@@ -3,6 +3,10 @@ from .simple_pid import PID
 import gym
 import gym_jsbsim.properties as prp
 import numpy as np
+import threading
+import rpyc
+import time
+
 
 class PIDAgent(Agent):
     """ An agent that realizes a PID controller.
@@ -10,12 +14,50 @@ class PIDAgent(Agent):
     The PID control agent can be used as a Benchmark.
     The PID control Agent connects to a ControlGUI.py application to change the parameters interactively.
     """
-    def __init__(self, action_space: gym.Space, agent_interaction_freq=5):
+    def __init__(self, action_space: gym.Space, agent_interaction_freq=5, env = None):
         self.action_space = action_space
         self.controllers = {}
-        self.controllers['pitchControl'] = PID(sample_time=None, Kp=-5e-2, Ki=-6.5e-2, Kd=-1e-3, output_limits=(-1, 1))
-        self.controllers['rollControl']  = PID(sample_time=None, Kp= 3.5e-2, Ki= 1e-2,   Kd=0    , output_limits=(-1, 1))
+        self.pitchControlParams = {'Kp': -5e-2, 'Ki': -6.5e-2, 'Kd': -1e-3}
+        self.rollControlParams = {'Kp': 3.5e-2, 'Ki': 1e-2, 'Kd': 0.0}
+        self.controllers['pitchControl'] = PID(sample_time=None, 
+                    Kp=self.pitchControlParams['Kp'], 
+                    Ki=self.pitchControlParams['Ki'],
+                    Kd=self.pitchControlParams['Kd'], output_limits=(-1, 1))
+        self.controllers['rollControl']  = PID(sample_time=None, 
+                    Kp=self.rollControlParams['Kp'],
+                    Ki=self.rollControlParams['Ki'],
+                    Kd=self.rollControlParams['Kd'], output_limits=(-1, 1))
         self.dt = 1.0/agent_interaction_freq    #the step time between two agent interactions in [sec] (for the PID controller)
+
+        self.env = env  #this is used in conjunction with the ControlGUI.py to change setpoints and PID parameters in real time
+
+        if env: 
+            try:
+                # all of this is a dirty hack, but it works.
+                # When starting ControlGUI.py in anaother console, one can adjust the PID settings and the 
+                # roll and glide ange setpoints
+                client = RPYCClient()
+                client.start()
+                print("started client")
+                env.reset() #only now, the sim.jsbsim property gets populated
+                try:
+                    client.addQuadSlider(name="pitchControl", 
+                            cb = getCallback(self.env, self, 'pitchControl', 'target/glideAngle-deg', inverted = True))
+                    client.setValue('pitchControl', 'sliderP',  -1*self.pitchControlParams['Kp'])   #TODO: it's only positive so far
+                    client.setValue('pitchControl', 'sliderPI', -1*self.pitchControlParams['Ki'])   #TODO: it's only positive so far
+                    client.setValue('pitchControl', 'sliderPD', -1*self.pitchControlParams['Kd'])   #TODO: it's only positive so far
+                    client.setValue('pitchControl', 'sliderSetpoint', env.task.TARGET_GLIDE_ANGLE_DEG)   #TODO: it's only positive so far
+                    client.addQuadSlider(name="rollControl", setMin = 35, setMax = -35, setRes = 1, 
+                            cb = getCallback(self.env, self, 'rollControl', 'target/roll-deg'))
+                    client.setValue('rollControl', 'sliderP',  self.rollControlParams['Kp'])   #TODO: it's only positive so far
+                    client.setValue('rollControl', 'sliderPI', self.rollControlParams['Ki'])   #TODO: it's only positive so far
+                    client.setValue('rollControl', 'sliderPD', self.rollControlParams['Kd'])   #TODO: it's only positive so far
+                    client.setValue('rollControl', 'sliderSetpoint', env.task.TARGET_ROLL_ANGLE_DEG)
+                except:
+                    print("could not register controller widgets")
+            except:
+                print("GUI-Client could not cnnect to ControlGUI.py. Sorry")
+
     
     def getControllerNames(self):
         """
@@ -50,3 +92,44 @@ class PIDAgent(Agent):
         # this agent type does not learn in response to observations
         pass
 
+class RPYCClient(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        conn = rpyc.connect("localhost", 12345)
+        self.bgsrv = rpyc.BgServingThread(conn, self.backgroundStoppedCb)
+        self.bgsrv.SLEEP_INTERVAL = 0.025   #to make the GUI more reactive
+        self.bgsrvRunning = True
+        self.c = conn.root
+        # callback("Hallo aus der __init__")
+        # self.registerCallbackBtn("from RPYCCLient", callback)
+
+    def backgroundStoppedCb(self):
+        self.bgsrvRunning = False
+
+    def addQuadSlider(self, name, setMin = 15, setMax = -15, setRes = 0.2, cb = None, **options):
+        self.c.addQuadSlider(name, setMin, setMax, setRes, cb, **options)
+    
+    def printMessage(self, msg):
+        self.c.printMessage(msg)
+    
+    def setValue(self, QuadSliderKey, SliderKey, value):
+        return self.c.setValue(QuadSliderKey, SliderKey, value)
+
+    def run(self):
+        while self.bgsrvRunning:
+            time.sleep(1)
+
+def getCallback(env, agent, name, propName, inverted=False, **kwargs):
+    def tuningCallback(**kwargs):
+        print("tuning: {}:".format(name))
+        for key, value in kwargs.items(): 
+            print ("%s == %s" %(key, value)) 
+        #change PID params
+        if inverted:
+            agent.setControllerParams(name, -kwargs['valueP'], -kwargs['valuePI'], -kwargs['valuePD'], kwargs['valueEnabled'])
+        else:
+            agent.setControllerParams(name, kwargs['valueP'], kwargs['valuePI'], kwargs['valuePD'], kwargs['valueEnabled'])
+        #change setpoint
+        env.sim.jsbsim[propName] = kwargs['valueSetPoint']
+
+    return tuningCallback

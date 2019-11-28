@@ -1,5 +1,6 @@
 
 .vscode/
+.history/
 
 gym_jsbsim/__pycache__/
 
@@ -135,3 +136,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 gym_jsbsim/devTesting/checkPIDAgent.html
+
+glideAngle_Elevator.html
