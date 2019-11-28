@@ -1,6 +1,6 @@
 import math
 import collections
-from gym_jsbsim import utils
+import gym_jsbsim.utils as utils
 
 
 class BoundedProperty(collections.namedtuple('BoundedProperty', ['name', 'description', 'min', 'max'])):
@@ -12,13 +12,21 @@ class Property(collections.namedtuple('Property', ['name', 'description'])):
     def get_legal_name(self):
         return utils.AttributeFormatter.translate(self.name)
 
+# to find out about valid properties use something like:
+# JSBSim --aircraft=c172p --catalog > c172p_catalog.txt
+# or even better FGFDMExec.get_property_catalog() from the python bindings
+
+# a list of useful properties is given here: http://outerra.shoutwiki.com/wiki/JSBSim_Properties#Piston_engine_specific
 
 # position and attitude
 altitude_sl_ft = BoundedProperty('position/h-sl-ft', 'altitude above mean sea level [ft]', -1400, 85000)
 pitch_rad = BoundedProperty('attitude/pitch-rad', 'pitch [rad]', -0.5 * math.pi, 0.5 * math.pi)
 roll_rad = BoundedProperty('attitude/roll-rad', 'roll [rad]', -math.pi, math.pi)
+roll_deg = BoundedProperty('attitude/phi-deg', 'roll (phi) [deg]', -180, +180)
 heading_deg = BoundedProperty('attitude/psi-deg', 'heading [deg]', 0, 360)
-sideslip_deg = BoundedProperty('aero/beta-deg', 'sideslip [deg]', -180, +180)
+angleOfAttack_deg = BoundedProperty('aero/alpha-deg', 'angle of attack (alpha) [deg]', -180, +180)
+flightPath_deg = BoundedProperty('flight-path/gamma-deg', 'flight path angle (gamma) [deg]', -180, +180)
+sideslip_deg = BoundedProperty('aero/beta-deg', 'sideslip (beta) [deg]', -180, +180)
 lat_geod_deg = BoundedProperty('position/lat-geod-deg', 'geocentric latitude [deg]', -90, 90)
 lng_geoc_deg = BoundedProperty('position/long-gc-deg', 'geodesic longitude [deg]', -180, 180)
 dist_travel_m = Property('position/distance-from-start-mag-mt', 'distance travelled from starting position [m]')
@@ -34,6 +42,8 @@ p_radps = BoundedProperty('velocities/p-rad_sec', 'roll rate [rad/s]', -2 * math
 q_radps = BoundedProperty('velocities/q-rad_sec', 'pitch rate [rad/s]', -2 * math.pi, 2 * math.pi)
 r_radps = BoundedProperty('velocities/r-rad_sec', 'yaw rate [rad/s]', -2 * math.pi, 2 * math.pi)
 altitude_rate_fps = Property('velocities/h-dot-fps', 'Rate of altitude change [ft/s]')
+indicated_airspeed = BoundedProperty('velocities/vc-kts', 'Indicated Airspeed [KIAS]', 0, 250)
+true_airspeed = BoundedProperty('velocities/vtrue-kts', 'True Airspeed [KTAS]', 0, 250)
 
 # controls state
 aileron_left = BoundedProperty('fcs/left-aileron-pos-norm', 'left aileron position, normalised', -1, 1)

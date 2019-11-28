@@ -112,3 +112,6 @@ class TestFlightGearVisualiser(unittest.TestCase):
             is_empty_plot = len(axis_data_plots.axes.lines) == 0
             self.assertFalse(is_empty_plot,
                              msg=f'no data plotted on axis {axis}')
+
+if __name__ == '__main__':
+    unittest.main()

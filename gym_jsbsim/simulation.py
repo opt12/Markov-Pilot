@@ -12,7 +12,7 @@ class Simulation(object):
     A class which wraps an instance of JSBSim and manages communication with it.
     """
     encoding = 'utf-8'  # encoding of bytes returned by JSBSim Cython funcs
-    ROOT_DIR = os.path.abspath('/home/gordon/apps/jsbsim')
+    ROOT_DIR = os.path.abspath('/home/felix/git/jsbsim/')  #TODO: use some path parameter here
     OUTPUT_FILE = 'flightgear.xml'
     LONGITUDINAL = 'longitudinal'
     FULL = 'full'
@@ -143,6 +143,8 @@ class Simulation(object):
 
         # now that IC object is created in JSBSim, specify own conditions
         self.set_custom_initial_conditions(init_conditions)
+
+        self.jsbsim.print_simulation_configuration()
 
         success = self.jsbsim.run_ic()
         if not success:

@@ -2,10 +2,25 @@ import gym
 import numpy as np
 from gym_jsbsim.tasks import Shaping, HeadingControlTask
 from gym_jsbsim.simulation import Simulation
-from gym_jsbsim.visualiser import FigureVisualiser, FlightGearVisualiser
+from gym_jsbsim.visualiser import FigureVisualiser, FlightGearVisualiser, TimeLineVisualiser
 from gym_jsbsim.aircraft import Aircraft, cessna172P
 from typing import Type, Tuple, Dict
 
+
+import time
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()        
+        if 'log_time' in kw:
+            name = kw.get('log_name', method.__name__.upper())
+            kw['log_time'][name] = int((te - ts) * 1000)
+        else:
+            print ('%r  %2.2f ms' % \
+                  (method.__name__, (te - ts) * 1000))
+        return result    
+    return timed
 
 class JsbSimEnv(gym.Env):
     """
@@ -21,7 +36,7 @@ class JsbSimEnv(gym.Env):
     docstrings have been adapted or copied from the OpenAI Gym source code.
     """
     JSBSIM_DT_HZ: int = 60  # JSBSim integration frequency
-    metadata = {'render.modes': ['human', 'flightgear']}
+    metadata = {'render.modes': ['human', 'flightgear', 'timeline']}
 
     def __init__(self, task_type: Type[HeadingControlTask], aircraft: Aircraft = cessna172P,
                  agent_interaction_freq: int = 5, shaping: Shaping=Shaping.STANDARD):
@@ -49,6 +64,7 @@ class JsbSimEnv(gym.Env):
         self.action_space: gym.spaces.Box = self.task.get_action_space()
         # set visualisation objects
         self.figure_visualiser: FigureVisualiser = None
+        self.timeline_visualiser: TimeLineVisualiser = None
         self.flightgear_visualiser: FlightGearVisualiser = None
         self.step_delay = None
 
@@ -95,7 +111,7 @@ class JsbSimEnv(gym.Env):
         return Simulation(sim_frequency_hz=dt,
                           aircraft=aircraft,
                           init_conditions=initial_conditions)
-
+    # @timeit
     def render(self, mode='flightgear', flightgear_blocking=True):
         """Renders the environment.
         The set of supported modes varies per environment. (And some
@@ -123,6 +139,11 @@ class JsbSimEnv(gym.Env):
                 self.figure_visualiser = FigureVisualiser(self.sim,
                                                           self.task.get_props_to_output())
             self.figure_visualiser.plot(self.sim)
+        elif mode == 'timeline':
+            if not self.timeline_visualiser:
+                self.timeline_visualiser = TimeLineVisualiser(self.sim,
+                                                          self.task.get_timeline_props_to_output())
+            self.timeline_visualiser.plot(self.sim)
         elif mode == 'flightgear':
             if not self.flightgear_visualiser:
                 self.flightgear_visualiser = FlightGearVisualiser(self.sim,
@@ -142,6 +163,8 @@ class JsbSimEnv(gym.Env):
             self.sim.close()
         if self.figure_visualiser:
             self.figure_visualiser.close()
+        if self.timeline_visualiser:
+            self.timeline_visualiser.close()
         if self.flightgear_visualiser:
             self.flightgear_visualiser.close()
 

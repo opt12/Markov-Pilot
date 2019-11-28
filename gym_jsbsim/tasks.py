@@ -93,11 +93,19 @@ class FlightTask(Task, ABC):
         (optional) _update_custom_properties: updates any custom properties in the sim
     """
     INITIAL_ALTITUDE_FT = 5000
-    base_state_variables = (prp.altitude_sl_ft, prp.pitch_rad, prp.roll_rad,
-                            prp.u_fps, prp.v_fps, prp.w_fps,
-                            prp.p_radps, prp.q_radps, prp.r_radps,
-                            prp.aileron_left, prp.aileron_right, prp.elevator,
-                            prp.rudder)
+    base_state_variables = (prp.altitude_sl_ft,     #0
+                            prp.pitch_rad,          #1
+                            prp.roll_rad,           #2
+                            prp.u_fps,              #3    
+                            prp.v_fps,              #4
+                            prp.w_fps,              #5
+                            prp.p_radps,            #6
+                            prp.q_radps,            #7
+                            prp.r_radps,            #8
+                            prp.aileron_left,       #9
+                            prp.aileron_right,      #10
+                            prp.elevator,           #11
+                            prp.rudder)             #12
     base_initial_conditions = types.MappingProxyType(  # MappingProxyType makes dict immutable
         {prp.initial_altitude_ft: INITIAL_ALTITUDE_FT,
          prp.initial_terrain_altitude_ft: 0.00000001,
@@ -403,6 +411,8 @@ class HeadingControlTask(FlightTask):
                 self.track_error_deg, prp.roll_rad, prp.sideslip_deg, self.last_agent_reward,
                 self.last_assessment_reward, self.steps_left)
 
+    # def get_timeline_props_to_output(self) -> Tuple:
+    #     return (prp.altitude_sl_ft, self.altitude_error_ft, prp.elevator)
 
 class TurnHeadingControlTask(HeadingControlTask):
     """

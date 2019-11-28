@@ -6,7 +6,8 @@ import gym_jsbsim.properties as prp
 from gym_jsbsim.aircraft import Aircraft
 from gym_jsbsim.simulation import Simulation
 from typing import NamedTuple, Tuple
-
+import numpy as np
+from collections import deque
 
 class AxesTuple(NamedTuple):
     """ Holds references to figure subplots (axes) """
@@ -220,6 +221,101 @@ class FigureVisualiser(object):
         all_axes.axes_throttle.plot([0], [thr_cmd], 'bo', mfc='none', markersize=10, clip_on=False)
         all_axes.axes_rudder.plot([rud_cmd], [0], 'bo', mfc='none', markersize=10, clip_on=False)
 
+class TimeLineVisualiser(object):
+    """ Class for manging a matplotlib Figure displaying agent state and actions """
+    TEXT_X_POSN_LABEL = 0.8
+    TEXT_X_POSN_VALUE = 0.9
+    TEXT_Y_POSN_INITIAL = 1.0
+    TEXT_Y_INCREMENT = -0.1
+    MAX_PLOT_LENGTH = 250
+
+    def __init__(self, _: Simulation, plot_props: Tuple[prp.Property]):
+        """
+        Constructor.
+
+        Sets here is ft_per_deg_lon, which depends dynamically on aircraft's
+        longitude (because of the conversion between geographic and Euclidean
+        coordinate systems). We retrieve longitude from the simulation and
+        assume it is constant thereafter.
+
+        :param _: (unused) Simulation that will be plotted
+        :param plot_props: Propertys which will have their values printed to Figure.
+            Must be retrievable from the plotted Simulation.
+        """
+        self.plot_props: Tuple[prp.Property] = plot_props
+        self.figure: plt.Figure = None
+        self.value_texts: Tuple[plt.Text] = None
+        self.plotAxes = []
+        self.plotLine = []
+        self.plotData = []
+
+
+    def plot(self, sim: Simulation) -> None:
+        """
+        Creates or updates a timeline plot for the passed properties
+
+        :param sim: Simulation that will be plotted
+        """
+        if not self.figure:
+            self.figure = self._plot_configure()
+
+        self._updateTimeline(sim)
+        #https://bastibe.de/2013-05-30-speeding-up-matplotlib.html
+        self.figure.canvas.update()
+        self.figure.canvas.flush_events()
+
+    def close(self):
+        if self.figure:
+            plt.close(self.figure)
+            self.figure = None
+            self.plotAxes = []
+            self.plotLine = []
+            self.plotData = []
+
+
+    def _plot_configure(self):
+        """
+        Creates a figure with subplots for states and actions.
+
+        :return: (figure, axes) where:
+            figure: a matplotlib Figure with subplots for state and controls
+            axes: an AxesTuple object with references to all figure subplot axes
+        """
+        plt.ion()  # interactive mode allows dynamic updating of plot
+        figure = plt.figure(figsize=(6, 11))
+
+        spec = plt.GridSpec(nrows=len(self.plot_props),
+                            ncols=1,
+                            wspace=0.3)
+
+        # create subplots
+        for idx, prop in enumerate(self.plot_props):
+            self.plotData.append(deque(np.zeros(self.MAX_PLOT_LENGTH), maxlen=self.MAX_PLOT_LENGTH))    #initialize an empty, linear numpy array of dimension 1
+            self.plotAxes.append(figure.add_subplot(spec[idx, 0]))
+            line,  = self.plotAxes[idx].plot(self.plotData[idx])
+            self.plotLine.append(line)
+            self.plotAxes[idx].set_ylim(top=self.plot_props[idx].max, bottom=self.plot_props[idx].min)  #set scale for y; TODO: check whether this is a good idea
+            self.plotAxes[idx].set_text = prop.get_legal_name()
+            #configure plots with one or two axis, ticks and stuff
+            ...
+
+        # create figure-wide legend
+        ...
+
+        plt.show()
+        figure.canvas.draw()   
+
+        # plt.pause(self.PLOT_PAUSE_SECONDS)  # voodoo pause needed for figure to appear
+
+        return figure
+
+    def _updateTimeline(self, sim):
+        for idx, prop in enumerate(self.plot_props):
+            self.plotData[idx].append(sim[prop])    #append new datapoint to deque
+            self.plotLine[idx].set_ydata(self.plotData[idx])    
+            self.plotAxes[idx].draw_artist(self.plotAxes[idx].patch)
+            self.plotAxes[idx].draw_artist(self.plotLine[idx])
+ 
 
 class FlightGearVisualiser(object):
     """
@@ -231,13 +327,14 @@ class FlightGearVisualiser(object):
     """
     TYPE = 'socket'
     DIRECTION = 'in'
-    RATE = 60
+    RATE = 60   #TODO: make this conform to the frequency used in the JSBSim integration frequency JSBSIM_DT_HZ in environment.py
     SERVER = ''
     PORT = 5550
     PROTOCOL = 'udp'
     LOADED_MESSAGE = 'loading cities done'
-    FLIGHTGEAR_TIME_FACTOR = 1  # sim speed relative to realtime, higher is faster
-    TIME = 'dusk'
+    FLIGHTGEAR_TIME_FACTOR = 2  # sim speed relative to realtime, higher is faster
+    #seems to hve no effect though
+    TIME = 'noon'
 
     def __init__(self, sim: Simulation, print_props: Tuple[prp.Property], block_until_loaded=True):
         """
@@ -252,22 +349,22 @@ class FlightGearVisualiser(object):
         self.configure_simulation_output(sim)
         self.print_props = print_props
         self.flightgear_process = self._launch_flightgear(sim.get_aircraft())
-        self.figure = FigureVisualiser(sim, print_props)
+        # self.figure = FigureVisualiser(sim, priknt_props)
         if block_until_loaded:
-            time.sleep(20)
-            #self._block_until_flightgear_loaded()
+            # time.sleep(20)  #TODO: this must be possible in a more generic way
+            self._block_until_flightgear_loaded()  #why not this here?
 
     def plot(self, sim: Simulation) -> None:
         """
         Updates a 3D plot of agent actions.
         """
-        self.figure.plot(sim)
+        # self.figure.plot(sim)
 
     @staticmethod
     def _launch_flightgear(aircraft: Aircraft):
         cmd_line_args = FlightGearVisualiser._create_cmd_line_args(aircraft.flightgear_id)
         gym.logger.info(f'Subprocess: "{cmd_line_args}"')
-        flightgear_process = subprocess.Popen(
+        flightgear_process = subprocess.Popen(  #TODO: wouldn't it be beneficial to try to find an already running FlightGear Process: https://stackoverflow.com/q/5029880/2682209
             cmd_line_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
