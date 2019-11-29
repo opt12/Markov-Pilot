@@ -1,4 +1,4 @@
-
+plots/
 .vscode/
 .history/
 
@@ -135,6 +135,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-gym_jsbsim/devTesting/checkPIDAgent.html
-
-glideAngle_Elevator.html

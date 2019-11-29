@@ -4,7 +4,11 @@ import gym_jsbsim.properties as prp
 import numpy as np
 import pandas as pd
 import datetime
+import os
+from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
 
+
+from timeit import timeit
 
 
 class EpisodePlotterWrapper(gym.Wrapper):
@@ -24,6 +28,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         self.recorderCols = list(map(lambda el:el.get_legal_name(),self.recorderData))
 
         self.showNextPlotFlag = False
+        self.exportNextPlotFlag = False
         self.firstRun = True #to determine if we're supposed to open a new Browser window
 
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
@@ -36,8 +41,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         #now let's move on to the next step
         self.lastObs = self.env.step(action)
         self.state, self.reward, self.done, info = self.lastObs
-        if self.done and self.showNextPlotFlag:
-            self.showNextPlotFlag = False   #only show the plot once and then reset
+        if self.done and (self.showNextPlotFlag or self.exportNextPlotFlag):
             data = np.concatenate((self.state, [self.reward], [self.done], np.empty(self.env.action_space.shape))).tolist()
             dataDict = dict(zip(self.recorderCols, data))
             self.recorderDictList.append(dataDict)
@@ -55,7 +59,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
     def showGraph(self,df):
         from bokeh.plotting import figure
         from bokeh.layouts import row, column, gridplot
-        from bokeh.io import output_file, show, output_notebook, reset_output, save
+        from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
         from bokeh.models.annotations import Title, Legend
         from bokeh.models.widgets.markups import Div
         from bokeh.models import LinearAxis, Range1d
@@ -68,8 +72,8 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pElev.add_layout(LinearAxis(y_range_name="elevator", axis_label="Elevator Cmd [norm.]"), 'right')
 
+        elevatorLine = pElev.line(df.index, df['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
         gammaLine = pElev.line(df.index, df['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
-        elevatorLine = pElev.line(df.index, df['fcs_elevator_cmd_norm'], line_width=2, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
 
         # RollAngle and Aileron
         pAileron = figure(plot_width=800, plot_height=500, x_range=pElev.x_range)
@@ -78,8 +82,8 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pAileron.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
 
+        aileronLine = pAileron.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
         phiLine = pAileron.line(df.index, df['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
-        aileronLine = pAileron.line(df.index, df['fcs_aileron_cmd_norm'], line_width=2, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
 
         #Altitude over ground
         pAltitude = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
@@ -130,20 +134,34 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pReward.toolbar.active_scroll = pReward.toolbar.tools[1]    #this selects the WheelZoomTool instance 
 
         reset_output()
-        output_file('glideAngle_Elevator.html')
         grid = gridplot([[pElev, pAileron], [pAltitude, pReward]])
         #for string formatting look here: https://pyformat.info/
         titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), df['reward'].sum())
         webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)
 
-        if self.firstRun:
-            show(webpage)  #opens up a new browser window
-            self.firstRun = False
-        else:
-            save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
+        dirname = os.path.dirname(__file__)
+
+        if self.showNextPlotFlag:
+            output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'))
+            if self.firstRun:
+                show(webpage)  #opens up a new browser window
+                self.firstRun = False
+            else:
+                save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
         
+        if self.exportNextPlotFlag:
+            @timeit
+            def export(webpage):
+                filename = os.path.join(dirname, '../plots/glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M:%S"), df['reward'].sum()))
+                export_png(webpage, filename)
+            export(webpage)
+
+        self.showNextPlotFlag = False   #only show the plot once and then reset
+        self.exportNextPlotFlag = False
         print("Output Plot generated: "+titleString)
 
-    def showNextPlot(self, show):
+    def showNextPlot(self, show = False, export = False):
         self.showNextPlotFlag = show
-
+        self.exportNextPlotFlag = export
+        
+        

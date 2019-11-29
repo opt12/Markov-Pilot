@@ -2,18 +2,19 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 import time
 import gym
+import numpy as np
 
 import gym_jsbsim
 from gym_jsbsim.agents import PIDAgent, RandomAgent, ConstantAgent
 from episodePlotterWrapper import EpisodePlotterWrapper
 
 if __name__ == "__main__":
-    env = gym.make("JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-FG-v0")
+    env = gym.make("JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0")
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
 
     agent_interaction_freq = env.JSBSIM_DT_HZ / env.sim_steps_per_agent_step
-    agent = PIDAgent(env.action_space, agent_interaction_freq, env)
-    # agent = RandomAgent(env.action_space)
+    elevatorAgent = PIDAgent(env.action_space, agent_interaction_freq, env)
+    aileronAgent  = RandomAgent(env.action_space)
     
 
     for i in range(1):
@@ -27,7 +28,9 @@ if __name__ == "__main__":
 
         while True: # this is what was originally done in the tensorforce runner
             frame_idx += 1
-            action = agent.act(state)
+            elevatorAction, _ = elevatorAgent.act(state)
+            _, aileronAction  = aileronAgent.act(state)
+            action = np.array([elevatorAction, aileronAction])
             state, reward, done, _ = env.step(action)
             # env.render('human')
             # env.render('timeline')
