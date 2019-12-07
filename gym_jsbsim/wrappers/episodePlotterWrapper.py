@@ -142,7 +142,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         dirname = os.path.dirname(__file__)
 
         if self.showNextPlotFlag:
-        output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'))
+            output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'))
         if self.firstRun:
             show(webpage)  #opens up a new browser window
             self.firstRun = False

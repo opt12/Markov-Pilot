@@ -7,6 +7,10 @@ import threading
 import rpyc
 import time
 
+from collections import namedtuple
+
+# a parameter set for a PID controller
+PidParameters = namedtuple('PidParameters', ['Kp', 'Ki', 'Kd'])
 
 class PIDAgent(Agent):
     """ An agent that realizes a PID controller.
@@ -88,6 +92,36 @@ class PIDAgent(Agent):
     def getActionNames(self):
         return('elevator', 'aileron')
 
+    def observe(self, state, action, reward, done):
+        # this agent type does not learn in response to observations
+        pass
+
+class PIDAgentSingleChannel(Agent):
+    """ An agent that realizes a single channel PID controller.
+
+    The PID control agent can be used as a Benchmark.
+    If a non-empty env is passed, the PID control Agent tries to connect 
+    to a ControlGUI.py application to change the parameters interactively.
+    """
+    def __init__(self, pid_parameters: PidParameters, low_limit: float, high_limit: float, agent_interaction_freq=5.0):
+        # self.pitchControlParams = {'Kp': -5e-2, 'Ki': -6.5e-2, 'Kd': -1e-3}
+        # self.rollControlParams = {'Kp': 3.5e-2, 'Ki': 1e-2, 'Kd': 0.0}
+        self.inverted = True if pid_parameters.Kp <0 else False
+        self.controller = PID(sample_time=None, 
+                    Kp=pid_parameters.Kp, 
+                    Ki=pid_parameters.Ki,
+                    Kd=pid_parameters.Kd, 
+                    output_limits=(low_limit, high_limit))
+        self.dt = 1.0/agent_interaction_freq    #the step time between two agent interactions in [sec] (for the PID controller)
+    
+    def act(self, error):
+        #using the errors keeps the setpoint constantly at 0; The errors should vanish
+        control_out = self.controller(error, dt=self.dt)
+
+        # print('PID output: {} => {}'.format(error, control_out))
+
+        return control_out
+    
     def observe(self, state, action, reward, done):
         # this agent type does not learn in response to observations
         pass

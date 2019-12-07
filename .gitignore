@@ -1,6 +1,8 @@
 plots/
 .vscode/
 .history/
+saves/
+runs/
 
 gym_jsbsim/__pycache__/
 
