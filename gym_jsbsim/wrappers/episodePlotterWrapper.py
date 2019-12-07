@@ -39,10 +39,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         dataDict = dict(zip(self.recorderCols, data))
         self.recorderDictList.append(dataDict)
         #now let's move on to the next step
-        self.lastObs = self.env.step(action)
-        self.state, self.reward, self.done, info = self.lastObs
+        self.newObs = self.env.step(action)
+        self.state, self.reward, self.done, info = self.newObs
         if self.done and (self.showNextPlotFlag or self.exportNextPlotFlag):
-            data = np.concatenate((self.state, [self.reward], [self.done], np.empty(self.env.action_space.shape))).tolist()
+            data = np.concatenate((self.state, [self.reward], [self.done], np.full(self.env.action_space.shape, np.nan))).tolist()
             dataDict = dict(zip(self.recorderCols, data))
             self.recorderDictList.append(dataDict)
             dataRecorder = pd.DataFrame(self.recorderDictList)    
@@ -142,12 +142,12 @@ class EpisodePlotterWrapper(gym.Wrapper):
         dirname = os.path.dirname(__file__)
 
         if self.showNextPlotFlag:
-            output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'))
-            if self.firstRun:
-                show(webpage)  #opens up a new browser window
-                self.firstRun = False
-            else:
-                save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
+        output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'))
+        if self.firstRun:
+            show(webpage)  #opens up a new browser window
+            self.firstRun = False
+        else:
+            save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
         
         if self.exportNextPlotFlag:
             @timeit
