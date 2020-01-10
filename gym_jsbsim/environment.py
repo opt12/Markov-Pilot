@@ -170,6 +170,11 @@ class JsbSimEnv(gym.Env):
         gym.logger.warn("Could not seed environment %s", self)
         return
 
+    def get_state_property_names(self):
+        """
+        returns the list of names of the named tuple representing the state of the specific task
+        """
+        return self.task.State._fields
 
 class NoFGJsbSimEnv(JsbSimEnv):
     """

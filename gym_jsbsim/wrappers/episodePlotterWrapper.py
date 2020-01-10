@@ -6,7 +6,7 @@ import pandas as pd
 import datetime
 import os
 from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
-
+import math
 
 from timeit import timeit
 
@@ -33,6 +33,8 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
 
+        self.plotCounter = 0    #this is just a counter that is incremented with every saved plot to chase the "too many open files" bug
+
     def step(self, action):
         #save the action and the sate and reward before
         data = np.concatenate((self.state, [self.reward], [self.done], action)).tolist()
@@ -41,13 +43,21 @@ class EpisodePlotterWrapper(gym.Wrapper):
         #now let's move on to the next step
         self.newObs = self.env.step(action)
         self.state, self.reward, self.done, info = self.newObs
-        if self.done and (self.showNextPlotFlag or self.exportNextPlotFlag):
-            data = np.concatenate((self.state, [self.reward], [self.done], np.full(self.env.action_space.shape, np.nan))).tolist()
-            dataDict = dict(zip(self.recorderCols, data))
-            self.recorderDictList.append(dataDict)
-            dataRecorder = pd.DataFrame(self.recorderDictList)    
-            # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
-            self.showGraph(dataRecorder)
+        if self.done:
+            contains_nan = any(math.isnan(el) for el in self.state)
+            if (contains_nan or 
+                    self.showNextPlotFlag or self.exportNextPlotFlag):
+                data = np.concatenate((self.state, [self.reward], [self.done], np.full(self.env.action_space.shape, np.nan))).tolist()
+                dataDict = dict(zip(self.recorderCols, data))
+                self.recorderDictList.append(dataDict)
+                dataRecorder = pd.DataFrame(self.recorderDictList)    
+                if (contains_nan):
+                    #save the entire pandas frame to CSV file
+                    dirname = os.path.dirname(__file__)
+                    filename = os.path.join(dirname, '../nan/state_with_NaN_{}.csv'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M:%S")))
+                    dataRecorder.to_csv(filename)
+                # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
+                self.showGraph(dataRecorder)
 
         return (self.state, self.reward, self.done, info)
 
@@ -142,15 +152,26 @@ class EpisodePlotterWrapper(gym.Wrapper):
         dirname = os.path.dirname(__file__)
 
         if self.showNextPlotFlag:
-            output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'))
-        if self.firstRun:
-            show(webpage)  #opens up a new browser window
-            self.firstRun = False
-        else:
-            save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
+            self.plotCounter += 1   #increment the plot counter
+            output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'), mode='inline') #use mode='inline' to make it work offline
+            if self.firstRun:
+                # placing this output_file here is a try to avoid the "too many open files exception"
+                # output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html')) #use mode='inline' to make it work offline
+                show(webpage)  #opens up a new browser window
+                self.firstRun = False
+            else:
+                try:
+                    save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
+                except OSError as err:
+                    #TODO: after a while it says too many open files exception. So I have to close that somehow
+                    # This happens in bokeh.io.saving.py _save_helper() when opening the file with "with io.open(...) as fd"
+                    print("OSError occurred after {} open files. Why this?".format(self.plotCounter))
+                    print(err)
+
+
         
         if self.exportNextPlotFlag:
-            @timeit
+            # @timeit   TODO: die sourcen werden nicht gefunden
             def export(webpage):
                 filename = os.path.join(dirname, '../plots/glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M:%S"), df['reward'].sum()))
                 export_png(webpage, filename)

@@ -143,8 +143,8 @@ class FlightTask(Task, ABC):
 
         # run simulation
         for _ in range(sim_steps):
-            sim.run()
-
+            if(not sim.run()):   #TODO: check return value. is it false if JSBSim encounters a problem
+                print("JSBSim terminated")
         self._update_custom_properties(sim)
         state = self.State(*(sim[prop] for prop in self.state_variables))
         done = self._is_terminal(sim)
@@ -152,7 +152,7 @@ class FlightTask(Task, ABC):
         if done:
             reward = self._reward_terminal_override(reward, sim)
         if self.debug:
-            self._validate_state(state, done, action, reward)
+            done  = done or self._validate_state(state, done, action, reward)   #returns true if state contains nan
         self._store_reward(reward, sim)
         self.last_state = state
         info = {'reward': reward}
@@ -168,6 +168,9 @@ class FlightTask(Task, ABC):
                    f'Terminal: {done}\n'
                    f'Reward: {reward}')
             warnings.warn(msg, RuntimeWarning)
+            return True #return true if it contains any nan
+        else:
+            return False
 
     def _store_reward(self, reward: rewards.Reward, sim: Simulation):
         sim[self.last_agent_reward] = reward.agent_reward()

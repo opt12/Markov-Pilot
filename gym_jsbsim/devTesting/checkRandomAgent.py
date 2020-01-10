@@ -1,5 +1,5 @@
 import sys            
-sys.path.append(r'/home/felix/git/gym-jsbsim/')
+sys.path.append(r'/home/felix/git/gym-jsbsim-eee/')
 
 import gym
 import gym_jsbsim
@@ -24,6 +24,7 @@ class RandomActionWrapper(gym.ActionWrapper):
 
 if __name__ == "__main__":
     env = gym.make("JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0")
+    # env = gym.make("JSBSim-TurnHeadingControlTask-Cessna172P-Shaping.STANDARD-NoFG-v0")
 
     obs = env.reset()
     total_reward = 0.0
@@ -36,10 +37,10 @@ if __name__ == "__main__":
         frame_idx += 1
 #        action = env.action_space.sample()
         action = env.action_space.sample()
-        action = np.array([0,0])
+        # action = np.array([0,0])
         obs, reward, done, _ = env.step(action)
-        # env.render('human')
-        env.render('timeline')
+        env.render('human')
+        # env.render('timeline')
         # env.render('flightgear')
         # print("Action: {}; Observation: {}".format(action, obs))
         total_reward += reward

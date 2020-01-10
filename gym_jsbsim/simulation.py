@@ -66,7 +66,7 @@ class Simulation(object):
         reference manual, launching JSBSim with '--catalog' command line arg or
         calling FGFDMExec.get_property_catalog().
 
-        Warning: JSBSim will create new properties if the specified one exists.
+        Warning: JSBSim will create new properties if the specified one doesn't exist.
         If the property you are setting is read-only in JSBSim the operation
         will silently fail.
 

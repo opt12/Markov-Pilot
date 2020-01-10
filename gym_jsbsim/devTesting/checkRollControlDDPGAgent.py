@@ -6,12 +6,18 @@ import numpy as np
 
 import gym_jsbsim
 from gym_jsbsim.agents import PIDAgent, RandomAgent, ConstantAgent
-from episodePlotterWrapper import EpisodePlotterWrapper
+from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper
 
 if __name__ == "__main__":
     env = gym.make("JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0")
-    env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
-
+    env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True, True)
+    env = PidWrapper(env, [False, False])
+    env.reset()
+    
+    # test_env = gym.make("JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0")
+    # test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
+    # test_env.reset()
+    
     agent_interaction_freq = env.JSBSIM_DT_HZ / env.sim_steps_per_agent_step
     elevatorAgent = PIDAgent(env.action_space, agent_interaction_freq, env)
     aileronAgent  = RandomAgent(env.action_space)
@@ -28,9 +34,10 @@ if __name__ == "__main__":
 
         while True: # this is what was originally done in the tensorforce runner
             frame_idx += 1
-            elevatorAction, _ = elevatorAgent.act(state)
-            _, aileronAction  = aileronAgent.act(state)
-            action = np.array([elevatorAction, aileronAction])
+            # elevatorAction, _ = elevatorAgent.act(state)
+            # _, aileronAction  = aileronAgent.act(state)
+            # action = np.array([elevatorAction, aileronAction])
+            action = aileronAgent.act(state)
             state, reward, done, _ = env.step(action)
             # env.render('human')
             # env.render('timeline')

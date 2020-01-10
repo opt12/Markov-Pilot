@@ -28,6 +28,7 @@ for env_id, (task, plane, shaping, enable_flightgear) in utils.get_env_id_kwargs
     gym.envs.registration.register(id=env_id,
                                    entry_point=entry_point,
                                    kwargs=kwargs)
+    # print("registered: {}".format(env_id))    #prints out all registered environments to copy the name from
 
 # make an Enum storing every Gym-JSBSim environment ID for convenience and value safety
 Envs = enum.Enum.__call__('Envs', [(utils.AttributeFormatter.translate(env_id), env_id)

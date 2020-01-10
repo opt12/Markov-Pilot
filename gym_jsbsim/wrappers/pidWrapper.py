@@ -77,12 +77,12 @@ class PidWrapper(gym.Wrapper):
         for orig_position, act in zip(self.original_positions, action):
             appliedActions[orig_position] = act
         # issue the merged action to the original environment
-        obs = self.env.step(appliedActions)
+        obs = self.original_env.step(appliedActions)
         self.state, _, _, _ = obs
         return obs
     
     def reset(self):
-        self.state = self.env.reset()
+        self.state = self.original_env.reset()
         return self.state
 
     
