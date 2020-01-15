@@ -84,6 +84,8 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         elevatorLine = pElev.line(df.index, df['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
         gammaLine = pElev.line(df.index, df['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
+        targetGammaLine = pElev.line(df.index, df['setpoint_glide_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
+        aoaLine = pElev.line(df.index, df['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA")
 
         # RollAngle and Aileron
         pAileron = figure(plot_width=800, plot_height=500, x_range=pElev.x_range)
@@ -94,6 +96,8 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         aileronLine = pAileron.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
         phiLine = pAileron.line(df.index, df['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
+        targetPhiLine = pAileron.line(df.index, df['setpoint_roll_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
+        
 
         #Altitude over ground
         pAltitude = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)

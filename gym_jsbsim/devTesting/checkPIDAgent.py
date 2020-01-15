@@ -7,9 +7,10 @@ import gym_jsbsim
 from gym_jsbsim.agents import PIDAgent, RandomAgent, ConstantAgent
 from gym_jsbsim.wrappers.episodePlotterWrapper import EpisodePlotterWrapper
 from gym_jsbsim.wrappers import PidWrapper, PidWrapperParams, PidParameters
+import gym_jsbsim.properties as prp
 
 if __name__ == "__main__":
-    env = gym.make("JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-FG-v0")
+    env = gym.make("JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0")
     # env = gym.make("JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0")
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
 
@@ -24,7 +25,12 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
     # env = PidWrapper(env, [elevator_wrap, aileron_wrap])
 
+    env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [aileron_wrap, elevator_wrap])
+    env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: -5.7
+                        , prp.setpoint_roll_angle_deg: -0
+                        , prp.episode_steps: 3000})
+    env.task.set_initial_ac_attitude(-6, -0, 95)
 
     # env_F15 = PidWrapper(env_F15, [aileron_wrap, elevator_wrap])
 
@@ -63,6 +69,14 @@ if __name__ == "__main__":
             # if frame_idx%10 == 0:
             #     #just in case we want some progress feedback
             #     print(frame_idx)
+            if frame_idx == 299:
+                env.task.change_setpoints(env.sim, { 
+                      prp.setpoint_roll_angle_deg: -10
+                })
+            if frame_idx == 599:
+                env.task.change_setpoints(env.sim, { prp.setpoint_roll_angle_deg: 10
+                })
+
             if done: # or 'done_F15'
                 break
         runtime = (time.time() - ts)

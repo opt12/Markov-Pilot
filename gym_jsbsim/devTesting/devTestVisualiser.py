@@ -17,7 +17,7 @@ import gym_jsbsim.properties as prp
 
 
 def get_props_to_output() -> Tuple:
-    return (prp.u_fps,)# prp.altitude_sl_ft, prp.roll_rad, prp.flightPath_deg,)
+    return (prp.u_fps,)# prp.altitude_sl_ft, prp.roll_rad, prp.flight_path_deg,)
 
 def updateFakeData(sim: Simulation) -> None:
     updateFakeData.time +=1

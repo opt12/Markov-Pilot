@@ -338,6 +338,13 @@ class HeadingControlTask(FlightTask):
                                                           positive_rewards=self.positive_rewards)
 
     def get_initial_conditions(self) -> Dict[Property, float]:
+        """
+        returns a dictionary with initial conditions.
+        the keys are Properties, the values are the corresponding float values.
+
+        This is a place to inject different setpoints for training and different 
+        aircraft attitudes to avoid overfitting during training.
+        """
         extra_conditions = {prp.initial_u_fps: self.aircraft.get_cruise_speed_fps(),
                             prp.initial_v_fps: 0,
                             prp.initial_w_fps: 0,

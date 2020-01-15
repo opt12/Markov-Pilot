@@ -52,6 +52,7 @@ class JsbSimEnv(gym.Env):
         self.timeline_visualiser: TimeLineVisualiser = None
         self.flightgear_visualiser: FlightGearVisualiser = None
         self.step_delay = None
+        self.reset()    #to initialize the simulation object right here. To have the opprotunity to use the sim object for e. g. storing setpoints
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
         """
@@ -79,6 +80,7 @@ class JsbSimEnv(gym.Env):
 
         :return: array, the initial observation of the space.
         """
+        # collect the initial conditions and store them into the properties of the sim-object.
         init_conditions = self.task.get_initial_conditions()
         if self.sim:
             self.sim.reinitialise(init_conditions)

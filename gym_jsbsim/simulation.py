@@ -36,6 +36,8 @@ class Simulation(object):
         self.jsbsim = jsbsim.FGFDMExec(root_dir=self.ROOT_DIR)
         self.jsbsim.set_debug_level(0)
         if allow_flightgear_output:
+            #TODO: if called multiple times, a file descriptor is leaked here for the output specified in the xml
+            #on file descriptors see: https://www.cyberciti.biz/tips/linux-procfs-file-descriptors.html
             flightgear_output_config = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                     self.OUTPUT_FILE)
             self.jsbsim.set_output_directive(flightgear_output_config)
@@ -152,6 +154,14 @@ class Simulation(object):
 
     def set_custom_initial_conditions(self,
                                       init_conditions: Dict['prp.Property', float] = None) -> None:
+        """
+        All properties specified in the init_conditions-Dict: Property->Float are stored into the Simulation object.
+
+        In case this property is not existing yet, it will be created by JSBSim. 
+        So the Simulation object can actually be used to stor own properties.
+
+        :param init_conditions: dict mapping properties to their initial values
+        """
         if init_conditions is not None:
             for prop, value in init_conditions.items():
                 self[prop] = value

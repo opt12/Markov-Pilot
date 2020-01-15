@@ -20,14 +20,17 @@ from typing import Optional, Sequence, Dict, Tuple, NamedTuple, Type
 from gym_jsbsim.tasks import FlightTask, Shaping
 
 
+class RandomParams(namedtuple('RandomParams', ['mean', 'std_dev'])):
+    ...
+
 class SteadyGlideTask(FlightTask):
     """
-    A task in which the agent shall maintain a 
+    A task in which the agent shall maintain a
     - steady glide angle (adjustable)
     - steady banking angle (adjustable)
     """
     TARGET_GLIDE_ANGLE_DEG = -6   #TODO: this is arbitrary
-    TARGET_ROLL_ANGLE_DEG  = -0
+    TARGET_ROLL_ANGLE_DEG  = -10
     DEFAULT_EPISODE_TIME_S = 60.  #TODO: make configurable
     GLIDE_ANGLE_ERROR_SCALING_DEG = 8
     ROLL_ANGLE_ERROR_SCALING_DEG = 8
@@ -35,10 +38,6 @@ class SteadyGlideTask(FlightTask):
     MAX_GLIDE_ANGLE_DEVIATION_DEG = 45
     MAX_ROLL_ANGLE_DEVIATION_DEG = 90
     #those are additional properties going into the sim[] object
-    prop_target_glideAngle_deg = BoundedProperty('target/glideAngle-deg', 'desired glide angle [deg]',
-                            prp.flightPath_deg.min, prp.flightPath_deg.max)
-    prop_target_rollAngle_deg = BoundedProperty('target/roll-deg', 'desired roll/banking angle [deg]',
-                            prp.roll_deg.min, prp.roll_deg.max)
     prop_glideAngle_error_deg = BoundedProperty('error/glideAngle-error-deg',
                                       'error to desired glide angle [deg]', -180, 180)
     prop_rollAngle_error_deg = BoundedProperty('error/rollAngle-error-deg',
@@ -55,23 +54,36 @@ class SteadyGlideTask(FlightTask):
         :param aircraft: the aircraft used in the simulation
         """
         self.max_time_s = episode_time_s
-        episode_steps = math.ceil(self.max_time_s * step_frequency_hz)
-        self.steps_left = BoundedProperty('info/steps_left', 'steps remaining in episode', 0,
-                                          episode_steps)
+        self.step_frequency_hz = step_frequency_hz
         self.aircraft = aircraft
         self.extra_state_variables = (  self.prop_glideAngle_error_deg    #13
                                       , self.prop_rollAngle_error_deg     #14
-                                      , self.steps_left              #15
-                                      , prp.flightPath_deg           #16
+                                      , prp.steps_left               #15
+                                      , prp.flight_path_deg          #16
                                       , prp.roll_deg                 #17
                                       , prp.indicated_airspeed       #18
                                       , prp.true_airspeed            #19
-                                    #   , sim[self.prop_target_glideAngle_deg]   #20
-                                    #   , sim[self.prop_target_rollAngle_deg]    #21
+                                      , prp.setpoint_flight_path_deg #20
+                                      , prp.setpoint_roll_angle_deg  #21
+                                      , prp.angleOfAttack_deg        #22
                                       )
         self.state_variables = FlightTask.base_state_variables + self.extra_state_variables
         self.positive_rewards = positive_rewards
         assessor = self.make_assessor(shaping_type)
+
+        episode_steps = math.ceil(self.max_time_s * step_frequency_hz)
+        self.setpoints: Dict[Property, float] = {
+                  prp.episode_steps: episode_steps
+                , prp.setpoint_flight_path_deg: self.TARGET_GLIDE_ANGLE_DEG
+                , prp.setpoint_roll_angle_deg:  self.TARGET_ROLL_ANGLE_DEG
+            }
+        self.inital_attitude: Dict[Property, float] = {
+                  prp.initial_u_fps: self.aircraft.get_cruise_speed_fps()*0.8    #forward speed
+                , prp.initial_flight_path_deg: 0
+                , prp.initial_roll_deg:0
+                , prp.initial_aoa_deg: 1.0    #just an arbitrary value for a reasonable AoA
+        }
+
         super().__init__(assessor, debug = True)
 
     def make_assessor(self, shaping: Shaping) -> assessors.AssessorImpl:
@@ -121,19 +133,47 @@ class SteadyGlideTask(FlightTask):
 
     def get_initial_conditions(self) -> Dict[Property, float]:
         INITIAL_ALTITUDE_FT = 6000
-        extra_conditions = {prp.initial_u_fps: self.aircraft.get_cruise_speed_fps()*0.8,
-                            prp.initial_v_fps: 0,
-                            prp.initial_w_fps: 0,
-                            prp.initial_p_radps: 0,
+        extra_conditions = {prp.initial_u_fps: self.inital_attitude[prp.initial_u_fps],    #forward speed
+                            prp.initial_v_fps: 0,   # side component of speed; shall be 0 in steady flight
+                            prp.initial_w_fps: 0,   # down component of speed; shall be 0 in steady flight
+                            prp.initial_p_radps: 0, # angular speed roll
                             prp.initial_q_radps: 0,
                             prp.initial_r_radps: 0,
-                            prp.initial_roc_fpm: 0,
+                            # prp.initial_roc_fpm: 0,   #overridden by flight_path
                             prp.initial_heading_deg: 0,
-                            prp.flightPath_deg: 0,  #to change the initial flightpath angle, change also the sink speed and the pitch
-                            prp.roll_deg: 0,
-                            prp.initial_altitude_ft: INITIAL_ALTITUDE_FT  #overrides value from tasks.py
+                            prp.initial_flight_path_deg: self.inital_attitude[prp.initial_flight_path_deg],  #to change the initial flightpath angle, change also the sink speed and the pitch
+                            prp.initial_roll_deg: self.inital_attitude[prp.initial_roll_deg],
+                            prp.initial_altitude_ft: INITIAL_ALTITUDE_FT,  #overrides value from tasks.py
+                            prp.initial_aoa_deg: self.inital_attitude[prp.initial_aoa_deg]
                             }
         return {**self.base_initial_conditions, **extra_conditions} #** returns the args as dictionary of named args
+
+    def change_setpoints(self, sim: Simulation, new_setpoints: Dict[Property, float]):
+        """
+        Changes the setpoint for the task. The changes will take effect within the next environment step. (call to task_step())
+
+        :param sim: The Simulation object of the environment to store the setpoints (needed for visualization)
+        :param new_setpoints: A dictionary with new setpoints to be used. New values overwrite old ones.
+        """
+        if new_setpoints is not None:
+            for prop, value in new_setpoints.items():
+                sim[prop] = value   #update the setpoints in the simulation model
+                self.setpoints[prop] = value    #update the setpoints in the task class
+
+    def set_initial_ac_attitude(self, path_angle_gamma_deg, roll_angle_phi_deg, fwd_speed_KAS = None, aoa_deg = 1.0):
+        """
+        Sets the initial flight path angle, the roll angle and the cruise speed to be used as initial conditions
+        """
+        if fwd_speed_KAS == None:
+            fwd_speed_fps = self.aircraft.get_cruise_speed_fps()*0.8
+        else:
+            fwd_speed_fps = 1.6878099110965*fwd_speed_KAS  # from knots to fps
+        self.inital_attitude: Dict[Property, float] = {
+                  prp.initial_u_fps: fwd_speed_fps
+                , prp.initial_flight_path_deg: path_angle_gamma_deg
+                , prp.initial_roll_deg: roll_angle_phi_deg
+                , prp.initial_aoa_deg: aoa_deg
+        }
 
     def _update_custom_properties(self, sim: Simulation) -> None:
         self._update_glideAngle_error(sim)
@@ -141,31 +181,31 @@ class SteadyGlideTask(FlightTask):
         self._decrement_steps_left(sim)
 
     def _update_glideAngle_error(self, sim: Simulation):
-        target_glideAngle_deg = sim[self.prop_target_glideAngle_deg]
-        error_deg = utils.reduce_reflex_angle_deg(sim[prp.flightPath_deg] - target_glideAngle_deg)
+        target_glideAngle_deg = sim[prp.setpoint_flight_path_deg]
+        error_deg = utils.reduce_reflex_angle_deg(sim[prp.flight_path_deg] - target_glideAngle_deg)
         sim[self.prop_glideAngle_error_deg] = error_deg
 
     def _update_rollAngle_error(self, sim: Simulation):
-        target_rollAngle_deg = sim[self.prop_target_rollAngle_deg]
+        target_rollAngle_deg = sim[prp.setpoint_roll_angle_deg]
         error_deg = utils.reduce_reflex_angle_deg(sim[prp.roll_deg] - target_rollAngle_deg)
         sim[self.prop_rollAngle_error_deg] = error_deg
 
     def _decrement_steps_left(self, sim: Simulation):
-        sim[self.steps_left] -= 1
-        # if(sim[self.steps_left] == 900):
-        #     sim[self.prop_target_rollAngle_deg] = 30
-        #     sim[self.prop_target_glideAngle_deg] = -3
-        # if(sim[self.steps_left] == 600):
-        #     sim[self.prop_target_rollAngle_deg] = -30
-        #     sim[self.prop_target_glideAngle_deg] = -15
-        # if(sim[self.steps_left] == 300):
-        #     sim[self.prop_target_rollAngle_deg] = 0
-        #     sim[self.prop_target_glideAngle_deg] = -6
+        sim[prp.steps_left] -= 1
+        # if(sim[prp.steps_left] == 900):
+        #     sim[prp.setpoint_roll_angle_deg] = 30
+        #     sim[prp.setpoint_flight_path_deg] = -3
+        # if(sim[prp.steps_left] == 600):
+        #     sim[prp.setpoint_roll_angle_deg] = -30
+        #     sim[prp.setpoint_flight_path_deg] = -15
+        # if(sim[prp.steps_left] == 300):
+        #     sim[prp.setpoint_roll_angle_deg] = 0
+        #     sim[prp.setpoint_flight_path_deg] = -6
 
 
     def _is_terminal(self, sim: Simulation) -> bool:
         # terminate when time >= max, but use math.isclose() for float equality test
-        terminal_step = sim[self.steps_left] <= 0
+        terminal_step = sim[prp.steps_left] <= 0
         state_quality = sim[self.last_assessment_reward]
         state_out_of_bounds = state_quality < self.MIN_STATE_QUALITY  # TODO:: issues if sequential?
         return (terminal_step
@@ -180,7 +220,7 @@ class SteadyGlideTask(FlightTask):
         return False #TODO: Das muss ich prüfen
         return (abs(glideAngle_error_deg) > self.MAX_GLIDE_ANGLE_DEVIATION_DEG) or \
                (abs(rollAngle_error_deg) > self.MAX_ROLL_ANGLE_DEVIATION_DEG)
-    
+
     #TODO: prevent negative altitudes and terminate before severe crashes happen as this may lead to NaN in state
     def _altitude_out_of_bounds(self, sim: Simulation) -> bool:
         altitude = sim[prp.altitude_sl_ft]
@@ -188,14 +228,14 @@ class SteadyGlideTask(FlightTask):
             print("altitude too small: {}; aborting".format(altitude))
             return True
         else:
-            return False 
+            return False
 
     def _get_out_of_bounds_reward(self, sim: Simulation) -> rewards.Reward:
         """
         if aircraft is out of bounds, we give the largest possible negative reward:
         as if this timestep, and every remaining timestep in the episode was -1.
         """
-        reward_scalar = (1 + sim[self.steps_left]) * -1.
+        reward_scalar = (1 + sim[prp.steps_left]) * -1.
         return RewardStub(reward_scalar, reward_scalar)
 
     def _reward_terminal_override(self, reward: rewards.Reward, sim: Simulation) -> rewards.Reward:
@@ -204,7 +244,7 @@ class SteadyGlideTask(FlightTask):
             return self._get_out_of_bounds_reward(sim)
         else:
             return reward
-    
+
     def _new_episode_init(self, sim: Simulation) -> None:
         # entirely override the method of the super class to have the possibility to go with engine off
         # super()._new_episode_init(sim)
@@ -216,33 +256,26 @@ class SteadyGlideTask(FlightTask):
         sim.raise_landing_gear()
         self._store_reward(RewardStub(1.0, 1.0), sim)
 
-        sim[self.steps_left] = self.steps_left.max
-        sim[self.prop_target_glideAngle_deg] = self._get_target_glideAngle()
-        sim[self.prop_target_rollAngle_deg] = self._get_target_rollAngle()
+        sim[prp.steps_left] = self.setpoints[prp.episode_steps]
+        for prop, value in self.setpoints.items():
+            sim[prop] = value   #update the setpoints in the simulation model
 
-    def _get_target_glideAngle(self) -> float:
-        #TODO: this shall be settable via GUI
-        # use the same, initial heading every episode
-        return self.TARGET_GLIDE_ANGLE_DEG
 
-    def _get_target_rollAngle(self) -> float:
-        #TODO: this shall be settable via GUI
-        return self.TARGET_ROLL_ANGLE_DEG
 
     def get_props_to_output(self) -> Tuple:
         #TODO: this shall go into a graph or better to go additionally to a graph
-        return (prp.u_fps, 
-                prp.flightPath_deg, self.prop_target_glideAngle_deg, self.prop_glideAngle_error_deg, 
-                prp.roll_deg, self.prop_target_rollAngle_deg, self.prop_rollAngle_error_deg,
-                self.last_agent_reward, self.last_assessment_reward, self.steps_left)
+        return (prp.u_fps,
+                prp.flight_path_deg, prp.setpoint_flight_path_deg, self.prop_glideAngle_error_deg,
+                prp.roll_deg, prp.setpoint_roll_angle_deg, self.prop_rollAngle_error_deg,
+                self.last_agent_reward, self.last_assessment_reward, prp.steps_left)
 
     def get_timeline_props_to_output(self) -> Tuple:
-        return (prp.flightPath_deg, self.prop_glideAngle_error_deg, prp.elevator,
+        return (prp.flight_path_deg, self.prop_glideAngle_error_deg, prp.elevator,
                 prp.roll_deg, self.prop_rollAngle_error_deg, prp.aileron_cmd,)
 
 class SteadyRollAngleTask(SteadyGlideTask):
     """
-    A task in which the agent shall maintain a 
+    A task in which the agent shall maintain a
     - steady banking angle (adjustable)
 
     The only difference to the SteadyGlideTask is that the glide path angle does not contribute to the reward.
@@ -250,17 +283,14 @@ class SteadyRollAngleTask(SteadyGlideTask):
     """
     THROTTLE_CMD = 0.8          #TODO: in glide descent with engine off, this is not set
     MIXTURE_CMD = 0.8           #TODO: in glide descent with engine off, this is not set
+    #TODO, these values are not in effect in the roll angle task, as the class variables of the parent class are used.
     TARGET_GLIDE_ANGLE_DEG = -6   # this is a steeper descent than in SteadyGlideTask to hold for bigger roll angles
-    TARGET_ROLL_ANGLE_DEG  = -0
+    TARGET_ROLL_ANGLE_DEG  = -10
     DEFAULT_EPISODE_TIME_S = 120.#TODO: make configurable
     ROLL_ANGLE_ERROR_SCALING_DEG = 8
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_ROLL_ANGLE_DEVIATION_DEG = 60
     MIN_ALTITUDE = 200 # the minimum allowed altitude; This is checked to avoid severe crashes during training which my lead to NaN in the state
-    prop_target_glideAngle_deg = BoundedProperty('target/glideAngle-deg', 'desired glide angle [deg]',
-                            prp.flightPath_deg.min, prp.flightPath_deg.max)
-    prop_target_rollAngle_deg = BoundedProperty('target/roll-deg', 'desired roll/banking angle [deg]',
-                            prp.roll_deg.min, prp.roll_deg.max)
     glideAngle_error_deg = BoundedProperty('error/glideAngle-error-deg',
                                       'error to desired glide angle [deg]', -180, 180)
     rollAngle_error_deg = BoundedProperty('error/rollAngle-error-deg',
@@ -278,43 +308,28 @@ class SteadyRollAngleTask(SteadyGlideTask):
         )
         return base_components
 
-    def get_initial_conditions(self) -> Dict[Property, float]:
-        INITIAL_ALTITUDE_FT = 6000
-        extra_conditions = {prp.initial_u_fps: self.aircraft.get_cruise_speed_fps()*0.6,
-                            prp.initial_v_fps: 0,
-                            prp.initial_w_fps: 0,
-                            prp.initial_p_radps: 0,
-                            prp.initial_q_radps: 0,
-                            prp.initial_r_radps: 0,
-                            prp.initial_roc_fpm: 0,
-                            prp.initial_heading_deg: 0,
-                            prp.flightPath_deg: 0,  #to change the initial flightpath angle, change also the sink speed and the pitch
-                            prp.roll_deg: 0,
-                            prp.initial_altitude_ft: INITIAL_ALTITUDE_FT  #overrides value from tasks.py
-                            }
-        return {**self.base_initial_conditions, **extra_conditions} #** returns the args as dictionary of named args
 
     def _decrement_steps_left(self, sim: Simulation):
-        sim[self.steps_left] -= 1
-        # if(sim[self.steps_left] == 900):
-        #     sim[self.prop_target_rollAngle_deg] = 30
-        #     sim[self.prop_target_glideAngle_deg] = -3
-        # if(sim[self.steps_left] == 600):
-        #     sim[self.prop_target_rollAngle_deg] = -30
-        #     sim[self.prop_target_glideAngle_deg] = -15
-        # if(sim[self.steps_left] == 300):
+        sim[prp.steps_left] -= 1
+        # if(sim[prp.steps_left] == 900):
+        #     sim[prp.setpoint_roll_angle_deg] = 30
+        #     sim[prp.setpoint_flight_path_deg] = -3
+        # if(sim[prp.steps_left] == 600):
+        #     sim[prp.setpoint_roll_angle_deg] = -30
+        #     sim[prp.setpoint_flight_path_deg] = -15
+        # if(sim[prp.steps_left] == 300):
         #     sim[self.target_rollAngle_deg] = 0
-        #     sim[self.prop_target_glideAngle_deg] = -6
+        #     sim[prp.setpoint_flight_path_deg] = -6
 
 
     def _is_terminal(self, sim: Simulation) -> bool:
         # terminate when time >= max, but use math.isclose() for float equality test
-        terminal_step = sim[self.steps_left] <= 0
+        terminal_step = sim[prp.steps_left] <= 0
         state_quality = sim[self.last_assessment_reward]
         state_out_of_bounds = state_quality < self.MIN_STATE_QUALITY  # TODO:: issues if sequential?
         return (
-            terminal_step 
-            or state_out_of_bounds 
+            terminal_step
+            or state_out_of_bounds
             or self._roll_out_of_bounds(sim)
             or self._altitude_out_of_bounds(sim)
         )
@@ -330,41 +345,31 @@ class SteadyRollAngleTask(SteadyGlideTask):
             print("altitude too small: {}; aborting".format(altitude))
             return True
         else:
-            return False 
+            return False
+
 
     def _new_episode_init(self, sim: Simulation) -> None:
-        # entirely override the method of the super class to have the possibility to go with engine off
-        # super()._new_episode_init(sim)
+        # no need to reimplement
+        super()._new_episode_init(sim)
 
-        # start with engine off instead of running
-        # sim.start_engines()
-        # sim.set_throttle_mixture_controls(self.THROTTLE_CMD, self.MIXTURE_CMD)
-
-        sim.raise_landing_gear()
-        self._store_reward(RewardStub(1.0, 1.0), sim)
-
-        sim[self.steps_left] = self.steps_left.max
-        sim[self.prop_target_glideAngle_deg] = self._get_target_glideAngle()
-        sim[self.prop_target_rollAngle_deg] = self._get_target_rollAngle()
-
-    def _get_target_glideAngle(self) -> float:
-        #TODO: this shall be settable via GUI
-        # use the same, initial heading every episode
-        return self.TARGET_GLIDE_ANGLE_DEG
-
-    # def _get_target_rollAngle(self) -> float:
-    #     #TODO: this shall be settable via GUI
-    #     return self.TARGET_ROLL_ANGLE_DEG
 
     def get_props_to_output(self) -> Tuple:
+        """
+        This is only a list of Property values, not the values itself.
+        The values itself are then queried from the Simulation object
+        """
         #TODO: this shall go into a graph or better to go additionally to a graph
-        return (prp.u_fps, 
-                prp.flightPath_deg, self.prop_target_glideAngle_deg, self.glideAngle_error_deg, 
-                prp.roll_deg, self.prop_target_rollAngle_deg, self.rollAngle_error_deg,
+        return (prp.u_fps,
+                prp.flight_path_deg, prp.setpoint_flight_path_deg, self.glideAngle_error_deg,
+                prp.roll_deg, prp.setpoint_roll_angle_deg, self.rollAngle_error_deg,
                 self.last_agent_reward, self.last_assessment_reward, self.steps_left)
 
     def get_timeline_props_to_output(self) -> Tuple:
-        return (prp.flightPath_deg, self.glideAngle_error_deg, prp.elevator,
+        """
+        This is only a list of Property values, not the values itself.
+        The values itself are then queried from the Simulation object
+        """
+        return (prp.flight_path_deg, self.glideAngle_error_deg, prp.elevator,
                 prp.roll_deg, self.rollAngle_error_deg, prp.aileron_cmd,)
 
 

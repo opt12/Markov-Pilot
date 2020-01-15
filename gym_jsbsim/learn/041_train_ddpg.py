@@ -23,7 +23,7 @@ from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperPar
 
 # ENV_ID = "Pendulum-v0"
 # ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"
-ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-FG-v0"
+ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 
 GAMMA = 0.95
 BATCH_SIZE = 64

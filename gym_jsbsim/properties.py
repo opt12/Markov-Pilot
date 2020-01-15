@@ -13,8 +13,7 @@ class Property(collections.namedtuple('Property', ['name', 'description'])):
         return utils.AttributeFormatter.translate(self.name)
 
 # to find out about valid properties use something like:
-# JSBSim --aircraft=c172p --catalog > c172p_catalog.txt
-# or even better FGFDMExec.get_property_catalog() from the python bindings
+# JSBSim --aircraft=c172p --catalog > c172p_catalog.txt (deactivate conda environment before!)
 
 # a list of useful properties is given here: http://outerra.shoutwiki.com/wiki/JSBSim_Properties#Piston_engine_specific
 
@@ -22,10 +21,11 @@ class Property(collections.namedtuple('Property', ['name', 'description'])):
 altitude_sl_ft = BoundedProperty('position/h-sl-ft', 'altitude above mean sea level [ft]', -1400, 85000)
 pitch_rad = BoundedProperty('attitude/pitch-rad', 'pitch [rad]', -0.5 * math.pi, 0.5 * math.pi)
 roll_rad = BoundedProperty('attitude/roll-rad', 'roll [rad]', -math.pi, math.pi)
+heading_rad = BoundedProperty('attitude/heading-true-rad', 'true heading [rad]', -math.pi, math.pi)
 roll_deg = BoundedProperty('attitude/phi-deg', 'roll (phi) [deg]', -180, +180)
 heading_deg = BoundedProperty('attitude/psi-deg', 'heading [deg]', 0, 360)
 angleOfAttack_deg = BoundedProperty('aero/alpha-deg', 'angle of attack (alpha) [deg]', -180, +180)
-flightPath_deg = BoundedProperty('flight-path/gamma-deg', 'flight path angle (gamma) [deg]', -180, +180)
+flight_path_deg = BoundedProperty('flight-path/gamma-deg', 'flight path angle (gamma) [deg]', -180, +180)
 sideslip_deg = BoundedProperty('aero/beta-deg', 'sideslip (beta) [deg]', -180, +180)
 lat_geod_deg = BoundedProperty('position/lat-geod-deg', 'geocentric latitude [deg]', -90, 90)
 lng_geoc_deg = BoundedProperty('position/long-gc-deg', 'geodesic longitude [deg]', -180, 180)
@@ -72,7 +72,7 @@ gear_all_cmd = BoundedProperty('gear/gear-cmd-norm', 'all landing gear commanded
 sim_dt = Property('simulation/dt', 'JSBSim simulation timestep [s]')
 sim_time_s = Property('simulation/sim-time-sec', 'Simulation time [s]')
 
-# initial conditions
+# initial conditions    (see https://jsbsim-team.github.io/jsbsim/classJSBSim_1_1FGInitialCondition.html)
 initial_altitude_ft = Property('ic/h-sl-ft', 'initial altitude MSL [ft]')
 initial_terrain_altitude_ft = Property('ic/terrain-elevation-ft', 'initial terrain alt [ft]')
 initial_longitude_geoc_deg = Property('ic/long-gc-deg', 'initial geocentric longitude [deg]')
@@ -85,7 +85,17 @@ initial_q_radps = Property('ic/q-rad_sec', 'pitch rate [rad/s]')
 initial_r_radps = Property('ic/r-rad_sec', 'yaw rate [rad/s]')
 initial_roc_fpm = Property('ic/roc-fpm', 'initial rate of climb [ft/min]')
 initial_heading_deg = Property('ic/psi-true-deg', 'initial (true) heading [deg]')
+initial_roll_deg = Property('ic/phi-deg', 'Roll angle initial condition in degrees')
+initial_flight_path_deg = Property('ic/gamma-deg', 'Flightpath angle initial condition in degrees')
+initial_aoa_deg = Property('ic/alpha-deg', 'Angle of attack initial condition in degrees')
 
+#setpoints to be used by tasks
+setpoint_flight_path_deg = BoundedProperty('setpoint/glide-angle_deg', 'the desired setpoint for the glide angle gamma', flight_path_deg.min, flight_path_deg.max)
+setpoint_roll_angle_deg  = BoundedProperty('setpoint/roll-angle_deg', 'the desired setpoint for the roll angle phi', roll_deg.min, roll_deg.max)
+
+#settings for the environment
+episode_steps = BoundedProperty('info/episode_steps', 'environment steps per episode', 0, 10000)
+steps_left    = BoundedProperty('info/steps_left', 'steps remaining in episode', 0, 10000)  #we need an upper bound as we add it to the state
 
 class Vector2(object):
     def __init__(self, x: float, y: float):
