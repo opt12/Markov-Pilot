@@ -19,11 +19,12 @@ import torch.nn.functional as F
 
 import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper
+import gym_jsbsim.properties as prp
 
 
 # ENV_ID = "Pendulum-v0"
-# ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"
-ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+# ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 
 GAMMA = 0.95
 BATCH_SIZE = 64
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "ddpg-" + args.name)
+    save_path = os.path.join("saves", "ddpg-" + ENV_ID + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     # elevator params: 'Kp':  -5e-2, 'Ki': -6.5e-2, 'Kd': -1e-3
@@ -80,12 +81,37 @@ if __name__ == "__main__":
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
+
+    tgt_flight_path_deg = -6
+    tgt_roll_angle_deg  = 10
+    episode_steps   = 300
+    initial_path_angle_gamma_deg = 0
+    initial_roll_angle_phi_deg   = 0
+    initial_fwd_speed_KAS        = 95
+    initial_aoa_deg              = 1.0
+    env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
+                                        , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg
+                                        , prp.episode_steps:            episode_steps})
+    env.task.set_initial_ac_attitude(path_angle_gamma_deg = initial_path_angle_gamma_deg, 
+                                        roll_angle_phi_deg   = initial_roll_angle_phi_deg, 
+                                        fwd_speed_KAS        = initial_fwd_speed_KAS, 
+                                        aoa_deg              = initial_aoa_deg)
+
+
     test_env = gym.make(ENV_ID)
     test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+
+    test_env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
+                                        , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg
+                                        , prp.episode_steps:            episode_steps})
+    test_env.task.set_initial_ac_attitude(path_angle_gamma_deg = initial_path_angle_gamma_deg, 
+                                        roll_angle_phi_deg   = initial_roll_angle_phi_deg, 
+                                        fwd_speed_KAS        = initial_fwd_speed_KAS, 
+                                        aoa_deg              = initial_aoa_deg)
 
     act_net = model.DDPGActor(env.observation_space.shape[0], env.action_space.shape[0]).to(device)
     crt_net = model.DDPGCritic(env.observation_space.shape[0], env.action_space.shape[0]).to(device)
@@ -94,7 +120,7 @@ if __name__ == "__main__":
     tgt_act_net = ptan.agent.TargetNet(act_net)
     tgt_crt_net = ptan.agent.TargetNet(crt_net)
 
-    writer = SummaryWriter(comment="-ddpg_" + args.name)
+    writer = SummaryWriter(comment="-ddpg_" + ENV_ID + args.name)
     agent = model.AgentDDPG(act_net, device=device)
     # agent = model.PidWithDDPG(act_net, device=device)
 
@@ -166,5 +192,12 @@ if __name__ == "__main__":
                         fname = os.path.join(save_path, name)
                         torch.save(act_net.state_dict(), fname)
                         best_reward = rewards
+                    else:
+                        #save the latest model with every test
+                        name = "latest.dat"
+                        fname = os.path.join(save_path, name)
+                        torch.save(act_net.state_dict(), fname)
+
+
 
     pass

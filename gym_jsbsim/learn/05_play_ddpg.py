@@ -46,15 +46,16 @@ if __name__ == "__main__":
     net = model.DDPGActor(env.observation_space.shape[0], env.action_space.shape[0])
     net.load_state_dict(torch.load(args.model))
 
+    tgt_flight_path_deg = -7
+    tgt_roll_angle_deg  = 25
+    episode_steps   = 3000
+    initial_path_angle_gamma_deg = 0
+    initial_roll_angle_phi_deg   = 0
+    initial_fwd_speed_KAS        = 95
+    initial_aoa_deg              = 1.0
+
     for i in range(args.repeat):
         # put all the value into variables, so I can manipulate them conveniently in the debugger
-        tgt_flight_path_deg = -6
-        tgt_roll_angle_deg  = 10
-        episode_steps   = 3000
-        initial_path_angle_gamma_deg = 0
-        initial_roll_angle_phi_deg   = 0
-        initial_fwd_speed_KAS        = 95
-        initial_aoa_deg              = 1.0
         env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                            , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg
                                            , prp.episode_steps:            episode_steps})
@@ -76,7 +77,7 @@ if __name__ == "__main__":
             # env.render()
             total_reward += reward
             total_steps += 1
-            if total_steps % 500 == 0:
+            if total_steps % 350 == 0:
                 tgt_roll_angle_deg = -tgt_roll_angle_deg
                 env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
