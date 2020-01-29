@@ -80,7 +80,8 @@ class NormalisedComponent(RewardComponent, ABC):
             from the State
         :param state_variables: the state variables corresponding to each State element
             that this component will be passed.
-        :param is_potential_based: True if reward is based on a potential difference
+        :param target: the target value or an index for retrieving it from States
+        :param potential_difference_based: True if reward is based on a potential difference
             between prev_state and state (AKA potential based shaping reward) else
             False (and reward depends only on the potential of current state).
         """
@@ -183,7 +184,7 @@ class AsymptoticErrorComponent(ErrorComponent):
                  prop: prp.BoundedProperty,
                  state_variables: Tuple[prp.BoundedProperty],
                  target: Union[int, float, prp.Property, prp.BoundedProperty],
-                 is_potential_based: bool,
+                 potential_difference_based: bool,
                  scaling_factor: Union[float, int]):
         """
         Constructor.
@@ -191,7 +192,7 @@ class AsymptoticErrorComponent(ErrorComponent):
         :param scaling_factor: the property value is scaled down by this amount.
             Shaping potential is at 0.5 when the error equals this factor.
         """
-        super().__init__(name, prop, state_variables, target, is_potential_based)
+        super().__init__(name, prop, state_variables, target, potential_difference_based)
         self.scaling_factor = scaling_factor
 
     def _normalise_error(self, absolute_error: float):
@@ -237,7 +238,7 @@ class LinearErrorComponent(ErrorComponent):
                  prop: prp.BoundedProperty,
                  state_variables: Tuple[prp.BoundedProperty],
                  target: Union[int, float, prp.Property, prp.BoundedProperty],
-                 is_potential_based: bool,
+                 potential_difference_based: bool,
                  scaling_factor: Union[float, int]):
         """
         Constructor.
@@ -246,12 +247,26 @@ class LinearErrorComponent(ErrorComponent):
             target. Minimum potential (0.0) occurs when error is
             max_error_size or greater.
         """
-        super().__init__(name, prop, state_variables, target, is_potential_based)
+        super().__init__(name, prop, state_variables, target, potential_difference_based)
         self.scaling_factor = scaling_factor
 
     def _normalise_error(self, absolute_error: float):
         return normalise_error_linear(absolute_error, self.scaling_factor)
 
+class QuadraticErrorComponent(LinearErrorComponent):
+    """
+    A potential-based shaping reward component.
+
+    Potential is based quadratically on the size of the error between a property of
+    interest and its target. The error must be in the interval [0, scaling_factor].
+
+    Due to the quadratic shape, errors near the target are less exagerated than those at
+    the boundaris of the error limits.
+    """
+    # returns the negated, squared difference between the current value and the target value divided by the max. value
+    # -(current_value-target_value)**2 / (val_max-val_min)**2
+    def _normalise_error(self, absolute_error: float):
+        return normalise_error_quadratic(absolute_error, self.scaling_factor)
 
 def normalise_error_asymptotic(absolute_error: float, scaling_factor: float) -> float:
     """
@@ -282,6 +297,23 @@ def normalise_error_linear(absolute_error: float, max_error: float) -> float:
         return 1.0
     else:
         return absolute_error / max_error
+
+def normalise_error_quadratic(absolute_error: float, max_error: float) -> float:
+    """
+    Given an absolute error in [-max_error, max_error], quadratically normalises error in [0, 1]
+
+    If absolute_error exceeds max_error, it is capped back to max_error
+    """
+    # returns the negated, squared difference between the current value and the target value divided by the max. value
+    # -(current_value-target_value)**2 / (val_max-val_min)**2
+
+    if absolute_error < 0:
+        raise ValueError(f'Error to be normalised must be non-negative '
+                         f': {absolute_error}')
+    elif absolute_error > max_error:
+        return 1.0
+    else:
+        return (absolute_error / max_error)**2
 
 
 class RewardStub(Reward):

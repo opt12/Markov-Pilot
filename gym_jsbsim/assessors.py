@@ -23,18 +23,19 @@ class AssessorImpl(Assessor):
     """
 
     def __init__(self, base_components: Iterable['RewardComponent'],
-                 potential_based_components: Iterable['RewardComponent'] = (),
+                 potential_difference_based_components: Iterable['RewardComponent'] = (),
                  positive_rewards: bool = False):
         """
         :param base_components: RewardComponents from which Reward is to be calculated
-        :param potential_based_components: RewardComponents from which a potential-based
-            reward component is to be calculated from
+        :param potential_difference_based_components: RewardComponents from which a potential-based
+            reward component is to be calculated from   
+            (potential_difference_based_components means, that it is calculated from the current_state and the last_state)
         :param positive_rewards: True if rewards should be in [0.0, 1.0] (0.0 corresp. to
             worst behaviour), else rewards will be in [-1.0, 0.0] with 0.0 corresp. to
-            perfect behaviour. Has no effect one potential difference based components.
+            perfect behaviour. Has no effect on potential difference based components.
         """
         self.base_components = tuple(base_components)
-        self.potential_components = tuple(potential_based_components)
+        self.potential_components = tuple(potential_difference_based_components)
         self.positive_rewards = positive_rewards
         if not self.base_components:
             raise ValueError('base reward components cannot be empty')
@@ -49,16 +50,14 @@ class AssessorImpl(Assessor):
         return Reward(self._base_rewards(state, prev_state, is_terminal),
                       self._potential_based_rewards(state, prev_state, is_terminal))
 
-    def _base_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[
-        float, ...]:
+    def _base_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[float, ...]:
         cmp_values = (cmp.calculate(state, prev_state, is_terminal) for cmp in self.base_components)
         if self.positive_rewards:
             return tuple(cmp_values)
         else:
             return tuple(value - 1 for value in cmp_values)
 
-    def _potential_based_rewards(self, state: State, last_state: State, is_terminal: bool) -> Tuple[
-        float, ...]:
+    def _potential_based_rewards(self, state: State, last_state: State, is_terminal: bool) -> Tuple[float, ...]:
         return tuple(
             cmp.calculate(state, last_state, is_terminal) for cmp in self.potential_components)
 
@@ -95,8 +94,7 @@ class SequentialAssessor(AssessorImpl, ABC):
         self.base_dependency_map = base_dependency_map
         self.potential_dependency_map = potential_dependency_map
 
-    def _base_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[
-        float, ...]:
+    def _base_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[float, ...]:
         potentials = tuple(cmp.get_potential(state, is_terminal) for cmp in self.base_components)
         seq_discounts = self._get_sequential_discounts(state,
                                                        is_terminal,
@@ -109,8 +107,7 @@ class SequentialAssessor(AssessorImpl, ABC):
         else:
             return tuple(value - 1 for value in seq_values)
 
-    def _potential_based_rewards(self, state: State, prev_state: State,
-                                 is_terminal: bool) -> Tuple[float, ...]:
+    def _potential_based_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[float, ...]:
         potentials = tuple(cmp.get_potential(state, is_terminal)
                            for cmp in self.potential_components)
         prev_potentials = tuple(cmp.get_potential(prev_state, False)
@@ -162,9 +159,7 @@ class ContinuousSequentialAssessor(SequentialAssessor):
 
     def _get_sequential_discounts(self, state: State, is_terminal: bool,
                                   components: Iterable['RewardComponent'],
-                                  dependency_map: Dict[
-                                      'RewardComponent', Tuple['RewardComponent', ...]]) -> Tuple[
-        float, ...]:
+                                  dependency_map: Dict['RewardComponent', Tuple['RewardComponent', ...]]) -> Tuple[float, ...]:
         discounts = []
         for component in components:
             dependents = dependency_map.get(component, ())

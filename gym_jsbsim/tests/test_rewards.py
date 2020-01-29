@@ -342,7 +342,7 @@ class TestAngularAsmyptoticErrorComponent(unittest.TestCase):
                                                prop=state_vars[property_index],
                                                state_variables=state_vars,
                                                target=target_value,
-                                               is_potential_based=True,
+                                               potential_difference_based=True,
                                                scaling_factor=scaling_factor)
 
     def test_get_potential_value_equals_target_terminal(self):

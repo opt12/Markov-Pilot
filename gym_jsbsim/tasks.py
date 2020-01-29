@@ -146,7 +146,7 @@ class FlightTask(Task, ABC):
             if(not sim.run()):   #TODO: check return value. is it false if JSBSim encounters a problem
                 print("JSBSim terminated")
         self._update_custom_properties(sim)
-        state = self.State(*(sim[prop] for prop in self.state_variables))
+        state: NamedTuple(float) = self.State(*(sim[prop] for prop in self.state_variables))   # enter the values to a variable of the State class (named tuple)
         done = self._is_terminal(sim)
         reward = self.assessor.assess(state, self.last_state, done)
         if done:
@@ -173,8 +173,8 @@ class FlightTask(Task, ABC):
             return False
 
     def _store_reward(self, reward: rewards.Reward, sim: Simulation):
-        sim[self.last_agent_reward] = reward.agent_reward()
-        sim[self.last_assessment_reward] = reward.assessment_reward()
+        sim[self.last_agent_reward] = reward.agent_reward()             # scalar reward value by taking mean of all reward elements
+        sim[self.last_assessment_reward] = reward.assessment_reward()   # scalar non-shaping reward by taking mean of base reward elements
 
     def _update_custom_properties(self, sim: Simulation) -> None:
         """ Calculates any custom properties which change every timestep. """
@@ -200,8 +200,8 @@ class FlightTask(Task, ABC):
     def observe_first_state(self, sim: Simulation) -> np.ndarray:
         self._new_episode_init(sim)
         self._update_custom_properties(sim)
-        state = self.State(*(sim[prop] for prop in self.state_variables))
-        self.last_state = state
+        state: NamedTuple(float) = self.State(*(sim[prop] for prop in self.state_variables))
+        self.last_state = state #set the last state the same as the first state atstart of episode
         return state
 
     def _new_episode_init(self, sim: Simulation) -> None:
@@ -293,13 +293,13 @@ class HeadingControlTask(FlightTask):
                                              prop=self.altitude_error_ft,
                                              state_variables=self.state_variables,
                                              target=0.0,
-                                             is_potential_based=False,
+                                             potential_difference_based=False,
                                              scaling_factor=self.ALTITUDE_SCALING_FT),
             rewards.AsymptoticErrorComponent(name='travel_direction',
                                              prop=self.track_error_deg,
                                              state_variables=self.state_variables,
                                              target=0.0,
-                                             is_potential_based=False,
+                                             potential_difference_based=False,
                                              scaling_factor=self.TRACK_ERROR_SCALING_DEG),
             # add an airspeed error relative to cruise speed component?
         )
@@ -316,13 +316,13 @@ class HeadingControlTask(FlightTask):
                                                            prop=prp.roll_rad,
                                                            state_variables=self.state_variables,
                                                            target=0.0,
-                                                           is_potential_based=True,
+                                                           potential_difference_based=True,
                                                            scaling_factor=self.ROLL_ERROR_SCALING_RAD)
             no_sideslip = rewards.AsymptoticErrorComponent(name='no_sideslip',
                                                            prop=prp.sideslip_deg,
                                                            state_variables=self.state_variables,
                                                            target=0.0,
-                                                           is_potential_based=True,
+                                                           potential_difference_based=True,
                                                            scaling_factor=self.SIDESLIP_ERROR_SCALING_DEG)
             potential_based_components = (wings_level, no_sideslip)
 
@@ -332,7 +332,7 @@ class HeadingControlTask(FlightTask):
         elif shaping is Shaping.EXTRA_SEQUENTIAL:
             altitude_error, travel_direction = base_components
             # make the wings_level shaping reward dependent on facing the correct direction
-            dependency_map = {wings_level: (travel_direction,)}
+            dependency_map = {wings_level: (travel_direction,)} # a Dict(rewards.AsymptoticErrorComponent --> (Tuple))
             return assessors.ContinuousSequentialAssessor(base_components, potential_based_components,
                                                           potential_dependency_map=dependency_map,
                                                           positive_rewards=self.positive_rewards)
@@ -394,7 +394,7 @@ class HeadingControlTask(FlightTask):
         as if this timestep, and every remaining timestep in the episode was -1.
         """
         reward_scalar = (1 + sim[self.steps_left]) * -1.
-        return RewardStub(reward_scalar, reward_scalar)
+        return RewardStub(agent_reward_value = reward_scalar, assessment_reward_value = reward_scalar)
 
     def _reward_terminal_override(self, reward: rewards.Reward, sim: Simulation) -> rewards.Reward:
         if self._altitude_out_of_bounds(sim) and not self.positive_rewards:

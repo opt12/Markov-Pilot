@@ -27,11 +27,22 @@ if __name__ == "__main__":
 
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [aileron_wrap, elevator_wrap])
-    env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: -5.7
-                        , prp.setpoint_roll_angle_deg: -0
-                        , prp.episode_steps: 3000})
-    env.task.set_initial_ac_attitude(-6, -0, 95)
+    tgt_flight_path_deg = -6
+    tgt_roll_angle_deg  = 10
+    episode_steps   = 300
+    initial_path_angle_gamma_deg = 0
+    initial_roll_angle_phi_deg   = 0
+    initial_fwd_speed_KAS        = 95
+    initial_aoa_deg              = 1.0
 
+    env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
+                        , prp.setpoint_roll_angle_deg: tgt_roll_angle_deg
+                        , prp.episode_steps: episode_steps})
+    env.task.set_initial_ac_attitude( {  prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
+                                       , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
+                                       , prp.initial_roll_deg: initial_roll_angle_phi_deg
+                                       , prp.initial_aoa_deg: initial_aoa_deg
+                                      })
     # env_F15 = PidWrapper(env_F15, [aileron_wrap, elevator_wrap])
 
     # agent_F15 = PIDAgent(env_F15.action_space, agent_interaction_freq, env_F15)

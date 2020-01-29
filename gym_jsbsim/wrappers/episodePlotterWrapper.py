@@ -29,32 +29,34 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         self.showNextPlotFlag = False
         self.exportNextPlotFlag = False
+        self.save_to_csv = False
         self.firstRun = True #to determine if we're supposed to open a new Browser window
 
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
 
         self.plotCounter = 0    #this is just a counter that is incremented with every saved plot to chase the "too many open files" bug
+        self.dirname = os.path.dirname(__file__) + '/../plots/{}'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M"))
+        if not os.path.exists(self.dirname):
+            os.mkdir(self.dirname)
+
+
 
     def step(self, action):
-        #save the action and the sate and reward before
+        #let's move on to the next step
+        self.newObs = self.env.step(action)
+        self.state, self.reward, self.done, info = self.newObs
         data = np.concatenate((self.state, [self.reward], [self.done], action)).tolist()
         dataDict = dict(zip(self.recorderCols, data))
         self.recorderDictList.append(dataDict)
-        #now let's move on to the next step
-        self.newObs = self.env.step(action)
-        self.state, self.reward, self.done, info = self.newObs
         if self.done:
-            contains_nan = any(math.isnan(el) for el in self.state)
-            if (contains_nan or 
-                    self.showNextPlotFlag or self.exportNextPlotFlag):
-                data = np.concatenate((self.state, [self.reward], [self.done], np.full(self.env.action_space.shape, np.nan))).tolist()
-                dataDict = dict(zip(self.recorderCols, data))
-                self.recorderDictList.append(dataDict)
+            if (self.showNextPlotFlag or self.exportNextPlotFlag or self.save_to_csv):
                 dataRecorder = pd.DataFrame(self.recorderDictList)    
-                if (contains_nan):
+                if (self.save_to_csv):
                     #save the entire pandas frame to CSV file
-                    dirname = os.path.dirname(__file__)
-                    filename = os.path.join(dirname, '../nan/state_with_NaN_{}.csv'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M:%S")))
+                    csv_dir_name = os.path.join(self.dirname, '../csv')
+                    if not os.path.exists(csv_dir_name):
+                        os.mkdir(csv_dir_name)
+                    filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H:%M:%S")))
                     dataRecorder.to_csv(filename)
                 # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
                 self.showGraph(dataRecorder)
@@ -64,6 +66,11 @@ class EpisodePlotterWrapper(gym.Wrapper):
     def reset(self):
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
         self.state = self.env.reset()
+        #save the initial state
+        data = np.concatenate((self.state, [0], [0], np.zeros(self.env.action_space.shape[0]))).tolist()
+        dataDict = dict(zip(self.recorderCols, data))
+        self.recorderDictList.append(dataDict)
+
         return self.state
     
     def showGraph(self,df):
@@ -95,6 +102,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pAileron.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
 
         aileronLine = pAileron.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
+        deltaAileronLine = pAileron.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
         phiLine = pAileron.line(df.index, df['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
         targetPhiLine = pAileron.line(df.index, df['setpoint_roll_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
         
@@ -150,17 +158,15 @@ class EpisodePlotterWrapper(gym.Wrapper):
         reset_output()
         grid = gridplot([[pElev, pAileron], [pAltitude, pReward]])
         #for string formatting look here: https://pyformat.info/
-        titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), df['reward'].sum())
+        titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), df['reward'].sum())
         webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)
-
-        dirname = os.path.dirname(__file__)
 
         if self.showNextPlotFlag:
             self.plotCounter += 1   #increment the plot counter
-            output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html'), mode='inline') #use mode='inline' to make it work offline
+            output_file(os.path.join(self.dirname, 'glideAngle_Elevator.html'), mode='inline') #use mode='inline' to make it work offline
             if self.firstRun:
                 # placing this output_file here is a try to avoid the "too many open files exception"
-                # output_file(os.path.join(dirname, '../plots/glideAngle_Elevator.html')) #use mode='inline' to make it work offline
+                # output_file(os.path.join(self.dirname, '../plots/glideAngle_Elevator.html')) #use mode='inline' to make it work offline
                 show(webpage)  #opens up a new browser window
                 self.firstRun = False
             else:
@@ -177,7 +183,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         if self.exportNextPlotFlag:
             # @timeit   TODO: die sourcen werden nicht gefunden
             def export(webpage):
-                filename = os.path.join(dirname, '../plots/glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M:%S"), df['reward'].sum()))
+                filename = os.path.join(self.dirname, 'glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%H:%M:%S"), df['reward'].sum()))
                 export_png(webpage, filename)
             export(webpage)
 
@@ -185,8 +191,9 @@ class EpisodePlotterWrapper(gym.Wrapper):
         self.exportNextPlotFlag = False
         print("Output Plot generated: "+titleString)
 
-    def showNextPlot(self, show = False, export = False):
+    def showNextPlot(self, show = False, export = False, save_to_csv = False):
         self.showNextPlotFlag = show
         self.exportNextPlotFlag = export
+        self.save_to_csv = save_to_csv
         
         

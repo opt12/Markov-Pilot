@@ -16,7 +16,9 @@ from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperPar
 import gym_jsbsim.properties as prp
 
 
-ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+# ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.EXTRA-NoFG-v0"
 
 
 if __name__ == "__main__":
@@ -36,7 +38,9 @@ if __name__ == "__main__":
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     # env = PidWrapper(env, [elevator_wrap, aileron_wrap])  #to apply PID control to the pitch and the roll axis (for benchmarking) #remove net.load_state_dict() !!!
-    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    # env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 
+                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
 
 
@@ -46,12 +50,12 @@ if __name__ == "__main__":
     net = model.DDPGActor(env.observation_space.shape[0], env.action_space.shape[0])
     net.load_state_dict(torch.load(args.model))
 
-    tgt_flight_path_deg = -7
-    tgt_roll_angle_deg  = 25
-    episode_steps   = 3000
-    initial_path_angle_gamma_deg = 0
-    initial_roll_angle_phi_deg   = 0
+    tgt_flight_path_deg = -11
+    tgt_roll_angle_deg  = 15
+    episode_steps   = 100
     initial_fwd_speed_KAS        = 95
+    initial_path_angle_gamma_deg = -0
+    initial_roll_angle_phi_deg   = -0
     initial_aoa_deg              = 1.0
 
     for i in range(args.repeat):
@@ -59,10 +63,11 @@ if __name__ == "__main__":
         env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                            , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg
                                            , prp.episode_steps:            episode_steps})
-        env.task.set_initial_ac_attitude(path_angle_gamma_deg = initial_path_angle_gamma_deg, 
-                                         roll_angle_phi_deg   = initial_roll_angle_phi_deg, 
-                                         fwd_speed_KAS        = initial_fwd_speed_KAS, 
-                                         aoa_deg              = initial_aoa_deg)
+        env.task.set_initial_ac_attitude( {  prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
+                                           , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
+                                           , prp.initial_roll_deg: initial_roll_angle_phi_deg
+                                           , prp.initial_aoa_deg: initial_aoa_deg
+                                           })
 
         obs = env.reset()
         total_reward = 0.0

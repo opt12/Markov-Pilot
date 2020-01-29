@@ -24,12 +24,12 @@ import gym_jsbsim.properties as prp
 
 
 # ENV_ID = "Pendulum-v0"
-ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-# ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+# ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 
 GAMMA = 0.95
 BATCH_SIZE = 64
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 0.5e-4
 REPLAY_SIZE = 100000
 REPLAY_INITIAL = 10000
 
@@ -77,10 +77,18 @@ if __name__ == "__main__":
 
     env = gym.make(ENV_ID)
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
-    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
-    # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
-    # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    # env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
+    # env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
+    env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+
+    test_env = gym.make(ENV_ID)
+    test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
+    # test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
+    # test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
+    test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -6
@@ -98,13 +106,6 @@ if __name__ == "__main__":
                                        , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
-
-    test_env = gym.make(ENV_ID)
-    test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
-    test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
-    # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
-    # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
     test_env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                         , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg

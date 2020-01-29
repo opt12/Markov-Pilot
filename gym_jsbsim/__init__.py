@@ -1,7 +1,7 @@
 import gym.envs.registration
 import enum
 from gym_jsbsim.tasks import Task, HeadingControlTask, TurnHeadingControlTask
-from gym_jsbsim.task_steadyGlide import SteadyGlideTask, SteadyRollAngleTask
+from gym_jsbsim.task_steadyGlide import SteadyRollGlideTask, SteadyRollAngleTask, SteadyGlideAngleTask
 from gym_jsbsim.visualiser import TimeLineVisualiser
 from gym_jsbsim.aircraft import Aircraft, cessna172P
 from gym_jsbsim import utils

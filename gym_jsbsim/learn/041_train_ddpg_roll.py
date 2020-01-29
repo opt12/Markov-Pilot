@@ -24,8 +24,8 @@ import gym_jsbsim.properties as prp
 
 
 # ENV_ID = "Pendulum-v0"
+# ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"
 ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-# ENV_ID = "JSBSim-SteadyGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 
 GAMMA = 0.95
 BATCH_SIZE = 64
@@ -78,7 +78,8 @@ if __name__ == "__main__":
     env = gym.make(ENV_ID)
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
-    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 
+                    'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
@@ -102,7 +103,8 @@ if __name__ == "__main__":
     test_env = gym.make(ENV_ID)
     test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
-    test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 
+                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
