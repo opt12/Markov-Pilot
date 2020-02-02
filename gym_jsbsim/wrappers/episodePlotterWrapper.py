@@ -120,6 +120,18 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pAltitude.extra_y_ranges.renderers = [kiasLine, tasLine]    #this does not wuite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
         pAltitude.y_range.renderers = [altitudeLine]
 
+        # Presented state
+        pState = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
+        # Setting the second y axis range name and range
+        pState.extra_y_ranges = {"aileron": Range1d(start=-1, end=1)}
+        # Adding the second axis to the plot.  
+        pState.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
+
+        aileronLine = pState.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
+        deltaAileronLine = pState.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
+        phiLine = pState.line(df.index, df['error_rollAngle_error_deg'], line_width=2, color=Viridis4[0], legend_label="Roll Error")
+        phiVelocity = pState.line(df.index, df['velocities_p_rad_sec'], line_width=2, color=Viridis4[3], legend_label="Roll Velocity")
+
         #Reward
         pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
         rewardLine = pReward.line(df.index, df['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
@@ -148,15 +160,22 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pReward.xaxis.axis_label = 'timestep [0.2s]'
         pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
 
+        tState = Title()
+        tState.text = 'actual Reward over Timesteps'
+        pState.title = tReward
+        pState.xaxis.axis_label = 'timestep [0.2s]'
+        pState.yaxis[0].axis_label = 'Aileron Cmd [norm.]'
+
         #activate the zooming on all plots
         #this is not nice, but this not either: https://stackoverflow.com/questions/49282688/how-do-i-set-default-active-tools-for-a-bokeh-gridplot
         pElev.toolbar.active_scroll = pElev.toolbar.tools[1]    #this selects the WheelZoomTool instance 
         pAileron.toolbar.active_scroll = pAileron.toolbar.tools[1]    #this selects the WheelZoomTool instance 
         pAltitude.toolbar.active_scroll = pAltitude.toolbar.tools[1]    #this selects the WheelZoomTool instance 
         pReward.toolbar.active_scroll = pReward.toolbar.tools[1]    #this selects the WheelZoomTool instance 
+        pState.toolbar.active_scroll = pState.toolbar.tools[1]    #this selects the WheelZoomTool instance 
 
         reset_output()
-        grid = gridplot([[pElev, pAileron], [pAltitude, pReward]])
+        grid = gridplot([[pElev, pAileron], [pAltitude, pState], [None, pReward]])
         #for string formatting look here: https://pyformat.info/
         titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), df['reward'].sum())
         webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)
