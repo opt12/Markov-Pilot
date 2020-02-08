@@ -19,7 +19,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import gym_jsbsim
-from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper
+from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
 
@@ -32,7 +32,6 @@ BATCH_SIZE = 64
 LEARNING_RATE = 1e-4
 REPLAY_SIZE = 100000
 REPLAY_INITIAL = 10000
-
 TEST_ITERS = 1000
 
 
@@ -76,15 +75,16 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID)
+    # env = VarySetpointsWrapper(env)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
-    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 
-                    'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 
+                    # 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
 
-    tgt_flight_path_deg = -6
+    tgt_flight_path_deg = -10
     tgt_roll_angle_deg  = 10
     episode_steps   = 300
     initial_path_angle_gamma_deg = 0
@@ -101,10 +101,11 @@ if __name__ == "__main__":
                                       })
 
     test_env = gym.make(ENV_ID)
+    # test_env = VarySetpointsWrapper(test_env)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
-    test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 
-                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 
+                        # 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
