@@ -128,9 +128,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pState.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
 
         aileronLine = pState.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
-        deltaAileronLine = pState.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
+        # deltaAileronLine = pState.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
         phiLine = pState.line(df.index, df['error_rollAngle_error_deg'], line_width=2, color=Viridis4[0], legend_label="Roll Error")
         phiVelocity = pState.line(df.index, df['velocities_p_rad_sec'], line_width=2, color=Viridis4[3], legend_label="Roll Velocity")
+        phiAcc = pState.line(df.index, df['accelerations_pdot_rad_sec2'], line_width=2, color=Viridis4[2], legend_label="Roll Acceleration")
 
         #Reward
         pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)

@@ -78,6 +78,7 @@ class SteadyRollGlideTask(FlightTask):
                                       , prp.aileron_cmd                 #24 include cmd value into the state to calculate Δ cmd to avoid thrashing 
                                       , self.prp_delta_cmd_elevator     #25
                                       , self.prp_delta_cmd_aileron      #26
+                                      , prp.pdot_rad_sec2               #27
                                       )
         self.state_variables = FlightTask.base_state_variables + self.extra_state_variables
         self.positive_rewards = positive_rewards
@@ -291,8 +292,6 @@ class SteadyRollGlideTask(FlightTask):
 
 class SteadyRollAngleTask(SteadyRollGlideTask):
 
-    AILERON_CMD_SCALING_FACTOR = 2
-
     """
     A task in which the agent shall maintain a
     - steady banking angle (adjustable)
@@ -301,19 +300,22 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
     The glide path angle error is calculated as well as this is fed into the PID controller for elevator control.
     """
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+        AILERON_CMD_SCALING_FACTOR = 1  #the max. absolute value of the delta-cmd
         base_components = (
             rewards.AsymptoticErrorComponent(name='rollAngle_error',
                                     prop=self.prop_roll_angle_error_deg,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
-                                    scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING),
+                                    scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                                    weight=4),
             rewards.QuadraticErrorComponent(name='aileroncmd_travel_error',
                                     prop=self.prp_delta_cmd_aileron,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
-                                    scaling_factor=self.AILERON_CMD_SCALING_FACTOR),
+                                    scaling_factor=AILERON_CMD_SCALING_FACTOR,
+                                    weight=1),
         )
         return base_components
 

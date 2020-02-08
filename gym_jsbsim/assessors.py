@@ -35,7 +35,14 @@ class AssessorImpl(Assessor):
             perfect behaviour. Has no effect on potential difference based components.
         """
         self.base_components = tuple(base_components)
+        self.base_cmp_names = tuple(cmp.name for cmp in self.base_components)
+        self.base_weights = tuple(cmp.weight for cmp in self.base_components)
+        
         self.potential_components = tuple(potential_difference_based_components)
+        self.potential_cmp_names = tuple(cmp.name for cmp in self.potential_components)
+        self.potential_weights = tuple(cmp.weight for cmp in self.potential_components)
+
+        self.reward_dict = {}    #to keep all individual reward components in a dict for visualization
         self.positive_rewards = positive_rewards
         if not self.base_components:
             raise ValueError('base reward components cannot be empty')
@@ -48,18 +55,25 @@ class AssessorImpl(Assessor):
     def assess(self, state: State, prev_state: State, is_terminal: bool) -> Reward:
         """ Calculates a Reward from the state transition. """
         return Reward(self._base_rewards(state, prev_state, is_terminal),
-                      self._potential_based_rewards(state, prev_state, is_terminal))
+                      self._potential_based_rewards(state, prev_state, is_terminal),
+                      self.base_weights, self.potential_weights)
 
     def _base_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[float, ...]:
-        cmp_values = (cmp.calculate(state, prev_state, is_terminal) for cmp in self.base_components)
+        cmp_values = [cmp.calculate(state, prev_state, is_terminal) for cmp in self.base_components]
+        # put the calculated value into the rewardDict
+        dict_of_base_rewards =  dict(zip(self.base_cmp_names, cmp_values))
+        self.reward_dict.update(dict_of_base_rewards)
         if self.positive_rewards:
             return tuple(cmp_values)
         else:
             return tuple(value - 1 for value in cmp_values)
 
     def _potential_based_rewards(self, state: State, last_state: State, is_terminal: bool) -> Tuple[float, ...]:
-        return tuple(
-            cmp.calculate(state, last_state, is_terminal) for cmp in self.potential_components)
+        cmp_values = [cmp.calculate(state, last_state, is_terminal) for cmp in self.potential_components]
+        # put the calculated value into the rewardDict
+        dict_of_potential_rewards =  dict(zip(self.base_cmp_names, cmp_values))
+        self.reward_dict.update(dict_of_potential_rewards)
+        return tuple(cmp_values)
 
 
 class SequentialAssessor(AssessorImpl, ABC):

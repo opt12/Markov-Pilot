@@ -1,7 +1,8 @@
 import gym_jsbsim.properties as prp
 from abc import ABC, abstractmethod
-from typing import Tuple, Union
+from typing import Tuple, Union, List
 from gym_jsbsim.utils import reduce_reflex_angle_deg
+import numpy as np
 
 State = 'tasks.FlightTask.State'  # alias for type hint
 
@@ -12,27 +13,35 @@ class Reward(object):
 
     We decompose rewards into tuples of component values, reflecting contributions
     from different goals. Separate tuples are maintained for the assessment (non-shaping)
-    components and the shaping components. It is intended that the
+    components and the shaping components. 
 
-    Scalar reward values are retrieved by calling .reward() or non_shaping_reward().
-    The scalar value is the mean of the components.
+    Optionally, a list of weights can be given which is respected for each component when calculating the mean.
+    
+    Scalar reward values are retrieved by calling .agent_reward() or .assessment_reward().
+    The scalar value is the weighted mean of the components.
     """
 
-    def __init__(self, base_reward_elements: Tuple, shaping_reward_elements: Tuple):
-        self.base_reward_elements = base_reward_elements
-        self.shaping_reward_elements = shaping_reward_elements
-        if not self.base_reward_elements:
+    def __init__(self, base_reward_elements: Tuple, shaping_reward_elements: Tuple,
+                       base_weights: List = None, shaping_weights: List = None):
+        if not base_reward_elements:
             raise ValueError('base agent_reward cannot be empty')
 
+        self.base_reward_elements = np.array(base_reward_elements)
+        self.base_weights = np.array(base_weights) if base_weights else np.ones((len(base_reward_elements),))
+        self.base_weights_sum = np.sum(self.base_weights)
+        self.shaping_reward_elements = np.array(shaping_reward_elements)
+        self.shaping_weights = np.array(shaping_weights) if shaping_weights else np.ones((len(shaping_reward_elements),))
+        self.shaping_weights_sum = np.sum(self.shaping_weights)
+
     def agent_reward(self) -> float:
-        """ Returns scalar reward value by taking mean of all reward elements """
-        sum_reward = sum(self.base_reward_elements) + sum(self.shaping_reward_elements)
-        num_reward_components = len(self.base_reward_elements) + len(self.shaping_reward_elements)
-        return sum_reward / num_reward_components
+        """ Returns scalar reward value by taking weighted mean of all reward elements """
+        sum_reward = np.sum(self.base_reward_elements*self.base_weights) + np.sum(self.shaping_reward_elements * self.shaping_weights)
+        sum_weights = self.base_weights_sum + self.shaping_weights_sum
+        return sum_reward / sum_weights
 
     def assessment_reward(self) -> float:
-        """ Returns scalar non-shaping reward by taking mean of base reward elements. """
-        return sum(self.base_reward_elements) / len(self.base_reward_elements)
+        """ Returns scalar non-shaping reward by taking the weighted mean of base reward elements. """
+        return np.sum(self.base_reward_elements*self.base_weights) / self.base_weights_sum
 
     def is_shaping(self):
         return bool(self.shaping_reward_elements)
@@ -71,7 +80,8 @@ class NormalisedComponent(RewardComponent, ABC):
                  prop: prp.BoundedProperty,
                  state_variables: Tuple[prp.BoundedProperty],
                  target: Union[int, float, prp.Property, prp.BoundedProperty],
-                 potential_difference_based: bool):
+                 potential_difference_based: bool,
+                 weight: float = 1.0):
         """
         Constructor.
 
@@ -84,8 +94,11 @@ class NormalisedComponent(RewardComponent, ABC):
         :param potential_difference_based: True if reward is based on a potential difference
             between prev_state and state (AKA potential based shaping reward) else
             False (and reward depends only on the potential of current state).
+        :param weight = 1.0: an arbitrary weight to be assigned to the component. Will be used when 
+            averaging over the individual components.
         """
         self.name = name
+        self.weight = weight
         self.state_index_of_value = state_variables.index(prop)
         self.potential_difference_based = potential_difference_based
         self._set_target(target, state_variables)
@@ -185,14 +198,15 @@ class AsymptoticErrorComponent(ErrorComponent):
                  state_variables: Tuple[prp.BoundedProperty],
                  target: Union[int, float, prp.Property, prp.BoundedProperty],
                  potential_difference_based: bool,
-                 scaling_factor: Union[float, int]):
+                 scaling_factor: Union[float, int],
+                 weight: float = 1.0):
         """
         Constructor.
 
         :param scaling_factor: the property value is scaled down by this amount.
             Shaping potential is at 0.5 when the error equals this factor.
         """
-        super().__init__(name, prop, state_variables, target, potential_difference_based)
+        super().__init__(name, prop, state_variables, target, potential_difference_based, weight)
         self.scaling_factor = scaling_factor
 
     def _normalise_error(self, absolute_error: float):
@@ -239,7 +253,8 @@ class LinearErrorComponent(ErrorComponent):
                  state_variables: Tuple[prp.BoundedProperty],
                  target: Union[int, float, prp.Property, prp.BoundedProperty],
                  potential_difference_based: bool,
-                 scaling_factor: Union[float, int]):
+                 scaling_factor: Union[float, int],
+                 weight: float = 1.0):
         """
         Constructor.
 
@@ -247,7 +262,7 @@ class LinearErrorComponent(ErrorComponent):
             target. Minimum potential (0.0) occurs when error is
             max_error_size or greater.
         """
-        super().__init__(name, prop, state_variables, target, potential_difference_based)
+        super().__init__(name, prop, state_variables, target, potential_difference_based, weight)
         self.scaling_factor = scaling_factor
 
     def _normalise_error(self, absolute_error: float):
@@ -298,7 +313,7 @@ def normalise_error_linear(absolute_error: float, max_error: float) -> float:
     else:
         return absolute_error / max_error
 
-def normalise_error_quadratic(absolute_error: float, max_error: float) -> float:
+def normalise_error_quadratic(absolute_error: float, max_error: float) -> float:    #TODO: this is now not a quadratic component any more; pure qudratic calc yields far too high rewards with "low" deltaA values
     """
     Given an absolute error in [-max_error, max_error], quadratically normalises error in [0, 1]
 
@@ -307,13 +322,12 @@ def normalise_error_quadratic(absolute_error: float, max_error: float) -> float:
     # returns the negated, squared difference between the current value and the target value divided by the max. value
     # -(current_value-target_value)**2 / (val_max-val_min)**2
 
+    exp = 2
     if absolute_error < 0:
         raise ValueError(f'Error to be normalised must be non-negative '
                          f': {absolute_error}')
-    elif absolute_error > max_error:
-        return 1.0
     else:
-        return (absolute_error / max_error)**2
+        return np.clip((absolute_error / max_error)**exp, 0, 1)
 
 
 class RewardStub(Reward):
