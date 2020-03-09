@@ -299,23 +299,36 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
     The only difference to the SteadyRollGlideTask is that the glide path angle does not contribute to the reward.
     The glide path angle error is calculated as well as this is fed into the PID controller for elevator control.
     """
+
+    def make_assessor(self, shaping: Shaping) -> assessors.AssessorImpl:
+        base_components = self._make_base_reward_components()
+        shaping_components = () #the shaping rewards are ot really what I need; I need reward engineering instead of reward shaping
+        return self._select_assessor(base_components, shaping_components, shaping)
+
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         AILERON_CMD_SCALING_FACTOR = 1  #the max. absolute value of the delta-cmd
         base_components = (
-            rewards.AsymptoticErrorComponent(name='rollAngle_error',
+            rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error',
                                     prop=self.prop_roll_angle_error_deg,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
-                                    weight=4),
-            rewards.QuadraticErrorComponent(name='aileroncmd_travel_error',
+                                    weight=1),
+            rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error_dep',
                                     prop=self.prp_delta_cmd_aileron,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=AILERON_CMD_SCALING_FACTOR,
-                                    weight=1),
+                                    weight=0),
+            rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error',
+                                    prop=self.prp_delta_cmd_aileron,
+                                    state_variables=self.state_variables,
+                                    target=0.0,
+                                    potential_difference_based=False,
+                                    scaling_factor=AILERON_CMD_SCALING_FACTOR,
+                                    weight=0),
         )
         return base_components
 
@@ -340,6 +353,13 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
                          shaping_components: Tuple[rewards.RewardComponent, ...],
                          shaping: Shaping) -> assessors.AssessorImpl:
         if shaping is Shaping.STANDARD:
+            # rwd_rollAngle_error, rwd_aileroncmd_travel_error_dep, _ = base_components
+
+            # dependency_map = {rwd_aileroncmd_travel_error_dep: (rwd_rollAngle_error,)} # a Dict(rewards.AsymptoticErrorComponent --> (Tuple))
+            # return assessors.ContinuousSequentialAssessor(base_components, shaping_components,
+            #                                               base_dependency_map = dependency_map,
+            #                                               positive_rewards=self.positive_rewards)
+
             return assessors.AssessorImpl(base_components, shaping_components,
                                           positive_rewards=self.positive_rewards)
         else:

@@ -19,6 +19,7 @@ import gym_jsbsim.properties as prp
 ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 # ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.EXTRA-NoFG-v0"
+PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
 
 
 if __name__ == "__main__":
@@ -39,8 +40,7 @@ if __name__ == "__main__":
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     # env = PidWrapper(env, [elevator_wrap, aileron_wrap])  #to apply PID control to the pitch and the roll axis (for benchmarking) #remove net.load_state_dict() !!!
     # env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
-    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 
-                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    env = StateSelectWrapper(env, PRESENTED_STATE)
 
 
 
@@ -50,10 +50,10 @@ if __name__ == "__main__":
     net = model.DDPGActor(env.observation_space.shape[0], env.action_space.shape[0])
     net.load_state_dict(torch.load(args.model))
 
-    tgt_flight_path_deg = -11
-    tgt_roll_angle_deg  = 15
-    episode_steps   = 100
-    initial_fwd_speed_KAS        = 95
+    tgt_flight_path_deg = -7.5
+    tgt_roll_angle_deg  = -10
+    episode_steps   = 2500
+    initial_fwd_speed_KAS        = 75
     initial_path_angle_gamma_deg = -0
     initial_roll_angle_phi_deg   = -0
     initial_aoa_deg              = 1.0
@@ -72,7 +72,7 @@ if __name__ == "__main__":
         obs = env.reset()
         total_reward = 0.0
         total_steps = 0
-        env.showNextPlot(True, False)   #show the plot, but don't save the png
+        env.showNextPlot(True, False, True)   #show the plot, but don't save the png
         while True:
             obs_v = torch.FloatTensor([obs])
             mu_v = net(obs_v)
@@ -82,7 +82,7 @@ if __name__ == "__main__":
             # env.render()
             total_reward += reward
             total_steps += 1
-            if total_steps % 350 == 0:
+            if total_steps % 500 == 0:
                 tgt_roll_angle_deg = -tgt_roll_angle_deg
                 env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })

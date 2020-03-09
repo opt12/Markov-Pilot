@@ -25,15 +25,6 @@ import gym_jsbsim.properties as prp
 
 # ENV_ID = "Pendulum-v0"
 # ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"
-ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-
-GAMMA = 0.95
-BATCH_SIZE = 64
-LEARNING_RATE = 1e-4
-REPLAY_SIZE = 100000
-REPLAY_INITIAL = 10000
-TEST_ITERS = 1000
-
 
 def test_net(net, env, count=10, device="cpu"):
     rewards = 0.0
@@ -66,7 +57,24 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "{}_ddpg-".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
+    ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+
+    GAMMA = .95
+    BATCH_SIZE = 128
+    LEARNING_RATE_ACTOR = 1e-4
+    LEARNING_RATE_CRITIC = 1e-4
+    LEARNING_RATE_ACTOR = 0.00005
+    LEARNING_RATE_CRITIC = 0.0005
+    # alpha=0.00005# LR actor
+    # beta=0.0005# Lr critic
+    REPLAY_SIZE = 100000
+    REPLAY_INITIAL = 10000
+    TEST_ITERS = 2000
+    INTERACTION_FREQ = 5
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
+    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
+
+    save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     # elevator params: 'Kp':  -5e-2, 'Ki': -6.5e-2, 'Kd': -1e-3
@@ -74,19 +82,18 @@ if __name__ == "__main__":
     elevator_wrap = PidWrapperParams('fcs_elevator_cmd_norm', 'error_glideAngle_error_deg', PidParameters( -5e-2, -6.5e-2, -1e-3))
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
-    env = gym.make(ENV_ID)
-    # env = VarySetpointsWrapper(env)     #to vary the setpoints during training
+    env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
+    env = VarySetpointsWrapper(env)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
-    env = StateSelectWrapper(env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 
-                    # 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    env = StateSelectWrapper(env, PRESENTED_STATE )
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -10
     tgt_roll_angle_deg  = 10
-    episode_steps   = 300
+    episode_steps   = 2*60*INTERACTION_FREQ
     initial_path_angle_gamma_deg = 0
     initial_roll_angle_phi_deg   = 0
     initial_fwd_speed_KAS        = 95
@@ -100,12 +107,11 @@ if __name__ == "__main__":
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
 
-    test_env = gym.make(ENV_ID)
-    # test_env = VarySetpointsWrapper(test_env)     #to vary the setpoints during training
+    test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
+    #test_env = VarySetpointsWrapper(test_env)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
-    test_env = StateSelectWrapper(test_env, ['error_rollAngle_error_deg', 'velocities_p_rad_sec'])#, 
-                        # 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
+    test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
     # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
@@ -126,13 +132,14 @@ if __name__ == "__main__":
     tgt_crt_net = ptan.agent.TargetNet(crt_net)
 
     writer = SummaryWriter(comment="-ddpg_" + ENV_ID + args.name)
-    agent = model.AgentDDPG(act_net, device=device)
+    #TODO: Check the OU-parameters! It looks like with standard prams, the noise is far too heavy.
+    agent = model.AgentDDPG(act_net, device=device)#, ou_mu=0.0, ou_teta=0.5, ou_sigma=0.05, ou_epsilon=1.0)
     # agent = model.PidWithDDPG(act_net, device=device)
 
     exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=GAMMA, steps_count=1)
     buffer = ptan.experience.ExperienceReplayBuffer(exp_source, buffer_size=REPLAY_SIZE)
-    act_opt = optim.Adam(act_net.parameters(), lr=LEARNING_RATE)
-    crt_opt = optim.Adam(crt_net.parameters(), lr=LEARNING_RATE)
+    act_opt = optim.Adam(act_net.parameters(), lr=LEARNING_RATE_ACTOR)
+    crt_opt = optim.Adam(crt_net.parameters(), lr=LEARNING_RATE_CRITIC)
 
     frame_idx = 0
     best_reward = None

@@ -45,8 +45,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         #let's move on to the next step
         self.newObs = self.env.step(action)
         self.state, self.reward, self.done, info = self.newObs
+        self.reward_components_dict = self.env.task.assessor.reward_dict    #this goes down quite a bit through the class hierarchy; Not nice, but it works for now.
         data = np.concatenate((self.state, [self.reward], [self.done], action)).tolist()
         dataDict = dict(zip(self.recorderCols, data))
+        dataDict.update(self.reward_components_dict)
         self.recorderDictList.append(dataDict)
         if self.done:
             if (self.showNextPlotFlag or self.exportNextPlotFlag or self.save_to_csv):
@@ -135,6 +137,9 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         #Reward
         pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
+        rwd_aileroncmd_travel_error_depLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error_dep'], line_width=2, color=Viridis4[0], legend_label = "rwd_aileroncmd_dep")
+        rwd_rollAngle_errorLine = pReward.line(df.index, df['rwd_rollAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
+        rwd_aileroncmd_travel_errorLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error'], line_width=2, color=Viridis4[2], legend_label = "rwd_aileroncmd_travel_error")
         rewardLine = pReward.line(df.index, df['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
 
         tElev = Title()
@@ -162,7 +167,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
 
         tState = Title()
-        tState.text = 'actual Reward over Timesteps'
+        tState.text = 'actual State presentation to Agent'
         pState.title = tReward
         pState.xaxis.axis_label = 'timestep [0.2s]'
         pState.yaxis[0].axis_label = 'Aileron Cmd [norm.]'
@@ -176,7 +181,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pState.toolbar.active_scroll = pState.toolbar.tools[1]    #this selects the WheelZoomTool instance 
 
         reset_output()
-        grid = gridplot([[pElev, pAileron], [pAltitude, pState], [None, pReward]])
+        grid = gridplot([[pElev, pAileron], [pAltitude, pReward], [None, pState]])
         #for string formatting look here: https://pyformat.info/
         titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), df['reward'].sum())
         webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)

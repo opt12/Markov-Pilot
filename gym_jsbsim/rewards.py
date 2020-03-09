@@ -283,6 +283,55 @@ class QuadraticErrorComponent(LinearErrorComponent):
     def _normalise_error(self, absolute_error: float):
         return normalise_error_quadratic(absolute_error, self.scaling_factor)
 
+class ScalingErrorComponent(LinearErrorComponent):
+    """
+    """
+
+    def __init__(self,
+                 name: str,
+                 prop: prp.BoundedProperty,
+                 scaling_prop: prp.BoundedProperty,
+                 state_variables: Tuple[prp.BoundedProperty],
+                 target: Union[int, float, prp.Property, prp.BoundedProperty],
+                 potential_difference_based: bool,
+                 scaling_factor: Union[float, int],
+                 weight: float = 1.0):
+        """
+        Constructor.
+
+        :param scaling_prop: the property to use for scaling the reward from prop value
+        """
+        super().__init__(name, prop, state_variables, target, potential_difference_based, weight)
+        self.scaling_prop = scaling_prop
+        self.state_index_of_scaling = state_variables.index(scaling_prop)
+
+
+    def get_potential(self, state: State, is_terminal) -> float:
+        """
+        Calculates the 'goodness' of a State given we want the compare_property
+        to be some target_value. The target value may be a constant or
+        retrieved from another property in the state.
+
+        The 'goodness' of the state is given in the interval [-1,0], where 0
+        corresponds to zero error, and -1 corresponds to inf error.
+        """
+        if is_terminal and self.potential_difference_based:
+            return self.POTENTIAL_BASED_DIFFERENCE_TERMINAL_VALUE
+
+        if self.is_constant_target():
+            target = self.target
+        else:
+            # else we have to look it up from the state
+            target = state[self.target_index]
+        value = state[self.state_index_of_value]
+        error = abs(value - target)
+        return 1 - self._normalise_error(error)
+
+    # returns the negated, squared difference between the current value and the target value divided by the max. value
+    # -(current_value-target_value)**2 / (val_max-val_min)**2
+    def _normalise_error(self, absolute_error: float):
+        return normalise_error_quadratic(absolute_error, self.scaling_factor)
+
 def normalise_error_asymptotic(absolute_error: float, scaling_factor: float) -> float:
     """
     Given an error in the interval [0, +inf], returns a normalised error in [0, 1]

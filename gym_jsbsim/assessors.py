@@ -71,7 +71,7 @@ class AssessorImpl(Assessor):
     def _potential_based_rewards(self, state: State, last_state: State, is_terminal: bool) -> Tuple[float, ...]:
         cmp_values = [cmp.calculate(state, last_state, is_terminal) for cmp in self.potential_components]
         # put the calculated value into the rewardDict
-        dict_of_potential_rewards =  dict(zip(self.base_cmp_names, cmp_values))
+        dict_of_potential_rewards =  dict(zip(self.potential_cmp_names, cmp_values))
         self.reward_dict.update(dict_of_potential_rewards)
         return tuple(cmp_values)
 
@@ -115,7 +115,10 @@ class SequentialAssessor(AssessorImpl, ABC):
                                                        self.base_components,
                                                        self.base_dependency_map)
 
-        seq_values = (pot * discount for pot, discount in zip(potentials, seq_discounts))
+        seq_values = tuple(pot * discount for pot, discount in zip(potentials, seq_discounts))
+        # put the calculated value into the rewardDict
+        dict_of_base_rewards =  dict(zip(self.base_cmp_names, seq_values))
+        self.reward_dict.update(dict_of_base_rewards)
         if self.positive_rewards:
             return tuple(seq_values)
         else:
@@ -138,7 +141,12 @@ class SequentialAssessor(AssessorImpl, ABC):
 
         seq_potentials = (p * d for p, d in zip(potentials, discounts))
         seq_prev_potentials = (p * d for p, d in zip(prev_potentials, prev_discounts))
-        return tuple(pot - prev_pot for pot, prev_pot in zip(seq_potentials, seq_prev_potentials))
+        seq_values = tuple(pot - prev_pot for pot, prev_pot in zip(seq_potentials, seq_prev_potentials))
+        # put the calculated value into the rewardDict
+        dict_of_potential_rewards =  dict(zip(self.potential_cmp_names, seq_values))
+        self.reward_dict.update(dict_of_potential_rewards)
+        return seq_values
+
 
     @abstractmethod
     def _get_sequential_discounts(self, state: State, is_terminal: bool,
