@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+from tensorboardX import SummaryWriter
+
 
 class OUActionNoise(object):
     def __init__(self, mu, sigma=0.15, theta=.2, dt=1e-2, x0=None):
@@ -112,13 +114,13 @@ class CriticNetwork(nn.Module):
 
         return state_action_value   #scalar vaue
 
-    def save_checkpoint(self):
+    def save_checkpoint(self, name_suffix=''):
         print('... saving checkpoint ...')
-        T.save(self.state_dict(), self.checkpoint_file)
+        T.save(self.state_dict(), self.checkpoint_file+'_'+name_suffix)
 
-    def load_checkpoint(self):
+    def load_checkpoint(self, name_suffix = ''):
         print('... loading checkpoint ...')
-        self.load_state_dict(T.load(self.checkpoint_file))
+        self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
 
 class ActorNetwork(nn.Module):
     def __init__(self, alpha, input_dims, fc1_dims, fc2_dims, n_actions, name,
@@ -170,18 +172,23 @@ class ActorNetwork(nn.Module):
 
         return x
 
-    def save_checkpoint(self):
+    def save_checkpoint(self, name_suffix=''):
         print('... saving checkpoint ...')
-        T.save(self.state_dict(), self.checkpoint_file)
+        T.save(self.state_dict(), self.checkpoint_file+'_'+name_suffix)
 
-    def load_checkpoint(self):
+    def load_checkpoint(self, name_suffix=''):
         print('... loading checkpoint ...')
-        self.load_state_dict(T.load(self.checkpoint_file))
+        self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
 
 class Agent(object):
     def __init__(self, lr_actor, lr_critic, input_dims, tau, env, gamma=0.99,
                  n_actions=2, max_size=1000000, layer1_size=400,
                  layer2_size=300, batch_size=64):
+        #default values for noise
+        self.noise_sigma = 0.15
+        self.noise_theta = 0.2
+
+        self.n_actions = n_actions
         self.gamma = gamma
         self.tau = tau
         self.memory = ReplayBuffer(max_size, input_dims, n_actions)
@@ -201,26 +208,41 @@ class Agent(object):
                                            layer2_size, n_actions=n_actions,
                                            name='TargetCritic')
 
-        self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)
+        # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)
+        self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
+
+        writer_name = f"-DDPG_input_dims-{input_dims}_n_actions-{n_actions}_lr_actor-{lr_actor}_lr_critic-{lr_critic}_batch_size-{batch_size}"
+        self.writer = SummaryWriter(comment=writer_name)
 
         print(self.actor)
         print(self.critic)
 
         self.update_network_parameters(tau=1)   #with tau=1 the target net is updated entirely to the base network
+        self.global_step = 0
+        self.episode_counter = 0
 
     def choose_action(self, observation, add_exploration_noise = True):
         self.actor.eval()   #don't calc statistics for layer normalization in action selection
         observation = T.tensor(observation, dtype=T.float).to(self.actor.device)    #convert to Tensor
         mu = self.actor.forward(observation).to(self.actor.device)
-        if add_exploration_noise:
-            mu = mu + T.tensor(self.noise(),                          #add exploration noise
-                               dtype=T.float).to(self.actor.device)
+        noise = self.noise() if add_exploration_noise else 0
+        if self.writer:
+            self.writer.add_scalar("exploration noise", noise, global_step=self.global_step)
+
+        mu = mu + T.tensor(noise,                          #add exploration noise
+                           dtype=T.float).to(self.actor.device)
         self.actor.train()  #switch to training mode
         return mu.cpu().detach().numpy()  #return actions as numpy array
 
 
     def remember(self, state, action, reward, new_state, done):
+        if self.writer:
+            self.writer.add_scalar("reward", reward, global_step=self.global_step)
         self.memory.store_transition(state, action, reward, new_state, done)
+        if done:
+            self.episode_counter += 1
+        self.global_step += 1
+        
 
     def learn(self):
         if self.memory.mem_cntr < self.batch_size:
@@ -250,7 +272,18 @@ class Agent(object):
         self.critic.train()         #switch critic back to training mode
         self.critic.optimizer.zero_grad()
         critic_loss = F.mse_loss(target_value, critic_value)
+        if self.writer:
+            self.writer.add_scalar("critic_loss", critic_loss, global_step=self.global_step)
         critic_loss.backward()
+        grad_max = 0.0
+        grad_means = 0.0
+        grad_count = 0
+        for p in self.critic.parameters():
+            grad_max = max(grad_max, p.grad.abs().max().item())
+            grad_means += (p.grad ** 2).mean().sqrt().item()
+            grad_count += 1
+        self.writer.add_scalar("critic grad_l2",  grad_means / grad_count, global_step=self.global_step)
+        self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
         self.critic.optimizer.step()
 
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
@@ -259,6 +292,8 @@ class Agent(object):
         self.actor.train()
         actor_performance = -self.critic.forward(state, mu) # use negative performance as optimizer always does gradiend descend, but we want to ascend
         actor_performance = T.mean(actor_performance)
+        if self.writer:
+            self.writer.add_scalar("actor_performance", -actor_performance, global_step=self.global_step)
         actor_performance.backward()
         self.actor.optimizer.step()
 
@@ -304,33 +339,40 @@ class Agent(object):
             print(name, T.equal(param, critic_state_dict[name]))
         input()
         """
-    def save_models(self):
-        self.actor.save_checkpoint()
-        self.target_actor.save_checkpoint()
-        self.critic.save_checkpoint()
-        self.target_critic.save_checkpoint()
+    def save_models(self, name_suffix = ''):
+        self.actor.save_checkpoint(name_suffix)
+        self.target_actor.save_checkpoint(name_suffix)
+        self.critic.save_checkpoint(name_suffix)
+        self.target_critic.save_checkpoint(name_suffix)
 
-    def load_models(self):
-        self.actor.load_checkpoint()
-        self.target_actor.load_checkpoint()
-        self.critic.load_checkpoint()
-        self.target_critic.load_checkpoint()
+    def load_models(self, name_suffix = ''):
+        self.actor.load_checkpoint(name_suffix)
+        self.target_actor.load_checkpoint(name_suffix)
+        self.critic.load_checkpoint(name_suffix)
+        self.target_critic.load_checkpoint(name_suffix)
 
     def reset_noise_source(self):
         self.noise.reset()
 
-    def check_actor_params(self):
-        current_actor_params = self.actor.named_parameters()
-        current_actor_dict = dict(current_actor_params)
-        original_actor_dict = dict(self.original_actor.named_parameters())
-        original_critic_dict = dict(self.original_critic.named_parameters())
-        current_critic_params = self.critic.named_parameters()
-        current_critic_dict = dict(current_critic_params)
-        print('Checking Actor parameters')
+    def reduce_noise_sigma(self, sigma_factor = 1, theta_factor = 1):
+        self.noise_sigma *= sigma_factor
+        self.noise_theta *= theta_factor
+        print('Noise set to sigma=%f, theta=%f' % (self.noise_sigma, self.noise_theta))
+        self.noise = OUActionNoise(mu=np.zeros(self.n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
+        self.noise.reset()
 
-        for param in current_actor_dict:
-            print(param, T.equal(original_actor_dict[param], current_actor_dict[param]))
-        print('Checking critic parameters')
-        for param in current_critic_dict:
-            print(param, T.equal(original_critic_dict[param], current_critic_dict[param]))
-        input()
+    # def check_actor_params(self):
+    #     current_actor_params = self.actor.named_parameters()
+    #     current_actor_dict = dict(current_actor_params)
+    #     original_actor_dict = dict(self.original_actor.named_parameters())
+    #     original_critic_dict = dict(self.original_critic.named_parameters())
+    #     current_critic_params = self.critic.named_parameters()
+    #     current_critic_dict = dict(current_critic_params)
+    #     print('Checking Actor parameters')
+
+    #     for param in current_actor_dict:
+    #         print(param, T.equal(original_actor_dict[param], current_actor_dict[param]))
+    #     print('Checking critic parameters')
+    #     for param in current_critic_dict:
+    #         print(param, T.equal(original_critic_dict[param], current_critic_dict[param]))
+    #     input()

@@ -2,6 +2,8 @@
 import sys            
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
+import time
+
 from ddpg_torch import Agent
 import gym
 import numpy as np
@@ -10,19 +12,36 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
+
+best_reward = None  #we don't like globals, but it really helps here
+
 def test_net(agent, env, add_exploration_noise=False):
-        obs = env.reset()
-        env.showNextPlot(True, True)
-        done = False
-        score = 0
-        while not done:
-            act = agent.choose_action(obs, add_exploration_noise=add_exploration_noise)
-            new_state, reward, done, info = env.step(act)
-            agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
-            score += reward     # the action includes noise!!!
-            obs = new_state
-            #env.render()
-        print("\tTest yielded a score of %.2f" %score, ".")
+    global best_reward
+    obs = env.reset()
+    env.showNextPlot(True, True)
+    done = False
+    score = 0
+    steps = 0
+    while not done:
+        act = agent.choose_action(obs, add_exploration_noise=add_exploration_noise)
+        new_state, reward, done, info = env.step(act)
+        agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
+        score += reward     # the action includes noise!!!
+        obs = new_state
+        steps += 1
+        #env.render()
+    print("\tTest yielded a score of %.2f" %score, ".")
+
+    if best_reward is None or best_reward < score:
+        if best_reward is not None:
+            print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
+        name = "best_%+.3f_%d.dat" % (score, steps)
+        agent.save_models(name_suffix=name)
+        agent.save_models(name_suffix='best.dat')
+        best_reward = score
+    else:
+        #save the latest model with every test
+        agent.save_models(name_suffix='best.dat')
 
 
 if __name__ == "__main__":
@@ -41,8 +60,11 @@ if __name__ == "__main__":
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
+    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts']
+    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
+    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
+
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
     # os.makedirs(save_path, exist_ok=True)
@@ -93,18 +115,23 @@ if __name__ == "__main__":
                                        , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
+    #TODO: open summary writer here
 
     train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0])
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0])  #TODO: pass summary writer to Agent
 
     np.random.seed(0)
 
     score_history = []
+
     for i in range(1000):
         obs = env.reset()
         done = False
         score = 0
         # train_agent.reset_noise_source()    #this is like in the original paper
+        train_agent.reduce_noise_sigma(sigma_factor=0.98)
+        steps = 0
+        ts = time.time()
         while not done:
             act = train_agent.choose_action(obs)
             new_state, reward, done, info = env.step(act)
@@ -113,13 +140,17 @@ if __name__ == "__main__":
             score += reward     # the action includes noise!!!
             obs = new_state
             #env.render()
+            steps += 1
         score_history.append(score)
+        delta_t = time.time() - ts
+
+        print('episode ', i, 'score %.2f;' % score,
+              '%d' % steps, 'steps in %.2f' % delta_t, 'sec; That\'s %.2f' % (steps/delta_t),'steps/sec', 
+            'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
         if i% 5 == 0:
             test_net(train_agent, test_env, add_exploration_noise=False)
 
-        if i % 25 == 0:
-            train_agent.save_models()
+        # if i % 25 == 0:
+        #     train_agent.save_models()
 
-        print('episode ', i, 'score %.2f' % score,
-            'trailing 100 games avg %.3f' % np.mean(score_history[-100:]))

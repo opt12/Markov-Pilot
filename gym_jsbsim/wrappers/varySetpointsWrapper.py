@@ -12,7 +12,7 @@ class VarySetpointsWrapper(gym.Wrapper):
     """
     A wrapper to vary the setpoints at the beginning of each episode
 
-    This can be used during training to have bigger vriance in the training data
+    This can be used during training to have bigger variance in the training data
     """
     
     def __init__(self, env):
@@ -24,11 +24,20 @@ class VarySetpointsWrapper(gym.Wrapper):
 
     def reset(self):
         tgt_flight_path_deg = random.uniform(-12, -5.5)
-        tgt_roll_angle_deg  = random.uniform(-15, -5)
+        tgt_roll_angle_deg  = random.uniform(-15, 15)
+        initial_path_angle_gamma_deg = tgt_flight_path_deg
+        initial_roll_angle_phi_deg   = tgt_roll_angle_deg
+        initial_fwd_speed_KAS        = random.uniform(65, 110)
+
         self.original_env.task.change_setpoints(self.original_env.sim, { 
             prp.setpoint_flight_path_deg: tgt_flight_path_deg
           , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg 
           })
+        self.original_env.task.set_initial_ac_attitude( {  prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
+                                    #    , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
+                                    #    , prp.initial_roll_deg: initial_roll_angle_phi_deg
+                                       #, prp.initial_aoa_deg: initial_aoa_deg
+                                      })
         
         return self.original_env.reset()
 
