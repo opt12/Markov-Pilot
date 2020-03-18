@@ -23,6 +23,7 @@ if __name__ == "__main__":
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
     CHKPT_POSTFIX = ""
     SAVED_MODEL_NAME = "roll_best"
+    # SAVED_MODEL_NAME = "roll_+585.855_599"
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    # env = VarySetpointsWrapper(env)     #to vary the setpoints during training
+    # env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         obs = new_state
         #env.render()
         total_steps += 1
-        if total_steps % 3500 == 0:
+        if total_steps % 350 == 0:
             tgt_roll_angle_deg = -tgt_roll_angle_deg
             env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                 , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })

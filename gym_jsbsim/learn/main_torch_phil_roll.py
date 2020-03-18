@@ -76,7 +76,7 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    env = VarySetpointsWrapper(env)     #to vary the setpoints during training
+    env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
@@ -101,7 +101,7 @@ if __name__ == "__main__":
                                       })
 
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
-    test_env = VarySetpointsWrapper(test_env)     #to vary the setpoints during training
+    test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
@@ -126,6 +126,8 @@ if __name__ == "__main__":
 
     score_history = []
 
+    exploration_noise_flag = True
+
     for i in range(1000):
         obs = env.reset()
         done = False
@@ -135,7 +137,7 @@ if __name__ == "__main__":
         steps = 0
         ts = time.time()
         while not done:
-            act = train_agent.choose_action(obs)
+            act = train_agent.choose_action(obs, add_exploration_noise = exploration_noise_flag)
             new_state, reward, done, info = env.step(act)
             train_agent.remember(obs, act, reward, new_state, int(done))
             train_agent.learn()
