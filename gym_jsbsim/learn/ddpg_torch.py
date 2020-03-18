@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
@@ -183,7 +185,7 @@ class ActorNetwork(nn.Module):
 class Agent(object):
     def __init__(self, lr_actor, lr_critic, input_dims, tau, env, gamma=0.99,
                  n_actions=2, max_size=1000000, layer1_size=400,
-                 layer2_size=300, batch_size=64):
+                 layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix=''):
         #default values for noise
         self.noise_sigma = 0.15
         self.noise_theta = 0.2
@@ -193,25 +195,31 @@ class Agent(object):
         self.tau = tau
         self.memory = ReplayBuffer(max_size, input_dims, n_actions)
         self.batch_size = batch_size
+        
+        self.chkpt_postfix = '_'+chkpt_postfix if chkpt_postfix != '' else ''
+        self.chkpt_dir= f"checkpoints/{chkpt_dir}/inputs_{input_dims}_actions_{n_actions}/layer1_{layer1_size}_layer2_{layer2_size}/"
+        Path(self.chkpt_dir).mkdir(parents=True, exist_ok=True)
+        
+        print(f"set checkpoint directory to: {self.chkpt_dir}")
 
         self.actor = ActorNetwork(lr_actor, input_dims, layer1_size,
                                   layer2_size, n_actions=n_actions,
-                                  name='Actor')
+                                  name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
         self.critic = CriticNetwork(lr_critic, input_dims, layer1_size,
                                     layer2_size, n_actions=n_actions,
-                                    name='Critic')
+                                    name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
 
         self.target_actor = ActorNetwork(lr_actor, input_dims, layer1_size,
                                          layer2_size, n_actions=n_actions,
-                                         name='TargetActor')
+                                         name='TargetActor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
         self.target_critic = CriticNetwork(lr_critic, input_dims, layer1_size,
                                            layer2_size, n_actions=n_actions,
-                                           name='TargetCritic')
+                                           name='TargetCritic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
 
         # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)
         self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
 
-        writer_name = f"-DDPG_input_dims-{input_dims}_n_actions-{n_actions}_lr_actor-{lr_actor}_lr_critic-{lr_critic}_batch_size-{batch_size}"
+        writer_name = f"GLIDE-DDPG_input_dims-{input_dims}_n_actions-{n_actions}_lr_actor-{lr_actor}_lr_critic-{lr_critic}_batch_size-{batch_size}"
         self.writer = SummaryWriter(comment=writer_name)
 
         print(self.actor)
@@ -226,8 +234,8 @@ class Agent(object):
         observation = T.tensor(observation, dtype=T.float).to(self.actor.device)    #convert to Tensor
         mu = self.actor.forward(observation).to(self.actor.device)
         noise = self.noise() if add_exploration_noise else 0
-        if self.writer:
-            self.writer.add_scalar("exploration noise", noise, global_step=self.global_step)
+        # if self.writer:
+        #     self.writer.add_scalar("exploration noise", noise, global_step=self.global_step)
 
         mu = mu + T.tensor(noise,                          #add exploration noise
                            dtype=T.float).to(self.actor.device)
@@ -339,17 +347,17 @@ class Agent(object):
             print(name, T.equal(param, critic_state_dict[name]))
         input()
         """
-    def save_models(self, name_suffix = ''):
-        self.actor.save_checkpoint(name_suffix)
-        self.target_actor.save_checkpoint(name_suffix)
-        self.critic.save_checkpoint(name_suffix)
-        self.target_critic.save_checkpoint(name_suffix)
+    def save_models(self, name_discriminator = ''):
+        self.actor.save_checkpoint(name_discriminator)
+        self.target_actor.save_checkpoint(name_discriminator)
+        self.critic.save_checkpoint(name_discriminator)
+        self.target_critic.save_checkpoint(name_discriminator)
 
-    def load_models(self, name_suffix = ''):
-        self.actor.load_checkpoint(name_suffix)
-        self.target_actor.load_checkpoint(name_suffix)
-        self.critic.load_checkpoint(name_suffix)
-        self.target_critic.load_checkpoint(name_suffix)
+    def load_models(self, name_discriminator = ''):
+        self.actor.load_checkpoint(name_discriminator)
+        self.target_actor.load_checkpoint(name_discriminator)
+        self.critic.load_checkpoint(name_discriminator)
+        self.target_critic.load_checkpoint(name_discriminator)
 
     def reset_noise_source(self):
         self.noise.reset()

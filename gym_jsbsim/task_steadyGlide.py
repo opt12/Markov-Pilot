@@ -107,18 +107,20 @@ class SteadyRollGlideTask(FlightTask):
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         base_components = (
-            rewards.AsymptoticErrorComponent(name='glideAngle_error',
-                                             prop=self.prop_glide_angle_error_deg,
-                                             state_variables=self.state_variables,
-                                             target=0.0,
-                                             potential_difference_based=False,
-                                             scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING),
-            rewards.AsymptoticErrorComponent(name='rollAngle_error',
-                                             prop=self.prop_roll_angle_error_deg,
-                                             state_variables=self.state_variables,
-                                             target=0.0,
-                                             potential_difference_based=False,
-                                             scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING),
+            rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error',
+                        prop=self.prop_glide_angle_error_deg,
+                        state_variables=self.state_variables,
+                        target=0.0,
+                        potential_difference_based=False,
+                        scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
+                        weight=1),
+            rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error',
+                        prop=self.prop_roll_angle_error_deg,
+                        state_variables=self.state_variables,
+                        target=0.0,
+                        potential_difference_based=False,
+                        scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                        weight=1),
             # add an airspeed error relative to cruise speed component?
             # TODO: add some indicator to avoid flattering of controls (some derivative value, i. e. the difference between the last and the current actuator command)
         )
@@ -212,9 +214,7 @@ class SteadyRollGlideTask(FlightTask):
             delta_ail  = sim[prp.aileron_cmd] - 0
         sim[self.prp_delta_cmd_elevator] = delta_elev
         sim[self.prp_delta_cmd_aileron] = delta_ail
-        
-
-
+       
     def _decrement_steps_left(self, sim: Simulation):
         sim[prp.steps_left] -= 1
         #TODO: rather count the steps up and compare with episode_steps; this eases prolonging the episode during runtime
@@ -276,8 +276,6 @@ class SteadyRollGlideTask(FlightTask):
         sim[prp.steps_left] = self.setpoints[prp.episode_steps]
         for prop, value in self.setpoints.items():
             sim[prop] = value   #update the setpoints in the simulation model
-
-
 
     def get_props_to_output(self) -> Tuple:
         #TODO: this shall go into a graph or better to go additionally to a graph
@@ -393,12 +391,13 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         base_components = (
-            rewards.AsymptoticErrorComponent(name='glideAngle_error',
-                                             prop=self.prop_glide_angle_error_deg,
-                                             state_variables=self.state_variables,
-                                             target=0.0,
-                                             potential_difference_based=False,
-                                             scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING),
+            rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error',
+                        prop=self.prop_glide_angle_error_deg,
+                        state_variables=self.state_variables,
+                        target=0.0,
+                        potential_difference_based=False,
+                        scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
+                        weight=9),
         )
         return base_components
 

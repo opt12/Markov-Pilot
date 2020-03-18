@@ -137,9 +137,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         #Reward
         pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
-        rwd_aileroncmd_travel_error_depLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error_dep'], line_width=2, color=Viridis4[0], legend_label = "rwd_aileroncmd_dep")
-        rwd_rollAngle_errorLine = pReward.line(df.index, df['rwd_rollAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
-        rwd_aileroncmd_travel_errorLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error'], line_width=2, color=Viridis4[2], legend_label = "rwd_aileroncmd_travel_error")
+        # rwd_aileroncmd_travel_error_depLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error_dep'], line_width=2, color=Viridis4[0], legend_label = "rwd_aileroncmd_dep")
+        # rwd_rollAngle_errorLine = pReward.line(df.index, df['rwd_rollAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
+        # rwd_glideAngle_errorLine = pReward.line(df.index, df['rwd_glideAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
+        # rwd_aileroncmd_travel_errorLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error'], line_width=2, color=Viridis4[2], legend_label = "rwd_aileroncmd_travel_error")
         rewardLine = pReward.line(df.index, df['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
 
         tElev = Title()
@@ -168,7 +169,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         tState = Title()
         tState.text = 'actual State presentation to Agent'
-        pState.title = tReward
+        # pState.title = tReward
         pState.xaxis.axis_label = 'timestep [0.2s]'
         pState.yaxis[0].axis_label = 'Aileron Cmd [norm.]'
 

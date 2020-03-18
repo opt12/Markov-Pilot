@@ -1,8 +1,10 @@
-plots/
 .vscode/
 .history/
+tmp/ddpg/
+plots/
 saves/
 runs/
+checkpoints/
 
 gym_jsbsim/__pycache__/
 
@@ -137,4 +139,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-tmp/ddpg/

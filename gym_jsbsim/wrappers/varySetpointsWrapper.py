@@ -25,8 +25,8 @@ class VarySetpointsWrapper(gym.Wrapper):
     def reset(self):
         tgt_flight_path_deg = random.uniform(-12, -5.5)
         tgt_roll_angle_deg  = random.uniform(-15, 15)
-        initial_path_angle_gamma_deg = tgt_flight_path_deg
-        initial_roll_angle_phi_deg   = tgt_roll_angle_deg
+        # initial_path_angle_gamma_deg = tgt_flight_path_deg
+        # initial_roll_angle_phi_deg   = tgt_roll_angle_deg
         initial_fwd_speed_KAS        = random.uniform(65, 110)
 
         self.original_env.task.change_setpoints(self.original_env.sim, { 
