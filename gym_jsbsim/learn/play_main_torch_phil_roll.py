@@ -21,8 +21,8 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "_decay_sine_after_30"
-    CHKPT_POSTFIX = ""
+    CHKPT_DIR = ENV_ID + "TryOut_Integral"
+    CHKPT_POSTFIX = "_Integral_no_delta_values"
     SAVED_MODEL_NAME = "roll_best"
     # SAVED_MODEL_NAME = "roll_+585.855_599"
 
@@ -34,7 +34,8 @@ if __name__ == "__main__":
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
@@ -47,7 +48,7 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    # env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
+    env = VarySetpointsWrapper(env)#, modulation_amplitude = 0.2, modulation_period = 150)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
@@ -94,7 +95,7 @@ if __name__ == "__main__":
         obs = new_state
         #env.render()
         total_steps += 1
-        if total_steps % 3500 == 0:
+        if total_steps % 350 == 0:
             tgt_roll_angle_deg = -tgt_roll_angle_deg
             env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                 , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })

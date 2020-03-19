@@ -29,6 +29,7 @@ class SteadyRollGlideTask(FlightTask):
     - steady glide angle (adjustable)
     - steady banking angle (adjustable)
     """
+    INTEGRAL_DECAY = 1   #just a starting value. TODO: make configurable if it works out
     TARGET_GLIDE_ANGLE_DEG_default = -6   #TODO: this is arbitrary
     TARGET_ROLL_ANGLE_DEG_default  = -10
     INITIAL_ALTITUDE_FT_default = 6000
@@ -42,8 +43,12 @@ class SteadyRollGlideTask(FlightTask):
     #those are additional properties going into the sim[] object
     prop_glide_angle_error_deg = BoundedProperty('error/glideAngle-error-deg',
                                       'error to desired glide angle [deg]', -180, 180)
+    prop_glide_angle_error_integral_deg_sec = BoundedProperty('error/glideAngle-error-Integral-deg-sec',
+                                      'decayed sum of the glide angle error [deg*sec]', -1800, 1800)    #arbitrary boundary, add clipping if required
     prop_roll_angle_error_deg = BoundedProperty('error/rollAngle-error-deg',
                                         'error to desired roll/banking angle [deg]', -180, 180)
+    prop_roll_angle_error_integral_deg_sec = BoundedProperty('error/rollAngle-error-integral-deg-sec',
+                                        'decayed sum of the roll/banking angle error [deg*sec]', -1800, 1800)   #arbitrary boundary, add clipping if required
     prp_delta_cmd_elevator = BoundedProperty('info/delta-cmd-elevator', 
                                 'the actuation travel for the elevator command since the last step',
                                 prp.elevator_cmd.min - prp.elevator_cmd.max, prp.elevator_cmd.max - prp.elevator_cmd.min)
@@ -79,6 +84,8 @@ class SteadyRollGlideTask(FlightTask):
                                       , self.prp_delta_cmd_elevator     #25
                                       , self.prp_delta_cmd_aileron      #26
                                       , prp.pdot_rad_sec2               #27
+                                      , self.prop_glide_angle_error_integral_deg_sec     #28
+                                      , self.prop_roll_angle_error_integral_deg_sec      #29
                                       )
         self.state_variables = FlightTask.base_state_variables + self.extra_state_variables
         self.positive_rewards = positive_rewards
@@ -160,7 +167,9 @@ class SteadyRollGlideTask(FlightTask):
                             prp.initial_flight_path_deg: self.inital_attitude[prp.initial_flight_path_deg],  #to change the initial flightpath angle, change also the sink speed and the pitch
                             prp.initial_roll_deg:        self.inital_attitude[prp.initial_roll_deg],
                             prp.initial_altitude_ft:     self.inital_attitude[prp.initial_altitude_ft],
-                            prp.initial_aoa_deg:         self.inital_attitude[prp.initial_aoa_deg]
+                            prp.initial_aoa_deg:         self.inital_attitude[prp.initial_aoa_deg],
+                            self.prop_glide_angle_error_integral_deg_sec: 0,    #reset the error integral 
+                            self.prop_roll_angle_error_integral_deg_sec: 0
                             }
         return {**self.base_initial_conditions, **extra_conditions} #** returns the args as dictionary of named args
 
@@ -175,6 +184,8 @@ class SteadyRollGlideTask(FlightTask):
             for prop, value in new_setpoints.items():
                 sim[prop] = value   #update the setpoints in the simulation model
                 self.setpoints[prop] = value    #update the setpoints in the task class
+            sim[self.prop_glide_angle_error_integral_deg_sec] = 0 #reset error integrals    TODO: only reset if associated setpoint was changed
+            sim[self.prop_roll_angle_error_integral_deg_sec]  = 0 #reset error integrals
 
     def set_initial_ac_attitude(self, new_initial_conditions: Dict[Property, float]) :#path_angle_gamma_deg, roll_angle_phi_deg, fwd_speed_KAS = None, aoa_deg = 1.0, ):
         """
@@ -196,12 +207,15 @@ class SteadyRollGlideTask(FlightTask):
         current_glide_angle_deg = sim[prp.flight_path_deg]
         error_deg = utils.reduce_reflex_angle_deg(current_glide_angle_deg - target_glide_angle_deg)
         sim[self.prop_glide_angle_error_deg] = error_deg
+        sim[self.prop_glide_angle_error_integral_deg_sec] = sim[self.prop_glide_angle_error_integral_deg_sec] * self.INTEGRAL_DECAY + error_deg * sim[prp.sim_dt]
 
     def _update_rollAngle_error(self, sim: Simulation):
         target_roll_angle_deg = sim[prp.setpoint_roll_angle_deg]
         current_roll_angle_deg = sim[prp.roll_deg]
         error_deg = utils.reduce_reflex_angle_deg(current_roll_angle_deg - target_roll_angle_deg)
         sim[self.prop_roll_angle_error_deg] = error_deg
+        sim[self.prop_roll_angle_error_integral_deg_sec] = sim[self.prop_roll_angle_error_integral_deg_sec] * self.INTEGRAL_DECAY + error_deg * sim[prp.sim_dt]
+
     
     def _update_cmd_travel(self, sim:Simulation): 
         cmd_elev_idx = self.state_variables.index(prp.elevator_cmd)
@@ -313,20 +327,27 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
                                     weight=9),
-            rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error_dep',
-                                    prop=self.prp_delta_cmd_aileron,
+            rewards.QuadraticErrorComponent(name='rwd_rollAngle_error_Integral',
+                                    prop=self.prop_roll_angle_error_integral_deg_sec,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
-                                    scaling_factor=AILERON_CMD_SCALING_FACTOR,
-                                    weight=0),
-            rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error',
-                                    prop=self.prp_delta_cmd_aileron,
-                                    state_variables=self.state_variables,
-                                    target=0.0,
-                                    potential_difference_based=False,
-                                    scaling_factor=AILERON_CMD_SCALING_FACTOR,
-                                    weight=1),
+                                    scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                                    weight=9),
+            # rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error_dep',
+            #                         prop=self.prp_delta_cmd_aileron,
+            #                         state_variables=self.state_variables,
+            #                         target=0.0,
+            #                         potential_difference_based=False,
+            #                         scaling_factor=AILERON_CMD_SCALING_FACTOR,
+            #                         weight=0),
+            # rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error',
+            #                         prop=self.prp_delta_cmd_aileron,
+            #                         state_variables=self.state_variables,
+            #                         target=0.0,
+            #                         potential_difference_based=False,
+            #                         scaling_factor=AILERON_CMD_SCALING_FACTOR,
+            #                         weight=2),
         )
         return base_components
 

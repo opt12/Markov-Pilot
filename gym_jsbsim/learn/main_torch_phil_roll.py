@@ -52,8 +52,8 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "_decay_sine_after_30"
-    CHKPT_POSTFIX = ""
+    CHKPT_DIR = ENV_ID + "TryOut_Integral"
+    CHKPT_POSTFIX = "_Integral_no_delta_values"
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -63,7 +63,8 @@ if __name__ == "__main__":
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
@@ -156,9 +157,9 @@ if __name__ == "__main__":
         if episode% 5 == 0:
             test_net(train_agent, test_env, add_exploration_noise=False)
         
-        if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
-            exploration_noise_flag = False
-            env.set_modulation_params(modulation_amplitude = 0.7)
+        # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
+        #     exploration_noise_flag = False
+        #     env.set_modulation_params(modulation_amplitude = 0.7)
             
 
         # if i % 25 == 0:
