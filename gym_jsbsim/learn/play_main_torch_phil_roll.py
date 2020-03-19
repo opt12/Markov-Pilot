@@ -21,6 +21,7 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+    CHKPT_DIR = ENV_ID + "_decay_sine_after_30"
     CHKPT_POSTFIX = ""
     SAVED_MODEL_NAME = "roll_best"
     # SAVED_MODEL_NAME = "roll_+585.855_599"
@@ -58,8 +59,8 @@ if __name__ == "__main__":
     tgt_roll_angle_deg  = -5
     episode_steps   = 2500  #2*60*INTERACTION_FREQ
     initial_fwd_speed_KAS        = 130
-    initial_path_angle_gamma_deg = -0
-    initial_roll_angle_phi_deg   = -0
+    initial_path_angle_gamma_deg = -6.5
+    initial_roll_angle_phi_deg   = -5
     initial_aoa_deg              = 1.0
 
     env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     # TODO: a of this stuff is unnecessary, but #I need an agent right now.
     play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
-              chkpt_dir=ENV_ID, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
     play_agent.load_models(name_discriminator = SAVED_MODEL_NAME)
 
@@ -93,7 +94,7 @@ if __name__ == "__main__":
         obs = new_state
         #env.render()
         total_steps += 1
-        if total_steps % 350 == 0:
+        if total_steps % 3500 == 0:
             tgt_roll_angle_deg = -tgt_roll_angle_deg
             env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                 , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })

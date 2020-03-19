@@ -52,6 +52,7 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+    CHKPT_DIR = ENV_ID + "_decay_sine_after_30"
     CHKPT_POSTFIX = ""
 
     GAMMA = .95
@@ -76,7 +77,7 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
+    env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150, modulation_decay=0.99)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
@@ -120,7 +121,7 @@ if __name__ == "__main__":
 
     train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
-              chkpt_dir=ENV_ID, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
 
     np.random.seed(0)
 
@@ -128,7 +129,7 @@ if __name__ == "__main__":
 
     exploration_noise_flag = True
 
-    for i in range(1000):
+    for episode in range(1000):
         obs = env.reset()
         done = False
         score = 0
@@ -148,12 +149,17 @@ if __name__ == "__main__":
         score_history.append(score)
         delta_t = time.time() - ts
 
-        print('episode ', i, 'score %.2f;' % score,
+        print('episode ', episode, 'score %.2f;' % score,
               '%d' % steps, 'steps in %.2f' % delta_t, 'sec; That\'s %.2f' % (steps/delta_t),'steps/sec', 
             'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
-        if i% 5 == 0:
+        if episode% 5 == 0:
             test_net(train_agent, test_env, add_exploration_noise=False)
+        
+        if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
+            exploration_noise_flag = False
+            env.set_modulation_params(modulation_amplitude = 0.7)
+            
 
         # if i % 25 == 0:
         #     train_agent.save_models()
