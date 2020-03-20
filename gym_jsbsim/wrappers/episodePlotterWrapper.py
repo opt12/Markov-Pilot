@@ -12,7 +12,7 @@ from timeit import timeit
 
 
 class EpisodePlotterWrapper(gym.Wrapper):
-    def __init__(self, env):
+    def __init__(self, env, presented_state = None):
         super(EpisodePlotterWrapper, self).__init__(env)
 
         #create a pandas dataframe to hold all episode data
@@ -24,8 +24,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         self.state = np.empty(self.env.observation_space.shape)
         self.reward = 0.0
         self.done = False
-        self.recorderData = self.state_variables + self.reward_variables + self.done_variables + self.action_variables
+        self.recorderData = self.state_variables + self.reward_variables + self.done_variables# + self.action_variables #actions are part of the state
         self.recorderCols = list(map(lambda el:el.get_legal_name(),self.recorderData))
+
+        self.presented_state = presented_state
 
         self.showNextPlotFlag = False
         self.exportNextPlotFlag = False
@@ -75,38 +77,38 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         return self.state
     
-    def showGraph(self,df):
+    def showGraph(self,data_frame):
         from bokeh.plotting import figure
         from bokeh.layouts import row, column, gridplot
         from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
         from bokeh.models.annotations import Title, Legend
         from bokeh.models.widgets.markups import Div
         from bokeh.models import LinearAxis, Range1d
-        from bokeh.palettes import Viridis4, Viridis5
+        from bokeh.palettes import Viridis4, Inferno7
 
         # GlideAngle and Elevator
-        pElev = figure(plot_width=800, plot_height=500)
+        pElev = figure(plot_width=800, plot_height=400)
         # Setting the second y axis range name and range
         pElev.extra_y_ranges = {"elevator": Range1d(start=-1, end=1)}
         # Adding the second axis to the plot.  
         pElev.add_layout(LinearAxis(y_range_name="elevator", axis_label="Elevator Cmd [norm.]"), 'right')
 
-        elevatorLine = pElev.line(df.index, df['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
-        gammaLine = pElev.line(df.index, df['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
-        targetGammaLine = pElev.line(df.index, df['setpoint_glide_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
-        aoaLine = pElev.line(df.index, df['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA")
+        elevatorLine = pElev.line(data_frame.index, data_frame['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
+        gammaLine = pElev.line(data_frame.index, data_frame['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
+        targetGammaLine = pElev.line(data_frame.index, data_frame['setpoint_glide_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
+        aoaLine = pElev.line(data_frame.index, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA")
 
         # RollAngle and Aileron
-        pAileron = figure(plot_width=800, plot_height=500, x_range=pElev.x_range)
+        pAileron = figure(plot_width=800, plot_height=400, x_range=pElev.x_range)
         # Setting the second y axis range name and range
         pAileron.extra_y_ranges = {"aileron": Range1d(start=-1, end=1)}
         # Adding the second axis to the plot.  
         pAileron.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
 
-        aileronLine = pAileron.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
-        deltaAileronLine = pAileron.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
-        phiLine = pAileron.line(df.index, df['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
-        targetPhiLine = pAileron.line(df.index, df['setpoint_roll_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
+        aileronLine = pAileron.line(data_frame.index, data_frame['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
+        deltaAileronLine = pAileron.line(data_frame.index, data_frame['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
+        phiLine = pAileron.line(data_frame.index, data_frame['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
+        targetPhiLine = pAileron.line(data_frame.index, data_frame['setpoint_roll_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
         
 
         #Altitude over ground
@@ -116,33 +118,55 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pAltitude.add_layout(LinearAxis(y_range_name="speed", axis_label="IAS, TAS [Knots]"), 'right')
 
-        altitudeLine = pAltitude.line(df.index, df['position_h_sl_ft'], line_width=2, color=Viridis4[2], legend_label = "Altitude [ftsl]")
-        kiasLine = pAltitude.line(df.index, df['velocities_vc_kts'], line_width=2, y_range_name="speed", color=Viridis4[1], legend_label = "Indicated Airspeed [KIAS]")
-        tasLine = pAltitude.line(df.index, df['velocities_vtrue_kts'], line_width=2, y_range_name="speed", color=Viridis4[0], legend_label = "True Airspeed [KAS]")
-        pAltitude.extra_y_ranges.renderers = [kiasLine, tasLine]    #this does not wuite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
+        altitudeLine = pAltitude.line(data_frame.index, data_frame['position_h_sl_ft'], line_width=2, color=Viridis4[2], legend_label = "Altitude [ftsl]")
+        kiasLine = pAltitude.line(data_frame.index, data_frame['velocities_vc_kts'], line_width=2, y_range_name="speed", color=Viridis4[1], legend_label = "Indicated Airspeed [KIAS]")
+        tasLine = pAltitude.line(data_frame.index, data_frame['velocities_vtrue_kts'], line_width=2, y_range_name="speed", color=Viridis4[0], legend_label = "True Airspeed [KAS]")
+        pAltitude.extra_y_ranges.renderers = [kiasLine, tasLine]    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
         pAltitude.y_range.renderers = [altitudeLine]
 
         # Presented state
         pState = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
         # Setting the second y axis range name and range
-        pState.extra_y_ranges = {"aileron": Range1d(start=-1, end=1)}
+        norm_state_extents = 10
+        pState.extra_y_ranges = {"normalized_data": Range1d(start=-norm_state_extents, end=norm_state_extents )}
         # Adding the second axis to the plot.  
-        pState.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
+        pState.add_layout(LinearAxis(y_range_name="normalized_data", axis_label="normalized data"), 'right')
+        state_lines = []
+        normalized_state_lines = []
+        if self.presented_state:
+            for idx, state_name in enumerate(self.presented_state):
+                if(data_frame[state_name].max() <= norm_state_extents and data_frame[state_name].min() >= -norm_state_extents):
+                    normalized_state_lines.append(
+                        pState.line(data_frame.index, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7], legend_label = "norm_"+state_name)
+                    )
+                else:     
+                    state_lines.append(
+                        pState.line(data_frame.index, data_frame[state_name], line_width=2, color=Inferno7[idx%7], legend_label = state_name)
+                    )
+            pState.y_range.renderers = state_lines
+            pState.extra_y_ranges.renderers = normalized_state_lines    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
 
-        aileronLine = pState.line(df.index, df['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis5[1], legend_label = "Aileron Cmd.")
-        # deltaAileronLine = pState.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
-        phiLine = pState.line(df.index, df['error_rollAngle_error_deg'], line_width=2, color=Viridis5[0], legend_label="Roll Error")
-        phiVelocity = pState.line(df.index, df['velocities_p_rad_sec'], line_width=2, color=Viridis5[3], legend_label="Roll Velocity")
-        phiAcc = pState.line(df.index, df['accelerations_pdot_rad_sec2'], line_width=2, color=Viridis5[2], legend_label="Roll Acceleration")
-        rollErrInt = pState.line(df.index, df['error_rollAngle_error_integral_deg_sec'], line_width=2, color=Viridis5[4], legend_label="Roll Error_Integral")
+        # aileronLine = pState.line(data_frame.index, data_frame['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis5[1], legend_label = "Aileron Cmd.")
+        # # deltaAileronLine = pState.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
+        # phiLine = pState.line(data_frame.index, data_frame['error_rollAngle_error_deg'], line_width=2, color=Viridis5[0], legend_label="Roll Error")
+        # phiVelocity = pState.line(data_frame.index, data_frame['velocities_p_rad_sec'], line_width=2, color=Viridis5[3], legend_label="Roll Velocity")
+        # # phiAcc = pState.line(df.index, df['accelerations_pdot_rad_sec2'], line_width=2, color=Viridis5[2], legend_label="Roll Acceleration")
+        # rollErrInt = pState.line(data_frame.index, data_frame['error_rollAngle_error_integral_deg_sec'], line_width=2, color=Viridis5[4], legend_label="Roll Error Integral")
+        # glideErrInt = pState.line(data_frame.index, data_frame['error_glideAngle_error_integral_deg_sec'], line_width=2, color=Viridis5[2], legend_label="Glide Error Integral")
 
         #Reward
         pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
+        rwd_cmp_lines = []
         # rwd_aileroncmd_travel_error_depLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error_dep'], line_width=2, color=Viridis4[0], legend_label = "rwd_aileroncmd_dep")
         # rwd_rollAngle_errorLine = pReward.line(df.index, df['rwd_rollAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
         # rwd_glideAngle_errorLine = pReward.line(df.index, df['rwd_glideAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
         # rwd_aileroncmd_travel_errorLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error'], line_width=2, color=Viridis4[2], legend_label = "rwd_aileroncmd_travel_error")
-        rewardLine = pReward.line(df.index, df['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
+        rewardLine = pReward.line(data_frame.index, data_frame['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
+        for idx, rwd_component in enumerate(self.reward_components_dict.keys()):
+            rwd_cmp_lines.append (
+                pReward.line(data_frame.index, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4], legend_label = rwd_component)
+            )
+
 
         tElev = Title()
         tElev.text = 'Flight Angle over Timesteps'
@@ -167,12 +191,18 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pReward.title = tReward
         pReward.xaxis.axis_label = 'timestep [0.2s]'
         pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
+        pReward.legend.location = 'top_left'
+        pReward.legend.click_policy="hide"
+
 
         tState = Title()
         tState.text = 'actual State presentation to Agent'
         # pState.title = tReward
         pState.xaxis.axis_label = 'timestep [0.2s]'
-        pState.yaxis[0].axis_label = 'Aileron Cmd [norm.]'
+        pState.yaxis[0].axis_label = 'state data'
+        pState.legend.location = 'top_left'
+        pState.legend.click_policy="hide"
+
 
         #activate the zooming on all plots
         #this is not nice, but this not either: https://stackoverflow.com/questions/49282688/how-do-i-set-default-active-tools-for-a-bokeh-gridplot
@@ -185,7 +215,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         reset_output()
         grid = gridplot([[pElev, pAileron], [pAltitude, pReward], [None, pState]])
         #for string formatting look here: https://pyformat.info/
-        titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), df['reward'].sum())
+        titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum())
         webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)
 
         if self.showNextPlotFlag:
@@ -210,7 +240,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         if self.exportNextPlotFlag:
             # @timeit   TODO: die sourcen werden nicht gefunden
             def export(webpage):
-                filename = os.path.join(self.dirname, 'glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%H:%M:%S"), df['reward'].sum()))
+                filename = os.path.join(self.dirname, 'glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum()))
                 export_png(webpage, filename)
             export(webpage)
 

@@ -21,8 +21,8 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "TryOut_Integral"
-    CHKPT_POSTFIX = "_Integral_no_delta_values"
+    CHKPT_DIR = ENV_ID + "Asymptotic_Integral"
+    CHKPT_POSTFIX = ""
     SAVED_MODEL_NAME = "roll_best"
     # SAVED_MODEL_NAME = "roll_+585.855_599"
 
@@ -74,7 +74,7 @@ if __name__ == "__main__":
                                       })
     # TODO: a of this stuff is unnecessary, but #I need an agent right now.
     play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
     play_agent.load_models(name_discriminator = SAVED_MODEL_NAME)

@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
     env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150, modulation_decay=0.99)     #to vary the setpoints during training
-    env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
+    env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
     # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
     test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
-    test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
+    test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
     # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis

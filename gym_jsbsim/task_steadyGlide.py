@@ -35,7 +35,7 @@ class SteadyRollGlideTask(FlightTask):
     INITIAL_ALTITUDE_FT_default = 6000
     EPISODE_TIME_S_default = 60.  #TODO: make configurable
     # The scaling factor specifies at what error from the target the agent receives 0.5 reward or potential out of a maximum of 1.0.
-    GLIDE_ANGLE_DEG_ERROR_SCALING = 0.25
+    GLIDE_ANGLE_DEG_ERROR_SCALING = 1
     ROLL_ANGLE_DEG_ERROR_SCALING = 1
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
     MAX_GLIDE_ANGLE_DEVIATION_DEG = 45
@@ -43,7 +43,7 @@ class SteadyRollGlideTask(FlightTask):
     #those are additional properties going into the sim[] object
     prop_glide_angle_error_deg = BoundedProperty('error/glideAngle-error-deg',
                                       'error to desired glide angle [deg]', -180, 180)
-    prop_glide_angle_error_integral_deg_sec = BoundedProperty('error/glideAngle-error-Integral-deg-sec',
+    prop_glide_angle_error_integral_deg_sec = BoundedProperty('error/glideAngle-error-integral-deg-sec',
                                       'decayed sum of the glide angle error [deg*sec]', -1800, 1800)    #arbitrary boundary, add clipping if required
     prop_roll_angle_error_deg = BoundedProperty('error/rollAngle-error-deg',
                                         'error to desired roll/banking angle [deg]', -180, 180)
@@ -121,8 +121,22 @@ class SteadyRollGlideTask(FlightTask):
                         potential_difference_based=False,
                         scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
                         weight=1),
+            rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error_Integral',
+                        prop=self.prop_glide_angle_error_integral_deg_sec,
+                        state_variables=self.state_variables,
+                        target=0.0,
+                        potential_difference_based=False,
+                        scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                        weight=1),
             rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error',
                         prop=self.prop_roll_angle_error_deg,
+                        state_variables=self.state_variables,
+                        target=0.0,
+                        potential_difference_based=False,
+                        scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                        weight=1),
+            rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error_Integral',
+                        prop=self.prop_roll_angle_error_integral_deg_sec,
                         state_variables=self.state_variables,
                         target=0.0,
                         potential_difference_based=False,
@@ -326,14 +340,14 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
-                                    weight=9),
-            rewards.QuadraticErrorComponent(name='rwd_rollAngle_error_Integral',
+                                    weight=1),
+            rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error_Integral',
                                     prop=self.prop_roll_angle_error_integral_deg_sec,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
-                                    weight=9),
+                                    weight=1),
             # rewards.QuadraticErrorComponent(name='rwd_aileroncmd_travel_error_dep',
             #                         prop=self.prp_delta_cmd_aileron,
             #                         state_variables=self.state_variables,
@@ -418,7 +432,14 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
                         target=0.0,
                         potential_difference_based=False,
                         scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
-                        weight=9),
+                        weight=1),
+            rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error_Integral',
+                        prop=self.prop_glide_angle_error_integral_deg_sec,
+                        state_variables=self.state_variables,
+                        target=0.0,
+                        potential_difference_based=False,
+                        scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
+                        weight=1),
         )
         return base_components
 
