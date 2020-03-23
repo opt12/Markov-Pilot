@@ -17,13 +17,14 @@ best_reward = None  #we don't like globals, but it really helps here
 
 def test_net(agent, env, add_exploration_noise=False):
     global best_reward
+    exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
     obs = env.reset()
     env.showNextPlot(True, True)
     done = False
     score = 0
     steps = 0
     while not done:
-        act = agent.choose_action(obs, add_exploration_noise=add_exploration_noise)
+        act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
         new_state, reward, done, info = env.step(act)
         agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
         score += reward     # the action includes noise!!!
@@ -32,16 +33,13 @@ def test_net(agent, env, add_exploration_noise=False):
         #env.render()
     print("\tTest yielded a score of %.2f" %score, ".")
 
+    name = "glide_%+.3f_%d" % (score, steps)
+    agent.save_models(name_discriminator=name)    
     if best_reward is None or best_reward < score:
         if best_reward is not None:
             print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-        name = "glide_%+.3f_%d.dat" % (score, steps)
-        agent.save_models(name_discriminator=name)
-        agent.save_models(name_discriminator='glide_best.dat')
+        agent.save_models(name_discriminator='glide_best')
         best_reward = score
-    else:
-        #save the latest model with every test
-        agent.save_models(name_discriminator='glide_latest.dat')
 
 
 if __name__ == "__main__":
@@ -52,6 +50,8 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_POSTFIX = ""
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -61,9 +61,13 @@ if __name__ == "__main__":
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_glideAngle_error_deg', 'velocities_q_rad_sec', 'velocities_vc_kts']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
+                       'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
+                       'velocities_vc_kts', 
+                       'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
+                       'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
 
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
@@ -75,13 +79,10 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    env = VarySetpointsWrapper(env)     #to vary the setpoints during training
-    env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    # env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
+    env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150, modulation_decay=0.99)     #to vary the setpoints during training
+    env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
-    # he next line is wrong and maybe the root cause for my former earlier problems. It must be q_rad_sec instead of _r_rad_sec
-    # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -6.5
@@ -101,9 +102,8 @@ if __name__ == "__main__":
                                       })
 
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
-    test_env = VarySetpointsWrapper(test_env)     #to vary the setpoints during training
-    test_env = EpisodePlotterWrapper(test_env)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    # test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
+    test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
+    test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
@@ -119,13 +119,16 @@ if __name__ == "__main__":
     #TODO: open summary writer here
 
     train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0])  #TODO: pass summary writer to Agent
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
 
     np.random.seed(0)
 
     score_history = []
 
-    for i in range(1000):
+    exploration_noise_flag = True
+
+    for episode in range(1000):
         obs = env.reset()
         done = False
         score = 0
@@ -134,7 +137,7 @@ if __name__ == "__main__":
         steps = 0
         ts = time.time()
         while not done:
-            act = train_agent.choose_action(obs)
+            act = train_agent.choose_action(obs, add_exploration_noise = exploration_noise_flag)
             new_state, reward, done, info = env.step(act)
             train_agent.remember(obs, act, reward, new_state, int(done))
             train_agent.learn()
@@ -145,12 +148,17 @@ if __name__ == "__main__":
         score_history.append(score)
         delta_t = time.time() - ts
 
-        print('episode ', i, 'score %.2f;' % score,
+        print('episode ', episode, 'score %.2f;' % score,
               '%d' % steps, 'steps in %.2f' % delta_t, 'sec; That\'s %.2f' % (steps/delta_t),'steps/sec', 
             'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
-        if i% 5 == 0:
+        if episode% 5 == 0:
             test_net(train_agent, test_env, add_exploration_noise=False)
+        
+        # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
+        #     exploration_noise_flag = False
+        #     env.set_modulation_params(modulation_amplitude = 0.7)
+            
 
         # if i % 25 == 0:
         #     train_agent.save_models()

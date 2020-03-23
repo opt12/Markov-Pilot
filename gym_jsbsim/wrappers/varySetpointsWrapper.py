@@ -36,14 +36,13 @@ class VarySetpointsWrapper(gym.Wrapper):
 
     def reset(self):
         tgt_flight_path_deg = random.uniform(-12, -5.5)
-        self.tgt_roll_angle_deg  = random.uniform(-15, 15)
+        self.tgt_roll_angle_deg  = random.uniform(-15, 15)  #object variable to support roll modulation
         if self.modulation_amplitude:
             self.modulation_amplitude *= self.modulation_decay
             print(f"sine wave modulation amplitude set to ±{self.modulation_amplitude}")
-        # else:
-        #     self.roll_modulation_amplitude = 0
-        # initial_path_angle_gamma_deg = tgt_flight_path_deg
-        # initial_roll_angle_phi_deg   = tgt_roll_angle_deg
+
+        initial_path_angle_gamma_deg = random.uniform(-12, -5.5)
+        initial_roll_angle_phi_deg   = random.uniform(-15, 15)
         initial_fwd_speed_KAS        = random.uniform(65, 110)
 
         self.original_env.task.change_setpoints(self.original_env.sim, { 
@@ -51,9 +50,9 @@ class VarySetpointsWrapper(gym.Wrapper):
           , prp.setpoint_roll_angle_deg:  self.tgt_roll_angle_deg 
           })
         self.original_env.task.set_initial_ac_attitude( {  prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
-                                    #    , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
-                                    #    , prp.initial_roll_deg: initial_roll_angle_phi_deg
-                                       #, prp.initial_aoa_deg: initial_aoa_deg
+                                        , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
+                                        , prp.initial_roll_deg: initial_roll_angle_phi_deg
+                                        # , prp.initial_aoa_deg: initial_aoa_deg
                                       })
         
         return self.original_env.reset()

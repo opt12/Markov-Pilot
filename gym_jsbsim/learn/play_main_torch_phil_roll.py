@@ -21,10 +21,12 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "_decay_sine_after_30"
-    CHKPT_POSTFIX = ""
+    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_POSTFIX = "bigger_state_presentation"
     SAVED_MODEL_NAME = "roll_best"
-    # SAVED_MODEL_NAME = "roll_+585.855_599"
+    # SAVED_MODEL_NAME = "roll_+584.694_599"
+    # ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"   #uncomment this line when rendering in Flightgear
+
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -34,7 +36,12 @@ if __name__ == "__main__":
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
+                       'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
+                       'velocities_vc_kts', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
+
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
@@ -47,20 +54,20 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    # env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
-    env = EpisodePlotterWrapper(env)    #to show a summary of the next epsode, set env.showNextPlot(True)
+    # env = VarySetpointsWrapper(env, modulation_amplitude = 0.2, modulation_period = 300)     #to vary the setpoints during training
+    env = VarySetpointsWrapper(env, modulation_amplitude = 25, modulation_period = 300)     #to vary the setpoints during training
+
+    env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
-    # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
-    # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -6.5
-    tgt_roll_angle_deg  = -5
+    tgt_roll_angle_deg  = -0
     episode_steps   = 2500  #2*60*INTERACTION_FREQ
     initial_fwd_speed_KAS        = 130
     initial_path_angle_gamma_deg = -6.5
-    initial_roll_angle_phi_deg   = -5
+    initial_roll_angle_phi_deg   = -0
     initial_aoa_deg              = 1.0
 
     env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
@@ -73,7 +80,7 @@ if __name__ == "__main__":
                                       })
     # TODO: a of this stuff is unnecessary, but #I need an agent right now.
     play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
     play_agent.load_models(name_discriminator = SAVED_MODEL_NAME)
@@ -88,13 +95,13 @@ if __name__ == "__main__":
     total_steps = 0
     ts = time.time()
     while not done:
-        act = play_agent.choose_action(obs, add_exploration_noise=False)
+        act = play_agent.choose_action(obs, add_exploration_noise=False)    #no noise when testing
         new_state, reward, done, info = env.step(act)
-        score += reward     # the action includes noise!!!
+        score += reward
         obs = new_state
-        #env.render()
+        # env.render('flightgear')  #when rendering in Flightgear, the environment must be changed as well
         total_steps += 1
-        if total_steps % 3500 == 0:
+        if total_steps % 350 == 0:
             tgt_roll_angle_deg = -tgt_roll_angle_deg
             env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                 , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })

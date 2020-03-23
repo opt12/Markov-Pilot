@@ -148,7 +148,7 @@ class FlightTask(Task, ABC):
         self._update_custom_properties(sim)
         state: NamedTuple(float) = self.State(*(sim[prop] for prop in self.state_variables))   # enter the values to a variable of the State class (named tuple)
         done = self._is_terminal(sim)
-        reward = self.assessor.assess(state, self.last_state, done)
+        reward = self.assessor.assess(state, self.last_state, done) #add the individual reward components to the simulation for plotting
         if done:
             reward = self._reward_terminal_override(reward, sim)
         if self.debug:
