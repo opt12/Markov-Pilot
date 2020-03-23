@@ -125,42 +125,37 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pAltitude.y_range.renderers = [altitudeLine]
 
         # Presented state
-        pState = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
+        pState = figure(plot_width=1200, plot_height=300, x_range=pElev.x_range)
         # Setting the second y axis range name and range
         norm_state_extents = 10
         pState.extra_y_ranges = {"normalized_data": Range1d(start=-norm_state_extents, end=norm_state_extents )}
         # Adding the second axis to the plot.  
         pState.add_layout(LinearAxis(y_range_name="normalized_data", axis_label="normalized data"), 'right')
         state_lines = []
+        legend_state = []
         normalized_state_lines = []
         if self.presented_state:
             for idx, state_name in enumerate(self.presented_state):
                 if(data_frame[state_name].max() <= norm_state_extents and data_frame[state_name].min() >= -norm_state_extents):
                     normalized_state_lines.append(
-                        pState.line(data_frame.index, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7], legend_label = "norm_"+state_name)
+                        pState.line(data_frame.index, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7])
                     )
+                    legend_state.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
                 else:     
                     state_lines.append(
-                        pState.line(data_frame.index, data_frame[state_name], line_width=2, color=Inferno7[idx%7], legend_label = state_name)
+                        pState.line(data_frame.index, data_frame[state_name], line_width=2, color=Inferno7[idx%7])
                     )
+                    legend_state.append( (state_name, [state_lines[-1]]) )                    
             pState.y_range.renderers = state_lines
             pState.extra_y_ranges.renderers = normalized_state_lines    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
 
-        # aileronLine = pState.line(data_frame.index, data_frame['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis5[1], legend_label = "Aileron Cmd.")
-        # # deltaAileronLine = pState.line(df.index, df['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
-        # phiLine = pState.line(data_frame.index, data_frame['error_rollAngle_error_deg'], line_width=2, color=Viridis5[0], legend_label="Roll Error")
-        # phiVelocity = pState.line(data_frame.index, data_frame['velocities_p_rad_sec'], line_width=2, color=Viridis5[3], legend_label="Roll Velocity")
-        # # phiAcc = pState.line(df.index, df['accelerations_pdot_rad_sec2'], line_width=2, color=Viridis5[2], legend_label="Roll Acceleration")
-        # rollErrInt = pState.line(data_frame.index, data_frame['error_rollAngle_error_integral_deg_sec'], line_width=2, color=Viridis5[4], legend_label="Roll Error Integral")
-        # glideErrInt = pState.line(data_frame.index, data_frame['error_glideAngle_error_integral_deg_sec'], line_width=2, color=Viridis5[2], legend_label="Glide Error Integral")
+        lg_state = Legend(items = legend_state, location=(0, 0), glyph_width = 25, label_width = 333)
+        lg_state.click_policy="hide"
+        pState.add_layout(lg_state, 'right')
 
         #Reward
         pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
         rwd_cmp_lines = []
-        # rwd_aileroncmd_travel_error_depLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error_dep'], line_width=2, color=Viridis4[0], legend_label = "rwd_aileroncmd_dep")
-        # rwd_rollAngle_errorLine = pReward.line(df.index, df['rwd_rollAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
-        # rwd_glideAngle_errorLine = pReward.line(df.index, df['rwd_glideAngle_error'], line_width=2, color=Viridis4[1], legend_label = "rwd_rollAngle_error")
-        # rwd_aileroncmd_travel_errorLine = pReward.line(df.index, df['rwd_aileroncmd_travel_error'], line_width=2, color=Viridis4[2], legend_label = "rwd_aileroncmd_travel_error")
         rewardLine = pReward.line(data_frame.index, data_frame['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
         for idx, rwd_component in enumerate(self.reward_components_dict.keys()):
             rwd_cmp_lines.append (
@@ -173,25 +168,29 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pElev.title = tElev
         pElev.xaxis.axis_label = 'timestep [0.2s]'
         pElev.yaxis[0].axis_label = 'Glide Path Angle [deg]'
+        pElev.legend.click_policy="hide"
 
         tAil = Title()
         tAil.text = 'Roll Angle over Timesteps'
         pAileron.title = tAil
         pAileron.xaxis.axis_label = 'timestep [0.2s]'
         pAileron.yaxis[0].axis_label = 'Roll Angle [deg]'
+        pAileron.legend.click_policy="hide"
 
         tAlti = Title()
         tAlti.text = 'Altitude and Speed [IAS, TAS] over Timesteps'
         pAltitude.title = tAlti
         pAltitude.xaxis.axis_label = 'timestep [0.2s]'
         pAltitude.yaxis[0].axis_label = 'Altitude [ftsl]'
+        pAltitude.legend.location="center_right"
+        pAltitude.legend.click_policy="hide"
 
         tReward = Title()
         tReward.text = 'actual Reward over Timesteps'
         pReward.title = tReward
         pReward.xaxis.axis_label = 'timestep [0.2s]'
         pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
-        pReward.legend.location = 'top_left'
+        pReward.legend.location = 'bottom_right'
         pReward.legend.click_policy="hide"
 
 
@@ -200,8 +199,6 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # pState.title = tReward
         pState.xaxis.axis_label = 'timestep [0.2s]'
         pState.yaxis[0].axis_label = 'state data'
-        pState.legend.location = 'top_left'
-        pState.legend.click_policy="hide"
 
 
         #activate the zooming on all plots
