@@ -17,13 +17,14 @@ best_reward = None  #we don't like globals, but it really helps here
 
 def test_net(agent, env, add_exploration_noise=False):
     global best_reward
+    exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
     obs = env.reset()
     env.showNextPlot(True, True)
     done = False
     score = 0
     steps = 0
     while not done:
-        act = agent.choose_action(obs, add_exploration_noise=add_exploration_noise)
+        act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
         new_state, reward, done, info = env.step(act)
         agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
         score += reward     # the action includes noise!!!
@@ -32,17 +33,14 @@ def test_net(agent, env, add_exploration_noise=False):
         #env.render()
     print("\tTest yielded a score of %.2f" %score, ".")
 
+    name = "roll_glide_%+.3f_%d" % (score, steps)
+    agent.save_models(name_discriminator=name)    
     if best_reward is None or best_reward < score:
         if best_reward is not None:
             print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-        name = "roll_glide_%+.3f_%d" % (score, steps)
-        agent.save_models(name_discriminator=name)
         agent.save_models(name_discriminator='roll_glide_best')
         best_reward = score
-    else:
-        #save the latest model with every test
-        agent.save_models(name_discriminator='roll_glide_latest')
-
+ 
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
@@ -52,8 +50,8 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "TryOut_Integral"
-    CHKPT_POSTFIX = "new_try_with_reward_components"
+    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_POSTFIX = ""
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -62,12 +60,11 @@ if __name__ == "__main__":
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
-                       'velocities_vc_kts']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
+                       'velocities_vc_kts', 
+                       'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
+                       'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
 
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
@@ -83,8 +80,6 @@ if __name__ == "__main__":
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     # env = PidWrapper(env, [])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
-    # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
-    # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -6.5
@@ -108,7 +103,6 @@ if __name__ == "__main__":
     test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     # test_env = PidWrapper(test_env, []) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
-    # test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
     test_env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg

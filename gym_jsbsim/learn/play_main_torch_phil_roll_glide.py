@@ -23,9 +23,9 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "TryOut_Integral"
-    CHKPT_POSTFIX = "new_try_with_reward_components"
-    SAVED_MODEL_NAME = "roll_glide_+524.065_599"
+    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_POSTFIX = ""
+    SAVED_MODEL_NAME = "roll_glide_best"
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -37,7 +37,9 @@ if __name__ == "__main__":
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
-                       'velocities_vc_kts']
+                       'velocities_vc_kts', 
+                       'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
+                       'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 

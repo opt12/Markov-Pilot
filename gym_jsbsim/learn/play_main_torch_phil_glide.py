@@ -22,9 +22,10 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "TryOut_Integral"
-    CHKPT_POSTFIX = "GLIDE_ANGLE_DEG_ERROR_SCALING_1"
+    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_POSTFIX = ""
     SAVED_MODEL_NAME = "glide_best"
+    SAVED_MODEL_NAME = "glide_+509.919_599"
 
 
     GAMMA = .95
@@ -35,8 +36,12 @@ if __name__ == "__main__":
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_glideAngle_error_deg', 'velocities_q_rad_sec', 'velocities_vc_kts', 'error_glideAngle_error_integral_deg_sec']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
+    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
+                       'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
+                       'velocities_vc_kts', 
+                       'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
+                       'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
+# PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
