@@ -47,7 +47,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         #let's move on to the next step
         self.newObs = self.env.step(action)
         self.state, self.reward, self.done, info = self.newObs
-        self.reward_components_dict = self.env.task.assessor.reward_dict    #this goes down quite a bit through the class hierarchy; Not nice, but it works for now.
+        self.reward_components_dict = info['reward_components']
         data = np.concatenate((self.state, [self.reward], [self.done], action)).tolist()
         dataDict = dict(zip(self.recorderCols, data))
         dataDict.update(self.reward_components_dict)
@@ -132,7 +132,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pState.add_layout(LinearAxis(y_range_name="normalized_data", axis_label="normalized data"), 'right')
         state_lines = []
-        legend_state = []
+        state_legend = []
         normalized_state_lines = []
         if self.presented_state:
             for idx, state_name in enumerate(self.presented_state):
@@ -140,27 +140,33 @@ class EpisodePlotterWrapper(gym.Wrapper):
                     normalized_state_lines.append(
                         pState.line(data_frame.index, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7])
                     )
-                    legend_state.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
+                    state_legend.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
                 else:     
                     state_lines.append(
                         pState.line(data_frame.index, data_frame[state_name], line_width=2, color=Inferno7[idx%7])
                     )
-                    legend_state.append( (state_name, [state_lines[-1]]) )                    
+                    state_legend.append( (state_name, [state_lines[-1]]) )                    
             pState.y_range.renderers = state_lines
             pState.extra_y_ranges.renderers = normalized_state_lines    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
 
-        lg_state = Legend(items = legend_state, location=(0, 0), glyph_width = 25, label_width = 333)
+        lg_state = Legend(items = state_legend, location=(0, 0), glyph_width = 25, label_width = 333)
         lg_state.click_policy="hide"
         pState.add_layout(lg_state, 'right')
 
         #Reward
-        pReward = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
+        pReward = figure(plot_width=1200, plot_height=300, x_range=pElev.x_range)
         rwd_cmp_lines = []
-        rewardLine = pReward.line(data_frame.index, data_frame['reward'], line_width=2, color=Viridis4[3], legend_label = "actual Reward")
+        reward_legend = []
+        rewardLine = pReward.line(data_frame.index, data_frame['reward'], line_width=2, color=Viridis4[3])
+        reward_legend.append( ("actual Reward", [rewardLine]) )
         for idx, rwd_component in enumerate(self.reward_components_dict.keys()):
             rwd_cmp_lines.append (
-                pReward.line(data_frame.index, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4], legend_label = rwd_component)
+                pReward.line(data_frame.index, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
             )
+            reward_legend.append( (rwd_component, [rwd_cmp_lines[-1]]) )
+        reward_lg = Legend(items = reward_legend, location=(48, 0), glyph_width = 25, label_width = 333)
+        reward_lg.click_policy="hide"
+        pReward.add_layout(reward_lg, 'right')
 
 
         tElev = Title()
@@ -190,8 +196,6 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pReward.title = tReward
         pReward.xaxis.axis_label = 'timestep [0.2s]'
         pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
-        pReward.legend.location = 'bottom_right'
-        pReward.legend.click_policy="hide"
 
 
         tState = Title()

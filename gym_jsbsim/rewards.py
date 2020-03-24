@@ -25,7 +25,8 @@ class Reward(object):
                        base_weights: List = None, shaping_weights: List = None):
         if not base_reward_elements:
             raise ValueError('base agent_reward cannot be empty')
-
+        
+        #TODO: add the names of the rewards to the reward object as a dict
         self.base_reward_elements = np.array(base_reward_elements)
         self.base_weights = np.array(base_weights) if base_weights else np.ones((len(base_reward_elements),))
         self.base_weights_sum = np.sum(self.base_weights)

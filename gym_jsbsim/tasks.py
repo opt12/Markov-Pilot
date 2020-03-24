@@ -155,7 +155,7 @@ class FlightTask(Task, ABC):
             done  = done or self._validate_state(state, done, action, reward)   #returns true if state contains nan
         self._store_reward(reward, sim)
         self.last_state = state
-        info = {'reward': reward}
+        info = {'reward': reward, 'reward_components': self.assessor.reward_dict }  #TODO: the reward_components should already be contained in the reward entry... Check rewards.py/__init__
 
         return state, reward.agent_reward(), done, info
 
