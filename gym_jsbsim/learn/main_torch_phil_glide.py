@@ -12,34 +12,35 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
+from evaluate_training import test_net
 
-best_reward = None  #we don't like globals, but it really helps here
+# best_reward = None  #we don't like globals, but it really helps here
 
-def test_net(agent, env, add_exploration_noise=False):
-    global best_reward
-    exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
-    obs = env.reset()
-    env.showNextPlot(True, True)
-    done = False
-    score = 0
-    steps = 0
-    while not done:
-        act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
-        new_state, reward, done, info = env.step(act)
-        agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
-        score += reward     # the action includes noise!!!
-        obs = new_state
-        steps += 1
-        #env.render()
-    print("\tTest yielded a score of %.2f" %score, ".")
+# def test_net(agent, env, add_exploration_noise=False):
+#     global best_reward
+#     exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
+#     obs = env.reset()
+#     env.showNextPlot(True, True)
+#     done = False
+#     score = 0
+#     steps = 0
+#     while not done:
+#         act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
+#         new_state, reward, done, info = env.step(act)
+#         agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
+#         score += reward     # the action includes noise!!!
+#         obs = new_state
+#         steps += 1
+#         #env.render()
+#     print("\tTest yielded a score of %.2f" %score, ".")
 
-    name = "glide_%+.3f_%d" % (score, steps)
-    agent.save_models(name_discriminator=name)    
-    if best_reward is None or best_reward < score:
-        if best_reward is not None:
-            print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-        agent.save_models(name_discriminator='glide_best')
-        best_reward = score
+#     name = "glide_%+.3f_%d" % (score, steps)
+#     agent.save_models(name_discriminator=name)    
+#     if best_reward is None or best_reward < score:
+#         if best_reward is not None:
+#             print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
+#         agent.save_models(name_discriminator='glide_best')
+#         best_reward = score
 
 
 if __name__ == "__main__":
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_DIR = ENV_ID + "integral_scaling_1"
     CHKPT_POSTFIX = ""
 
     GAMMA = .95
@@ -102,7 +103,7 @@ if __name__ == "__main__":
                                       })
 
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
-    test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
+    # test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     test_env = PidWrapper(test_env, [aileron_wrap]) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
@@ -128,12 +129,12 @@ if __name__ == "__main__":
 
     exploration_noise_flag = True
 
-    for episode in range(1000):
+    for episode in range(101):
         obs = env.reset()
         done = False
         score = 0
         # train_agent.reset_noise_source()    #this is like in the original paper
-        train_agent.reduce_noise_sigma(sigma_factor=0.98)
+        # train_agent.reduce_noise_sigma(sigma_factor=0.98)
         steps = 0
         ts = time.time()
         while not done:

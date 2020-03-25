@@ -12,35 +12,47 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
-from evaluate_training import test_net
 
-# best_reward = None  #we don't like globals, but it really helps here
+best_reward = None  #we don't like globals, but it really helps here
 
-# def test_net(agent, env, add_exploration_noise=False):
-#     global best_reward
-#     exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
-#     obs = env.reset()
-#     env.showNextPlot(True, True)
-#     done = False
-#     score = 0
-#     steps = 0
-#     while not done:
-#         act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
-#         new_state, reward, done, info = env.step(act)
-#         agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
-#         score += reward     # the action includes noise!!!
-#         obs = new_state
-#         steps += 1
-#         #env.render()
-#     print("\tTest yielded a score of %.2f" %score, ".")
+def test_net(elevator_agent, aileron_agent, env, add_exploration_noise=False):
+    global best_reward
+    exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
+    obs = env.reset()
+    env.showNextPlot(True, True)
+    done = False
+    score = 0
+    steps = 0
+    while not done:
+        act_elevator = elevator_agent.choose_action(obs, add_exploration_noise = exploration_noise)
+        act_aileron  = aileron_agent.choose_action( obs, add_exploration_noise = exploration_noise)
+        act = np.array([act_elevator[0], act_aileron[0]])
+        new_state, reward, done, info = env.step(act)   #for the order of actions see task_stadyGlide -> action_variables
 
-#     name = "roll_glide_%+.3f_%d" % (score, steps)
-#     agent.save_models(name_discriminator=name)    
-#     if best_reward is None or best_reward < score:
-#         if best_reward is not None:
-#             print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-#         agent.save_models(name_discriminator='roll_glide_best')
-#         best_reward = score
+        new_state, reward, done, info = env.step(act)
+
+        rwd_cmps = info['reward_components']
+        elevator_reward = 9 * rwd_cmps['rwd_glideAngle_error'] + 9 * rwd_cmps['rwd_glideAngle_error_Integral'] + 2 * rwd_cmps['rwd_elevator_cmd_travel_error'] / 20
+        aileron_reward  = 9 * rwd_cmps['rwd_rollAngle_error'] + 9 * rwd_cmps['rwd_rollAngle_error_Integral'] + 2 * rwd_cmps['rwd_aileron_cmd_travel_error'] / 20
+        train_agent_elevator.remember(obs, act_elevator, elevator_reward, new_state, int(done))
+        train_agent_aileron.remember(obs, act_aileron, aileron_reward, new_state, int(done))
+
+        score += (elevator_reward + aileron_reward)/2     # the action includes noise, so the reward is smaller than in testing without noise !!!
+        obs = new_state
+        steps += 1
+        #env.render()
+    print("\tTest yielded a score of %.2f" %score, ".")
+
+    name_elevator = "dual_glide_%+.3f_%d" % (score, steps)
+    name_aileron  = "dual_roll_%+.3f_%d" % (score, steps)
+    elevator_agent.save_models(name_discriminator=name_elevator)    
+    aileron_agent.save_models(name_discriminator=name_aileron)    
+    if best_reward is None or best_reward < score:
+        if best_reward is not None:
+            print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
+        elevator_agent.save_models(name_discriminator='dual_glide_best')
+        aileron_agent.save_models( name_discriminator='dual_roll_best')
+        best_reward = score
  
 
 if __name__ == "__main__":
@@ -51,10 +63,10 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + ""
-    CHKPT_POSTFIX = "gamma_1_0"
+    CHKPT_DIR = ENV_ID + "Dual_Agent"
+    CHKPT_POSTFIX = "First_Try"
 
-    GAMMA = 1.0
+    GAMMA = .95
     BATCH_SIZE = 64
     LEARNING_RATE_ACTOR = 1e-4
     LEARNING_RATE_CRITIC = 1e-3
@@ -100,7 +112,7 @@ if __name__ == "__main__":
                                       })
 
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
-    # test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
+    test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     # test_env = PidWrapper(test_env, []) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
@@ -116,8 +128,11 @@ if __name__ == "__main__":
                                       })
     #TODO: open summary writer here
 
-    train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
+    train_agent_elevator = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
+    train_agent_aileron = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
 
     np.random.seed(0)
@@ -126,20 +141,30 @@ if __name__ == "__main__":
 
     exploration_noise_flag = True
 
-    for episode in range(101):
+    for episode in range(101):   #just do 100 episodes to see how things develop
         obs = env.reset()
         done = False
         score = 0
-        # train_agent.reset_noise_source()    #this is like in the original paper
-        # train_agent.reduce_noise_sigma(sigma_factor=0.98)
+        train_agent_elevator.reset_noise_source()    #this is like in the original paper
+        train_agent_elevator.reduce_noise_sigma(sigma_factor=0.98)
+        train_agent_aileron.reset_noise_source()    #this is like in the original paper
+        train_agent_aileron.reduce_noise_sigma(sigma_factor=0.98)
         steps = 0
         ts = time.time()
         while not done:
-            act = train_agent.choose_action(obs, add_exploration_noise = exploration_noise_flag)
-            new_state, reward, done, info = env.step(act)
-            train_agent.remember(obs, act, reward, new_state, int(done))
-            train_agent.learn()
-            score += reward     # the action includes noise!!!
+            act_elevator = train_agent_elevator.choose_action(obs, add_exploration_noise = exploration_noise_flag)
+            act_aileron  = train_agent_aileron.choose_action( obs, add_exploration_noise = exploration_noise_flag)
+            act = np.array([act_elevator[0], act_aileron[0]])
+            new_state, reward, done, info = env.step(act)   #for the order of actions see task_stadyGlide -> action_variables
+            #calculate the individual rewards for elevator and aileron
+            rwd_cmps = info['reward_components']
+            elevator_reward = 9 * rwd_cmps['rwd_glideAngle_error'] + 9 * rwd_cmps['rwd_glideAngle_error_Integral'] + 2 * rwd_cmps['rwd_elevator_cmd_travel_error'] / 20
+            aileron_reward  = 9 * rwd_cmps['rwd_rollAngle_error'] + 9 * rwd_cmps['rwd_rollAngle_error_Integral'] + 2 * rwd_cmps['rwd_aileron_cmd_travel_error'] / 20
+            train_agent_elevator.remember(obs, act_elevator, elevator_reward, new_state, int(done))
+            train_agent_elevator.learn()
+            train_agent_aileron.remember(obs, act_aileron, aileron_reward, new_state, int(done))
+            train_agent_aileron.learn()
+            score += (elevator_reward + aileron_reward)/2     # the action includes noise, so the reward is smaller than in testing without noise !!!
             obs = new_state
             #env.render()
             steps += 1
@@ -151,7 +176,7 @@ if __name__ == "__main__":
             'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
         if episode% 5 == 0:
-            test_net(train_agent, test_env, add_exploration_noise=False)
+            test_net(train_agent_elevator, train_agent_aileron, test_env, add_exploration_noise=False)
         
         # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
         #     exploration_noise_flag = False
@@ -159,5 +184,5 @@ if __name__ == "__main__":
             
 
         # if i % 25 == 0:
-        #     train_agent.save_models()
+        #     train_agent_elevator.save_models()
 
