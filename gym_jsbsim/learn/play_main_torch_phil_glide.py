@@ -22,10 +22,9 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "MovementPunishment"
+    CHKPT_DIR = ENV_ID + "integral_scaling_1"
     CHKPT_POSTFIX = ""
     SAVED_MODEL_NAME = "glide_best"
-    SAVED_MODEL_NAME = "glide_+509.919_599"
 
 
     GAMMA = .95

@@ -21,8 +21,8 @@ if __name__ == "__main__":
     # device = torch.device("cuda" if args.cuda else "cpu")
 
     ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "MovementPunishment"
-    CHKPT_POSTFIX = "bigger_state_presentation"
+    CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
+    CHKPT_POSTFIX = "integral_decay_0_95"
     SAVED_MODEL_NAME = "roll_best"
     # SAVED_MODEL_NAME = "roll_+584.694_599"
     # ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"   #uncomment this line when rendering in Flightgear
@@ -40,7 +40,9 @@ if __name__ == "__main__":
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
-                       'velocities_vc_kts', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
+                       'velocities_vc_kts', 
+                       'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
+                       'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
 
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
     # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
@@ -55,7 +57,7 @@ if __name__ == "__main__":
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
     # env = VarySetpointsWrapper(env, modulation_amplitude = 0.2, modulation_period = 300)     #to vary the setpoints during training
-    env = VarySetpointsWrapper(env, modulation_amplitude = 25, modulation_period = 300)     #to vary the setpoints during training
+    env = VarySetpointsWrapper(env)#, modulation_amplitude = 10, modulation_period = 150)     #to vary the setpoints during training
 
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
@@ -63,11 +65,11 @@ if __name__ == "__main__":
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -6.5
-    tgt_roll_angle_deg  = -0
+    tgt_roll_angle_deg  = -10
     episode_steps   = 2500  #2*60*INTERACTION_FREQ
-    initial_fwd_speed_KAS        = 130
+    initial_fwd_speed_KAS        = 100
     initial_path_angle_gamma_deg = -6.5
-    initial_roll_angle_phi_deg   = -0
+    initial_roll_angle_phi_deg   = -10
     initial_aoa_deg              = 1.0
 
     env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
