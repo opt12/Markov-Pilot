@@ -15,6 +15,8 @@ class EpisodePlotterWrapper(gym.Wrapper):
     def __init__(self, env, presented_state = None):
         super(EpisodePlotterWrapper, self).__init__(env)
 
+        self.step_frequency_hz = env.task.step_frequency_hz  #use this to scale the x-axis
+
         #create a pandas dataframe to hold all episode data
         # |state | reward | done | action| per each step with property names as data
         self.action_variables = env.task.action_variables
@@ -93,10 +95,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pElev.add_layout(LinearAxis(y_range_name="elevator", axis_label="Elevator Cmd [norm.]"), 'right')
 
-        elevatorLine = pElev.line(data_frame.index, data_frame['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
-        gammaLine = pElev.line(data_frame.index, data_frame['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
-        targetGammaLine = pElev.line(data_frame.index, data_frame['setpoint_glide_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
-        aoaLine = pElev.line(data_frame.index, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA")
+        elevatorLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
+        gammaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
+        targetGammaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['setpoint_glide_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
+        aoaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA")
 
         # RollAngle and Aileron
         pAileron = figure(plot_width=800, plot_height=400, x_range=pElev.x_range)
@@ -105,10 +107,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pAileron.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
 
-        aileronLine = pAileron.line(data_frame.index, data_frame['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
-        deltaAileronLine = pAileron.line(data_frame.index, data_frame['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
-        phiLine = pAileron.line(data_frame.index, data_frame['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
-        targetPhiLine = pAileron.line(data_frame.index, data_frame['setpoint_roll_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
+        aileronLine = pAileron.line(data_frame.index/self.step_frequency_hz, data_frame['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
+        deltaAileronLine = pAileron.line(data_frame.index/self.step_frequency_hz, data_frame['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
+        phiLine = pAileron.line(data_frame.index/self.step_frequency_hz, data_frame['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
+        targetPhiLine = pAileron.line(data_frame.index/self.step_frequency_hz, data_frame['setpoint_roll_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
         
 
         #Altitude over ground
@@ -118,9 +120,9 @@ class EpisodePlotterWrapper(gym.Wrapper):
         # Adding the second axis to the plot.  
         pAltitude.add_layout(LinearAxis(y_range_name="speed", axis_label="IAS, TAS [Knots]"), 'right')
 
-        altitudeLine = pAltitude.line(data_frame.index, data_frame['position_h_sl_ft'], line_width=2, color=Viridis4[2], legend_label = "Altitude [ftsl]")
-        kiasLine = pAltitude.line(data_frame.index, data_frame['velocities_vc_kts'], line_width=2, y_range_name="speed", color=Viridis4[1], legend_label = "Indicated Airspeed [KIAS]")
-        tasLine = pAltitude.line(data_frame.index, data_frame['velocities_vtrue_kts'], line_width=2, y_range_name="speed", color=Viridis4[0], legend_label = "True Airspeed [KAS]")
+        altitudeLine = pAltitude.line(data_frame.index/self.step_frequency_hz, data_frame['position_h_sl_ft'], line_width=2, color=Viridis4[2], legend_label = "Altitude [ftsl]")
+        kiasLine = pAltitude.line(data_frame.index/self.step_frequency_hz, data_frame['velocities_vc_kts'], line_width=2, y_range_name="speed", color=Viridis4[1], legend_label = "Indicated Airspeed [KIAS]")
+        tasLine = pAltitude.line(data_frame.index/self.step_frequency_hz, data_frame['velocities_vtrue_kts'], line_width=2, y_range_name="speed", color=Viridis4[0], legend_label = "True Airspeed [KAS]")
         pAltitude.extra_y_ranges.renderers = [kiasLine, tasLine]    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
         pAltitude.y_range.renderers = [altitudeLine]
 
@@ -138,12 +140,12 @@ class EpisodePlotterWrapper(gym.Wrapper):
             for idx, state_name in enumerate(self.presented_state):
                 if(data_frame[state_name].max() <= norm_state_extents and data_frame[state_name].min() >= -norm_state_extents):
                     normalized_state_lines.append(
-                        pState.line(data_frame.index, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7])
+                        pState.line(data_frame.index/self.step_frequency_hz, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7])
                     )
                     state_legend.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
                 else:     
                     state_lines.append(
-                        pState.line(data_frame.index, data_frame[state_name], line_width=2, color=Inferno7[idx%7])
+                        pState.line(data_frame.index/self.step_frequency_hz, data_frame[state_name], line_width=2, color=Inferno7[idx%7])
                     )
                     state_legend.append( (state_name, [state_lines[-1]]) )                    
             pState.y_range.renderers = state_lines
@@ -157,11 +159,11 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pReward = figure(plot_width=1200, plot_height=300, x_range=pElev.x_range)
         rwd_cmp_lines = []
         reward_legend = []
-        rewardLine = pReward.line(data_frame.index, data_frame['reward'], line_width=2, color=Viridis4[3])
+        rewardLine = pReward.line(data_frame.index/self.step_frequency_hz, data_frame['reward'], line_width=2, color=Viridis4[3])
         reward_legend.append( ("actual Reward", [rewardLine]) )
         for idx, rwd_component in enumerate(self.reward_components_dict.keys()):
             rwd_cmp_lines.append (
-                pReward.line(data_frame.index, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
+                pReward.line(data_frame.index/self.step_frequency_hz, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
             )
             reward_legend.append( (rwd_component, [rwd_cmp_lines[-1]]) )
         reward_lg = Legend(items = reward_legend, location=(48, 0), glyph_width = 25, label_width = 333)
@@ -172,21 +174,21 @@ class EpisodePlotterWrapper(gym.Wrapper):
         tElev = Title()
         tElev.text = 'Flight Angle over Timesteps'
         pElev.title = tElev
-        pElev.xaxis.axis_label = 'timestep [0.2s]'
+        pElev.xaxis.axis_label = 'timestep [s]'
         pElev.yaxis[0].axis_label = 'Glide Path Angle [deg]'
         pElev.legend.click_policy="hide"
 
         tAil = Title()
         tAil.text = 'Roll Angle over Timesteps'
         pAileron.title = tAil
-        pAileron.xaxis.axis_label = 'timestep [0.2s]'
+        pAileron.xaxis.axis_label = 'timestep [s]'
         pAileron.yaxis[0].axis_label = 'Roll Angle [deg]'
         pAileron.legend.click_policy="hide"
 
         tAlti = Title()
         tAlti.text = 'Altitude and Speed [IAS, TAS] over Timesteps'
         pAltitude.title = tAlti
-        pAltitude.xaxis.axis_label = 'timestep [0.2s]'
+        pAltitude.xaxis.axis_label = 'timestep [s]'
         pAltitude.yaxis[0].axis_label = 'Altitude [ftsl]'
         pAltitude.legend.location="center_right"
         pAltitude.legend.click_policy="hide"
@@ -194,14 +196,14 @@ class EpisodePlotterWrapper(gym.Wrapper):
         tReward = Title()
         tReward.text = 'actual Reward over Timesteps'
         pReward.title = tReward
-        pReward.xaxis.axis_label = 'timestep [0.2s]'
+        pReward.xaxis.axis_label = 'timestep [s]'
         pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
 
 
         tState = Title()
         tState.text = 'actual State presentation to Agent'
         # pState.title = tReward
-        pState.xaxis.axis_label = 'timestep [0.2s]'
+        pState.xaxis.axis_label = 'timestep [s]'
         pState.yaxis[0].axis_label = 'state data'
 
 
