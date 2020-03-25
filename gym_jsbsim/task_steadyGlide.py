@@ -115,6 +115,8 @@ class SteadyRollGlideTask(FlightTask):
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         AILERON_CMD_TRAVEL_SCALING_FACTOR  = 2
         ELEVATOR_CMD_TRAVEL_SCALING_FACTOR = 2
+        GLIDE_ANGLE_INT_DEG_ERROR_SCALING = self.GLIDE_ANGLE_DEG_ERROR_SCALING / 4
+        ROLL_ANGLE_INTEGRAL_DEG_ERROR_SCALING = self.ROLL_ANGLE_DEG_ERROR_SCALING/4
         base_components = (
             rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error',
                                     prop=self.prop_roll_angle_error_deg,
@@ -122,21 +124,21 @@ class SteadyRollGlideTask(FlightTask):
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
-                                    weight=9),
+                                    weight=4),
             rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error_Integral',
                                     prop=self.prop_roll_angle_error_integral_deg_sec,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
-                                    scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                                    scaling_factor=self.ROLL_ANGLE_INTEGRAL_DEG_ERROR_SCALING,
                                     weight=9),
-            rewards.QuadraticErrorComponent(name='rwd_aileron_cmd_travel_error',
+            rewards.LinearErrorComponent(name='rwd_aileron_cmd_travel_error',
                                     prop=self.prp_delta_cmd_aileron,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=AILERON_CMD_TRAVEL_SCALING_FACTOR,
-                                    weight=2),
+                                    weight=1),
 
             rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error',
                         prop=self.prop_glide_angle_error_deg,
@@ -150,15 +152,15 @@ class SteadyRollGlideTask(FlightTask):
                         state_variables=self.state_variables,
                         target=0.0,
                         potential_difference_based=False,
-                        scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
-                        weight=9),
-            rewards.QuadraticErrorComponent(name='rwd_elevator_cmd_travel_error',
+                        scaling_factor=self.GLIDE_ANGLE_INT_DEG_ERROR_SCALING,
+                        weight=4),
+            rewards.LinearErrorComponent(name='rwd_elevator_cmd_travel_error',
                         prop=self.prp_delta_cmd_elevator,
                         state_variables=self.state_variables,
                         target=0.0,
                         potential_difference_based=False,
                         scaling_factor=ELEVATOR_CMD_TRAVEL_SCALING_FACTOR,
-                        weight=2),
+                        weight=1),
         )
         return base_components
 
@@ -348,6 +350,7 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         AILERON_CMD_TRAVEL_SCALING_FACTOR = 2  #the max. absolute value of the delta-cmd
+        ROLL_ANGLE_INTEGRAL_DEG_ERROR_SCALING = self.ROLL_ANGLE_DEG_ERROR_SCALING/4
         base_components = (
             rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error',
                                     prop=self.prop_roll_angle_error_deg,
@@ -355,21 +358,22 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
-                                    weight=9),
+                                    weight=4),
             rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error_Integral',
                                     prop=self.prop_roll_angle_error_integral_deg_sec,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
-                                    scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING,
+                                    scaling_factor=ROLL_ANGLE_INTEGRAL_DEG_ERROR_SCALING,
                                     weight=9),
-            rewards.QuadraticErrorComponent(name='rwd_aileron_cmd_travel_error',
+            # rewards.QuadraticErrorComponent(name='rwd_aileron_cmd_travel_error',
+            rewards.LinearErrorComponent(name='rwd_aileron_cmd_travel_error',
                                     prop=self.prp_delta_cmd_aileron,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
                                     scaling_factor=AILERON_CMD_TRAVEL_SCALING_FACTOR,
-                                    weight=2),
+                                    weight=1),
         )
         return base_components
 
@@ -409,7 +413,7 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
                                                            state_variables=self.state_variables,
                                                            target=0.0,
                                                            potential_difference_based=True,
-                                                           scaling_factor=self.AILERON_CMD_SCALING_FACTOR) 
+                                                           scaling_factor=self.ROLL_ANGLE_DEG_ERROR_SCALING) 
             potential_based_components = (small_aileron_commands,)
 
         if shaping is Shaping.EXTRA:
@@ -434,6 +438,7 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         ELEVATOR_CMD_TRAVEL_SCALING_FACTOR = 2
+        GLIDE_ANGLE_INT_DEG_ERROR_SCALING = self.GLIDE_ANGLE_DEG_ERROR_SCALING / 4
         base_components = (
             rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error',
                         prop=self.prop_glide_angle_error_deg,
@@ -441,21 +446,21 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
                         target=0.0,
                         potential_difference_based=False,
                         scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
-                        weight=9),
+                        weight=4),
             rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error_Integral',
                         prop=self.prop_glide_angle_error_integral_deg_sec,
                         state_variables=self.state_variables,
                         target=0.0,
                         potential_difference_based=False,
-                        scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
+                        scaling_factor=GLIDE_ANGLE_INT_DEG_ERROR_SCALING,
                         weight=9),
-            rewards.QuadraticErrorComponent(name='rwd_elevator_cmd_travel_error',
+            rewards.LinearErrorComponent(name='rwd_elevator_cmd_travel_error',
                         prop=self.prp_delta_cmd_elevator,
                         state_variables=self.state_variables,
                         target=0.0,
                         potential_difference_based=False,
                         scaling_factor=ELEVATOR_CMD_TRAVEL_SCALING_FACTOR,
-                        weight=2),
+                        weight=1),
         )
         return base_components
 
