@@ -53,6 +53,7 @@ class JsbSimEnv(gym.Env):
         self.flightgear_visualiser: FlightGearVisualiser = None
         self.step_delay = None
         self.reset()    #to initialize the simulation object right here. To have the opprotunity to use the sim object for e. g. storing setpoints
+        self.meta_dict = {'model_type': 'trained', 'model_discriminator': 'no file'} #to store additional meta information (e. g. used ny Episode Plotter Wrapper)
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, Dict]:
         """
@@ -177,6 +178,10 @@ class JsbSimEnv(gym.Env):
         returns the list of names of the named tuple representing the state of the specific task
         """
         return self.task.State._fields
+    
+    def set_meta_information(self, **kwargs):
+        self.meta_dict = {**self.meta_dict, **kwargs}
+
 
 class NoFGJsbSimEnv(JsbSimEnv):
     """

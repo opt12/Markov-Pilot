@@ -13,6 +13,11 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
+ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+CHKPT_DIR = ENV_ID + "_integral_scaling_1"
+CHKPT_POSTFIX = ""
+SAVED_MODEL_DISCRIMINATOR = "glide_best"
+# SAVED_MODEL_DISCRIMINATOR = "glide_+584.69"
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
@@ -20,12 +25,6 @@ if __name__ == "__main__":
     # parser.add_argument("-n", "--name", required=True, help="Name of the run")
     # args = parser.parse_args()
     # device = torch.device("cuda" if args.cuda else "cpu")
-
-    ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "integral_scaling_1"
-    CHKPT_POSTFIX = ""
-    SAVED_MODEL_NAME = "glide_best"
-
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -40,8 +39,6 @@ if __name__ == "__main__":
                        'velocities_vc_kts', 
                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
                        'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
-# PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
     # os.makedirs(save_path, exist_ok=True)
@@ -52,17 +49,16 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150, modulation_decay=0.99)     #to vary the setpoints during training
+    #env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150, modulation_decay=0.99)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
-    # env = StateSelectWrapper(env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
     print("env.observation_space: {}".format(env.observation_space))
 
     tgt_flight_path_deg = -6.5
     tgt_roll_angle_deg  = -5
     episode_steps   = 2500  #2*60*INTERACTION_FREQ
-    initial_fwd_speed_KAS        = 130
+    initial_fwd_speed_KAS        = 85
     initial_path_angle_gamma_deg = -0
     initial_roll_angle_phi_deg   = -0
     initial_aoa_deg              = 1.0
@@ -75,13 +71,16 @@ if __name__ == "__main__":
                                        , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
-    # TODO: a of this stuff is unnecessary, but #I need an agent right now.
-    play_agent = Agent(env=env, input_dims = [env.observation_space.shape[0]], n_actions = env.action_space.shape[0],
-              lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, tau=0.001,  #irrelevant for pure playing
-              layer1_size=400, layer2_size=300, 
-              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
+    # TODO: a of this stuff is unnecessary, but I need an agent right now.
+    play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
-    play_agent.load_models(name_discriminator = SAVED_MODEL_NAME)
+    env.set_meta_information(env_info = 'glide path control Player')
+    env.set_meta_information(model_discriminator = SAVED_MODEL_DISCRIMINATOR)
+    
+    play_agent.load_models(name_discriminator = SAVED_MODEL_DISCRIMINATOR)
+
 
     np.random.seed(0)
 
@@ -93,11 +92,11 @@ if __name__ == "__main__":
     total_steps = 0
     ts = time.time()
     while not done:
-        act = play_agent.choose_action(obs, add_exploration_noise=False)
+        act = play_agent.choose_action(obs, add_exploration_noise=False)    #no noise when testing
         new_state, reward, done, info = env.step(act)
-        score += reward     # the action includes noise!!!
+        score += reward
         obs = new_state
-        #env.render()
+        # env.render('flightgear')  #when rendering in Flightgear, the environment must be changed as well
         total_steps += 1
         if total_steps % 350 == 0:
             tgt_roll_angle_deg = -tgt_roll_angle_deg

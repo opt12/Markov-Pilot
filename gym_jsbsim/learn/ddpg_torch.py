@@ -117,11 +117,11 @@ class CriticNetwork(nn.Module):
         return state_action_value   #scalar vaue
 
     def save_checkpoint(self, name_suffix=''):
-        print('... saving checkpoint ...')
+        print('... saving checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
         T.save(self.state_dict(), self.checkpoint_file+'_'+name_suffix)
 
     def load_checkpoint(self, name_suffix = ''):
-        print('... loading checkpoint ...')
+        print('... loading checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
         self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
 
 class ActorNetwork(nn.Module):
@@ -175,11 +175,11 @@ class ActorNetwork(nn.Module):
         return x
 
     def save_checkpoint(self, name_suffix=''):
-        print('... saving checkpoint ...')
+        print('... saving checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
         T.save(self.state_dict(), self.checkpoint_file+'_'+name_suffix)
 
     def load_checkpoint(self, name_suffix=''):
-        print('... loading checkpoint ...')
+        print('... loading checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
         self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
 
 class Agent(object):
@@ -189,6 +189,8 @@ class Agent(object):
         #default values for noise
         self.noise_sigma = 0.15
         self.noise_theta = 0.2
+
+        self.env = env #TODO: this is only to set the meta_information, so the env parameter could be eliminated entirely
 
         self.n_actions = n_actions
         self.gamma = gamma
@@ -228,6 +230,12 @@ class Agent(object):
         self.update_network_parameters(tau=1)   #with tau=1 the target net is updated entirely to the base network
         self.global_step = 0
         self.episode_counter = 0
+
+        #add the agent's settings to the env meta-information:
+        env.set_meta_information(lr_actor=lr_actor, lr_critic=lr_critic, input_dims = input_dims, tau=tau, 
+                batch_size=batch_size,  layer1_size=layer1_size, layer2_size=layer2_size, n_actions = n_actions,
+                chkpt_dir=chkpt_dir, chkpt_postfix=chkpt_postfix, summary_writer = writer_name)
+
 
     def choose_action(self, observation, add_exploration_noise = True):
         self.actor.eval()   #don't calc statistics for layer normalization in action selection
@@ -358,6 +366,7 @@ class Agent(object):
         self.target_actor.load_checkpoint(name_discriminator)
         self.critic.load_checkpoint(name_discriminator)
         self.target_critic.load_checkpoint(name_discriminator)
+        self.env.set_meta_information(model_type = 'loaded')
 
     def reset_noise_source(self):
         self.noise.reset()

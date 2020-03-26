@@ -14,6 +14,11 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
+ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+CHKPT_DIR = ENV_ID + "_250_episodes"
+CHKPT_POSTFIX = "gamma_1_0"
+SAVED_MODEL_DISCRIMINATOR = "roll_glide_sync_best"
+# SAVED_MODEL_DISCRIMINATOR = "roll_glide_sync_+11.83"
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
@@ -22,11 +27,6 @@ if __name__ == "__main__":
     # args = parser.parse_args()
     # device = torch.device("cuda" if args.cuda else "cpu")
 
-    ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "MovementPunishment"
-    CHKPT_POSTFIX = ""
-    SAVED_MODEL_NAME = "roll_glide_best"
-
     GAMMA = .95
     BATCH_SIZE = 64
     LEARNING_RATE_ACTOR = 1e-4
@@ -34,14 +34,11 @@ if __name__ == "__main__":
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
                        'velocities_vc_kts', 
                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
                        'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
     # os.makedirs(save_path, exist_ok=True)
@@ -75,12 +72,15 @@ if __name__ == "__main__":
                                        , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
-
+    # TODO: a of this stuff is unnecessary, but I need an agent right now.
     play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
-    play_agent.load_models(name_discriminator = SAVED_MODEL_NAME)
+    env.set_meta_information(env_info = 'synchronous roll-glide Player')
+    env.set_meta_information(model_discriminator = SAVED_MODEL_DISCRIMINATOR)
+    
+    play_agent.load_models(name_discriminator = SAVED_MODEL_DISCRIMINATOR)
 
 
     np.random.seed(0)
@@ -93,11 +93,11 @@ if __name__ == "__main__":
     total_steps = 0
     ts = time.time()
     while not done:
-        act = play_agent.choose_action(obs, add_exploration_noise=False)
+        act = play_agent.choose_action(obs, add_exploration_noise=False)    #no noise when testing
         new_state, reward, done, info = env.step(act)
-        score += reward     # the action includes noise!!!
+        score += reward
         obs = new_state
-        #env.render()
+        # env.render('flightgear')  #when rendering in Flightgear, the environment must be changed as well
         total_steps += 1
         if total_steps % 350 == 0:
             tgt_roll_angle_deg = -tgt_roll_angle_deg
@@ -109,3 +109,4 @@ if __name__ == "__main__":
     print('episode finished; score %.2f;' % score,
             '%d' % total_steps, 'steps in %.2f' % delta_t, 'sec; That\'s %.2f' % (total_steps/delta_t),'steps/sec')
 
+env.close()

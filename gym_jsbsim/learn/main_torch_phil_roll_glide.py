@@ -14,34 +14,10 @@ import gym_jsbsim.properties as prp
 
 from evaluate_training import test_net
 
-# best_reward = None  #we don't like globals, but it really helps here
-
-# def test_net(agent, env, add_exploration_noise=False):
-#     global best_reward
-#     exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
-#     obs = env.reset()
-#     env.showNextPlot(True, True)
-#     done = False
-#     score = 0
-#     steps = 0
-#     while not done:
-#         act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
-#         new_state, reward, done, info = env.step(act)
-#         agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
-#         score += reward     # the action includes noise!!!
-#         obs = new_state
-#         steps += 1
-#         #env.render()
-#     print("\tTest yielded a score of %.2f" %score, ".")
-
-#     name = "roll_glide_%+.3f_%d" % (score, steps)
-#     agent.save_models(name_discriminator=name)    
-#     if best_reward is None or best_reward < score:
-#         if best_reward is not None:
-#             print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-#         agent.save_models(name_discriminator='roll_glide_best')
-#         best_reward = score
- 
+ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+CHKPT_DIR = ENV_ID + "_250_episodes"
+CHKPT_POSTFIX = "gamma_1_0"
+SAVED_MODEL_BASE_NAME = "roll_glide_sync"
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
@@ -50,11 +26,7 @@ if __name__ == "__main__":
     # args = parser.parse_args()
     # device = torch.device("cuda" if args.cuda else "cpu")
 
-    ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + ""
-    CHKPT_POSTFIX = "gamma_1_0"
-
-    GAMMA = 1.0
+    GAMMA = 0.95
     BATCH_SIZE = 64
     LEARNING_RATE_ACTOR = 1e-4
     LEARNING_RATE_CRITIC = 1e-3
@@ -106,19 +78,16 @@ if __name__ == "__main__":
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
-    test_env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                                        , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg
-                                        , prp.episode_steps:            episode_steps})
-    test_env.task.set_initial_ac_attitude( {  prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
-                                       , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
-                                       , prp.initial_roll_deg: initial_roll_angle_phi_deg
-                                       , prp.initial_aoa_deg: initial_aoa_deg
-                                      })
     #TODO: open summary writer here
 
     train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
+
+    env.set_meta_information(env_info = 'synchronous roll-glide Training')
+    env.set_meta_information(model_base_name = SAVED_MODEL_BASE_NAME)
+
+    test_env.set_meta_information(**env.meta_dict)  #kind of hacky, but it works
 
     np.random.seed(0)
 
@@ -126,7 +95,7 @@ if __name__ == "__main__":
 
     exploration_noise_flag = True
 
-    for episode in range(101):
+    for episode in range(251):
         obs = env.reset()
         done = False
         score = 0
@@ -151,6 +120,7 @@ if __name__ == "__main__":
             'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
         if episode% 5 == 0:
+            test_env.set_meta_information(episode_number = episode) #in fact, this is another episode, but with no training, so I don't increment it
             test_net(train_agent, test_env, add_exploration_noise=False)
         
         # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
@@ -160,4 +130,5 @@ if __name__ == "__main__":
 
         # if i % 25 == 0:
         #     train_agent.save_models()
-
+env.close()
+test_env.close()

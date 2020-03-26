@@ -58,13 +58,13 @@ def test_net(agent, env, add_exploration_noise=False):
         #env.render()
     print("\tTest yielded a score of %.2f" %score, ".")
 
-    name = "roll_%+.3f_%d" % (score, steps)
-    agent.save_models(name_discriminator=name)    
+    name = env.meta_dict['model_base_name']
+    discriminator = env.meta_dict['model_discriminator']
+    env.set_meta_information(model_discriminator = discriminator)
+    agent.save_models(name_discriminator=discriminator)    
     if best_reward is None or best_reward < score:
         if best_reward is not None:
             print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-        name = "roll_%+.3f_%d" % (score, steps)
-        agent.save_models(name_discriminator=name)
-        agent.save_models(name_discriminator='roll_best')
+        agent.save_models(name_discriminator= name + '_best')
         best_reward = score
 

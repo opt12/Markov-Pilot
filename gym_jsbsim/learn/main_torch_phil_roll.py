@@ -14,6 +14,11 @@ import gym_jsbsim.properties as prp
 
 from evaluate_training import test_net
 
+ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
+CHKPT_POSTFIX = ""
+SAVED_MODEL_BASE_NAME = "roll"
+
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
     # parser.add_argument("--cuda", default=False, action='store_true', help='Enable CUDA')
@@ -21,28 +26,18 @@ if __name__ == "__main__":
     # args = parser.parse_args()
     # device = torch.device("cuda" if args.cuda else "cpu")
 
-    ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
-    CHKPT_POSTFIX = ""
-
-    GAMMA = .95
+    GAMMA = 0.95
     BATCH_SIZE = 64
     LEARNING_RATE_ACTOR = 1e-4
     LEARNING_RATE_CRITIC = 1e-3
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
                        'velocities_vc_kts', 
                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
                        'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
-
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
@@ -89,6 +84,11 @@ if __name__ == "__main__":
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
 
+    env.set_meta_information(env_info = 'roll Training')
+    env.set_meta_information(model_base_name = SAVED_MODEL_BASE_NAME)
+
+    test_env.set_meta_information(**env.meta_dict)  #kind of hacky, but it works
+
     np.random.seed(0)
 
     score_history = []
@@ -120,6 +120,7 @@ if __name__ == "__main__":
             'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
         if episode% 5 == 0:
+            test_env.set_meta_information(episode_number = episode) #in fact, this is another episode, but with no training, so I don't increment it
             test_net(train_agent, test_env, add_exploration_noise=False)
         
         # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
@@ -129,4 +130,5 @@ if __name__ == "__main__":
 
         # if i % 25 == 0:
         #     train_agent.save_models()
-
+env.close()
+test_env.close()

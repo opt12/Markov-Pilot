@@ -6,7 +6,8 @@ import pandas as pd
 import datetime
 import os
 import shutil   #to have copyfile available
-from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
+from bokeh.io import output_file, show, reset_output, save, export_png
+from bokeh.models import ColumnDataSource, DataTable, TableColumn
 import math
 
 from timeit import timeit
@@ -16,12 +17,13 @@ class EpisodePlotterWrapper(gym.Wrapper):
     def __init__(self, env, presented_state = None):
         super(EpisodePlotterWrapper, self).__init__(env)
 
+        self.env = env
         self.step_frequency_hz = env.task.step_frequency_hz  #use this to scale the x-axis
 
         #create a pandas dataframe to hold all episode data
         # |state | reward | done | action| per each step with property names as data
-        self.action_variables = env.task.action_variables
-        self.state_variables = env.task.state_variables
+        self.action_variables = self.env.task.action_variables
+        self.state_variables = self.env.task.state_variables
         self.reward_variables = (prp.Property('reward', 'the reward dobtained in this step'),)
         self.done_variables = (prp.Property('done', 'indicates the end of an episode'),)
         self.state = np.empty(self.env.observation_space.shape)
@@ -43,9 +45,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         self.dirname = os.path.dirname(__file__) + '/../plots/{}'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M"))
         if not os.path.exists(self.dirname):
             os.mkdir(self.dirname)
-
-
-
+        
     def step(self, action):
         #let's move on to the next step
         self.newObs = self.env.step(action)
@@ -83,7 +83,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
     def showGraph(self,data_frame):
         from bokeh.plotting import figure
         from bokeh.layouts import row, column, gridplot
-        from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
+        from bokeh.io import output_file, show, reset_output, save, export_png
         from bokeh.models.annotations import Title, Legend
         from bokeh.models.widgets.markups import Div
         from bokeh.models import LinearAxis, Range1d
@@ -217,10 +217,27 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pState.toolbar.active_scroll = pState.toolbar.tools[1]    #this selects the WheelZoomTool instance 
 
         reset_output()
-        grid = gridplot([[pElev, pAileron], [pAltitude, pReward], [None, pState]])
+
+        if self.env.meta_dict['model_type'] == 'trained':
+            discriminator = self.env.meta_dict['model_base_name']+"_%+.2f" % (data_frame['reward'].sum())
+            self.env.meta_dict['model_discriminator'] = discriminator
+        else: 
+            discriminator = self.env.meta_dict['model_discriminator']
+
+        grid = gridplot([[pElev, pAileron], [pAltitude, pReward], [self.get_meta_info_table(), pState]])
         #for string formatting look here: https://pyformat.info/
-        titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum())
-        webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)
+
+        titleString = "Run Date: {}; ".format(datetime.datetime.now().strftime("%c"))
+        if 'episode_number' in self.env.meta_dict:
+            titleString += "Episode: {}; ".format(self.env.meta_dict['episode_number'])
+        titleString += "Total Reward: {:.2f}; ".format(data_frame['reward'].sum())
+        titleString += "Model Discriminator: {};".format(self.env.meta_dict['model_discriminator'])
+        webpage = column(
+            Div(text="<h1>" + self.env.unwrapped.spec.id + 
+            (" - " + self.env.meta_dict['env_info']) if 'env_info' in self.meta_dict else "" + 
+            "</h1>"), 
+            Div(text="<h2>"+titleString+"</h2>"), 
+            grid)
 
         html_output_name = os.path.join(self.dirname, 'glideAngle_Elevator_latest.html')
         if self.showNextPlotFlag:
@@ -234,7 +251,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         
         if self.exportNextPlotFlag:
-            base_filename = os.path.join(self.dirname, 'glideAngle_Elevator_{}_Reward_{:.2f}'.format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum()))
+            base_filename = os.path.join(self.dirname, 'glideAngle_Elevator_Reward_{:.2f}_time_{}'.format(data_frame['reward'].sum(), datetime.datetime.now().strftime("%H:%M:%S")))
             # @timeit   TODO: die sourcen werden nicht gefunden
             if self.showNextPlotFlag:
                 #we keep the html as well for easy exploration
@@ -252,5 +269,25 @@ class EpisodePlotterWrapper(gym.Wrapper):
         self.showNextPlotFlag = show
         self.exportNextPlotFlag = export
         self.save_to_csv = save_to_csv
+    
+    def prepare_plot_meta(self):
+        env_id = "<h1>" + self.env.unwrapped.spec.id + "</h1>"
+
+        meta_info_string = ""
+        for item in self.env.meta_dict.items():
+            meta_info_string += f"{item}<br>"
+        return env_id + "<h2>"+"</h2>" + meta_info_string
+    
+    def get_meta_info_table(self):
+        data = {'keys': list(self.env.meta_dict.keys()),
+                'vals': list(self.env.meta_dict.values())}
+        source = ColumnDataSource(data = data)
+
+        columns = [
+                TableColumn(field="keys", title="Key"),
+                TableColumn(field="vals", title="Value"),
+            ]
+        return DataTable(source=source, columns=columns, fit_columns= True, reorderable=False, editable=True)
+
         
         

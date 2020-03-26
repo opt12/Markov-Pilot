@@ -12,6 +12,11 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
+ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
+CHKPT_POSTFIX = "integral_decay_0_95"
+SAVED_MODEL_DISCRIMINATOR = "roll_best"
+# SAVED_MODEL_DISCRIMINATOR = "roll_+584.69"
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
@@ -20,14 +25,6 @@ if __name__ == "__main__":
     # args = parser.parse_args()
     # device = torch.device("cuda" if args.cuda else "cpu")
 
-    ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-    CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
-    CHKPT_POSTFIX = "integral_decay_0_95"
-    SAVED_MODEL_NAME = "roll_best"
-    # SAVED_MODEL_NAME = "roll_+584.694_599"
-    # ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"   #uncomment this line when rendering in Flightgear
-
-
     GAMMA = .95
     BATCH_SIZE = 64
     LEARNING_RATE_ACTOR = 1e-4
@@ -35,17 +32,12 @@ if __name__ == "__main__":
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
     INTERACTION_FREQ = 5
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
-    PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts', 'error_rollAngle_error_integral_deg_sec']
+
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
                        'velocities_vc_kts', 
                        'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm', 
                        'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
-
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'info_delta_cmd_aileron', 'fcs_aileron_cmd_norm']
-    # PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'velocities_vc_kts']
 
     # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
     # os.makedirs(save_path, exist_ok=True)
@@ -58,7 +50,6 @@ if __name__ == "__main__":
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
     # env = VarySetpointsWrapper(env, modulation_amplitude = 0.2, modulation_period = 300)     #to vary the setpoints during training
     env = VarySetpointsWrapper(env)#, modulation_amplitude = 10, modulation_period = 150)     #to vary the setpoints during training
-
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
@@ -80,12 +71,16 @@ if __name__ == "__main__":
                                        , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
-    # TODO: a of this stuff is unnecessary, but #I need an agent right now.
+    # TODO: a of this stuff is unnecessary, but I need an agent right now.
     play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
-    play_agent.load_models(name_discriminator = SAVED_MODEL_NAME)
+    env.set_meta_information(env_info = 'roll control Player')
+    env.set_meta_information(model_discriminator = SAVED_MODEL_DISCRIMINATOR)
+    
+    play_agent.load_models(name_discriminator = SAVED_MODEL_DISCRIMINATOR)
+
 
     np.random.seed(0)
 
