@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import os
+import shutil   #to have copyfile available
 from bokeh.io import output_file, show, output_notebook, reset_output, save, export_png
 import math
 
@@ -221,30 +222,26 @@ class EpisodePlotterWrapper(gym.Wrapper):
         titleString = "Run Plot: {}; Total Reward: {:.2f}".format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum())
         webpage = column(Div(text="<h2>"+titleString+"</h2>"), grid)
 
+        html_output_name = os.path.join(self.dirname, 'glideAngle_Elevator_latest.html')
         if self.showNextPlotFlag:
             self.plotCounter += 1   #increment the plot counter
-            output_file(os.path.join(self.dirname, 'glideAngle_Elevator.html'), mode='inline') #use mode='inline' to make it work offline
+            output_file(html_output_name, mode='absolute') #use mode='absolute' to make it work offline with the js and css installed in the bokeh package locally
             if self.firstRun:
-                # placing this output_file here is a try to avoid the "too many open files exception"
-                # output_file(os.path.join(self.dirname, '../plots/glideAngle_Elevator.html')) #use mode='inline' to make it work offline
                 show(webpage)  #opens up a new browser window
                 self.firstRun = False
             else:
-                try:
-                    save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
-                except OSError as err:
-                    #TODO: after a while it says too many open files exception. So I have to close that somehow
-                    # This happens in bokeh.io.saving.py _save_helper() when opening the file with "with io.open(...) as fd"
-                    print("OSError occurred after {} open files. Why this?".format(self.plotCounter))
-                    print(err)
-
+                save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
 
         
         if self.exportNextPlotFlag:
+            base_filename = os.path.join(self.dirname, 'glideAngle_Elevator_{}_Reward_{:.2f}'.format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum()))
             # @timeit   TODO: die sourcen werden nicht gefunden
+            if self.showNextPlotFlag:
+                #we keep the html as well for easy exploration
+                shutil.copyfile(html_output_name, base_filename+'.html')
             def export(webpage):
-                filename = os.path.join(self.dirname, 'glideAngle_Elevator_{}_Reward_{:.2f}.png'.format(datetime.datetime.now().strftime("%H:%M:%S"), data_frame['reward'].sum()))
-                export_png(webpage, filename)
+                filename = base_filename + '.png'
+                export_png(webpage, filename= filename)
             export(webpage)
 
         self.showNextPlotFlag = False   #only show the plot once and then reset
