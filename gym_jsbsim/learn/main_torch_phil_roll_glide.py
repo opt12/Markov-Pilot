@@ -15,7 +15,7 @@ import gym_jsbsim.properties as prp
 from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-CHKPT_DIR = ENV_ID + "_250_episodes"
+CHKPT_DIR = ENV_ID + "_500_episodes"
 CHKPT_POSTFIX = "gamma_1_0"
 SAVED_MODEL_BASE_NAME = "roll_glide_sync"
 
@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
     exploration_noise_flag = True
 
-    for episode in range(251):
+    for episode in range(501):
         obs = env.reset()
         done = False
         score = 0

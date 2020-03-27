@@ -70,6 +70,21 @@ class EpisodePlotterWrapper(gym.Wrapper):
 
         return (self.state, self.reward, self.done, info)
 
+    def close(self):
+        #if env is closed before itself gets a done, show the graph is needed
+        if (self.showNextPlotFlag or self.exportNextPlotFlag or self.save_to_csv):
+            dataRecorder = pd.DataFrame(self.recorderDictList)    
+            if (self.save_to_csv):
+                #save the entire pandas frame to CSV file
+                csv_dir_name = os.path.join(self.dirname, '../csv')
+                if not os.path.exists(csv_dir_name):
+                    os.mkdir(csv_dir_name)
+                filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H:%M:%S")))
+                dataRecorder.to_csv(filename)
+            # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
+            self.showGraph(dataRecorder)
+
+
     def reset(self):
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
         self.state = self.env.reset()
@@ -128,7 +143,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pAltitude.y_range.renderers = [altitudeLine]
 
         # Presented state
-        pState = figure(plot_width=1200, plot_height=300, x_range=pElev.x_range)
+        pState = figure(plot_width=1157, plot_height=300, x_range=pElev.x_range)
         # Setting the second y axis range name and range
         norm_state_extents = 10
         pState.extra_y_ranges = {"normalized_data": Range1d(start=-norm_state_extents, end=norm_state_extents )}
@@ -152,12 +167,12 @@ class EpisodePlotterWrapper(gym.Wrapper):
             pState.y_range.renderers = state_lines
             pState.extra_y_ranges.renderers = normalized_state_lines    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
 
-        lg_state = Legend(items = state_legend, location=(0, 0), glyph_width = 25, label_width = 333)
+        lg_state = Legend(items = state_legend, location=(0, 0), glyph_width = 25, label_width = 290)
         lg_state.click_policy="hide"
         pState.add_layout(lg_state, 'right')
 
         #Reward
-        pReward = figure(plot_width=1200, plot_height=300, x_range=pElev.x_range)
+        pReward = figure(plot_width=1157, plot_height=300, x_range=pElev.x_range)
         rwd_cmp_lines = []
         reward_legend = []
         rewardLine = pReward.line(data_frame.index/self.step_frequency_hz, data_frame['reward'], line_width=2, color=Viridis4[3])
@@ -167,7 +182,7 @@ class EpisodePlotterWrapper(gym.Wrapper):
                 pReward.line(data_frame.index/self.step_frequency_hz, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
             )
             reward_legend.append( (rwd_component, [rwd_cmp_lines[-1]]) )
-        reward_lg = Legend(items = reward_legend, location=(48, 0), glyph_width = 25, label_width = 333)
+        reward_lg = Legend(items = reward_legend, location=(48, 0), glyph_width = 25, label_width = 290)
         reward_lg.click_policy="hide"
         pReward.add_layout(reward_lg, 'right')
 
