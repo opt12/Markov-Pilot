@@ -16,7 +16,7 @@ from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 CHKPT_DIR = ENV_ID + "_500_episodes"
-CHKPT_POSTFIX = "gamma_1_0"
+CHKPT_POSTFIX = "with_setpoint_variation"
 SAVED_MODEL_BASE_NAME = "roll_glide_sync"
 
 if __name__ == "__main__":
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         obs = env.reset()
         done = False
         score = 0
-        # train_agent.reset_noise_source()    #this is like in the original paper
+        train_agent.reset_noise_source()    #this is like in the original paper
         # train_agent.reduce_noise_sigma(sigma_factor=0.98)
         steps = 0
         ts = time.time()
@@ -130,5 +130,5 @@ if __name__ == "__main__":
 
         # if i % 25 == 0:
         #     train_agent.save_models()
-env.close()
-test_env.close()
+    env.close()
+    test_env.close()

@@ -13,46 +13,76 @@ from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperPar
 import gym_jsbsim.properties as prp
 
 
-best_reward = None  #we don't like globals, but it really helps here
+best_overall = best_roll = best_glide = None  #we don't like globals, but it really helps here
 
 def test_net(elevator_agent, aileron_agent, env, add_exploration_noise=False):
-    global best_reward
+    global best_overall, best_roll, best_glide
     exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
     obs = env.reset()
     env.showNextPlot(True, True)
     done = False
-    score = 0
+    score_overall = score_elevator = score_aileron = 0
     steps = 0
     while not done:
         act_elevator = elevator_agent.choose_action(obs, add_exploration_noise = exploration_noise)
         act_aileron  = aileron_agent.choose_action( obs, add_exploration_noise = exploration_noise)
         act = np.array([act_elevator[0], act_aileron[0]])
-        new_state, reward, done, info = env.step(act)   #for the order of actions see task_stadyGlide -> action_variables
-
-        new_state, reward, done, info = env.step(act)
+        new_state, reward_overall, done, info = env.step(act)   #for the order of actions see task_stadyGlide -> action_variables
 
         rwd_cmps = info['reward_components']
-        elevator_reward = 9 * rwd_cmps['rwd_glideAngle_error'] + 9 * rwd_cmps['rwd_glideAngle_error_Integral'] + 2 * rwd_cmps['rwd_elevator_cmd_travel_error'] / 20
-        aileron_reward  = 9 * rwd_cmps['rwd_rollAngle_error'] + 9 * rwd_cmps['rwd_rollAngle_error_Integral'] + 2 * rwd_cmps['rwd_aileron_cmd_travel_error'] / 20
+        elevator_reward = (9 * rwd_cmps['rwd_glideAngle_error'] + 9 * rwd_cmps['rwd_glideAngle_error_Integral'] + 2 * rwd_cmps['rwd_elevator_cmd_travel_error']) / 20
+        aileron_reward  = (9 * rwd_cmps['rwd_rollAngle_error'] + 9 * rwd_cmps['rwd_rollAngle_error_Integral'] + 2 * rwd_cmps['rwd_aileron_cmd_travel_error']) / 20
         train_agent_elevator.remember(obs, act_elevator, elevator_reward, new_state, int(done))
         train_agent_aileron.remember(obs, act_aileron, aileron_reward, new_state, int(done))
 
-        score += (elevator_reward + aileron_reward)/2     # the action includes noise, so the reward is smaller than in testing without noise !!!
+        score_elevator += elevator_reward
+        score_aileron  += aileron_reward
+        score_overall  += reward_overall
         obs = new_state
         steps += 1
-        #env.render()
-    print("\tTest yielded a score of %.2f" %score, ".")
 
-    name_elevator = "dual_glide_%+.3f_%d" % (score, steps)
-    name_aileron  = "dual_roll_%+.3f_%d" % (score, steps)
+        if steps == int(0.5 *60* env.task.step_frequency_hz):
+            tgt_flight_path_deg = -6.5
+            tgt_roll_angle_deg  = -10
+            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
+                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg})
+        if steps == int(1 *60* env.task.step_frequency_hz):
+            tgt_flight_path_deg = -7.5
+            tgt_roll_angle_deg  = -10
+            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
+                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg})
+        if steps == int(1.5 *60* env.task.step_frequency_hz):
+            tgt_flight_path_deg = -7.5
+            tgt_roll_angle_deg  = 10
+            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
+                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg})
+
+        #env.render()
+    print("\tTest yielded an overall score of %.2f" %score_overall, ".")
+
+    name_elevator = "dual_glide_%.2f_overall_%.2f" % (score_elevator, score_overall)
+    name_aileron  = "dual_roll_%.2f_overall_%.2f" % (score_aileron, score_overall)
     elevator_agent.save_models(name_discriminator=name_elevator)    
-    aileron_agent.save_models(name_discriminator=name_aileron)    
-    if best_reward is None or best_reward < score:
-        if best_reward is not None:
-            print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-        elevator_agent.save_models(name_discriminator='dual_glide_best')
-        aileron_agent.save_models( name_discriminator='dual_roll_best')
-        best_reward = score
+    aileron_agent.save_models(name_discriminator=name_aileron)   
+
+    if best_overall is None or best_overall < score_overall:
+        if best_overall is not None:
+            print("Best overall reward updated: %.2f -> %.2f" % (best_overall, score_overall))
+        elevator_agent.save_models(name_discriminator='dual_glide_best_overall')
+        aileron_agent.save_models( name_discriminator='dual_roll_best_overall')
+        best_overall = score_overall
+ 
+    if best_roll is None or best_roll < score_aileron:
+        if best_roll is not None:
+            print("Best aileron reward updated: %.2f -> %.2f" % (best_roll, score_aileron))
+        aileron_agent.save_models( name_discriminator='dual_roll_best_aileron')
+        best_roll = score_aileron
+ 
+    if best_glide is None or best_glide < score_elevator:
+        if best_glide is not None:
+            print("Best elevator reward updated: %.2f -> %.2f" % (best_glide, score_elevator))
+        elevator_agent.save_models(name_discriminator='dual_glide_best_elevator')
+        best_glide = score_elevator
  
 
 if __name__ == "__main__":
@@ -64,7 +94,8 @@ if __name__ == "__main__":
 
     ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
     CHKPT_DIR = ENV_ID + "Dual_Agent"
-    CHKPT_POSTFIX = "First_Try"
+    CHKPT_POSTFIX = "Retry_split_save"
+    SAVED_MODEL_BASE_NAME = "roll_glide_dual"
 
     GAMMA = .95
     BATCH_SIZE = 64
@@ -112,7 +143,7 @@ if __name__ == "__main__":
                                       })
 
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
-    test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
+    # test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     # test_env = PidWrapper(test_env, []) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
@@ -135,20 +166,25 @@ if __name__ == "__main__":
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
 
+    env.set_meta_information(env_info = 'synchronous roll-glide Training')
+    env.set_meta_information(model_base_name = SAVED_MODEL_BASE_NAME)
+
+    test_env.set_meta_information(**env.meta_dict)  #kind of hacky, but it works
+
     np.random.seed(0)
 
     score_history = []
 
     exploration_noise_flag = True
 
-    for episode in range(101):   #just do 100 episodes to see how things develop
+    for episode in range(501):
         obs = env.reset()
         done = False
         score = 0
         train_agent_elevator.reset_noise_source()    #this is like in the original paper
-        train_agent_elevator.reduce_noise_sigma(sigma_factor=0.98)
+        # train_agent_elevator.reduce_noise_sigma(sigma_factor=0.98)
         train_agent_aileron.reset_noise_source()    #this is like in the original paper
-        train_agent_aileron.reduce_noise_sigma(sigma_factor=0.98)
+        # train_agent_aileron.reduce_noise_sigma(sigma_factor=0.98)
         steps = 0
         ts = time.time()
         while not done:
@@ -158,8 +194,8 @@ if __name__ == "__main__":
             new_state, reward, done, info = env.step(act)   #for the order of actions see task_stadyGlide -> action_variables
             #calculate the individual rewards for elevator and aileron
             rwd_cmps = info['reward_components']
-            elevator_reward = 9 * rwd_cmps['rwd_glideAngle_error'] + 9 * rwd_cmps['rwd_glideAngle_error_Integral'] + 2 * rwd_cmps['rwd_elevator_cmd_travel_error'] / 20
-            aileron_reward  = 9 * rwd_cmps['rwd_rollAngle_error'] + 9 * rwd_cmps['rwd_rollAngle_error_Integral'] + 2 * rwd_cmps['rwd_aileron_cmd_travel_error'] / 20
+            elevator_reward = (9 * rwd_cmps['rwd_glideAngle_error'] + 9 * rwd_cmps['rwd_glideAngle_error_Integral'] + 2 * rwd_cmps['rwd_elevator_cmd_travel_error']) / 20
+            aileron_reward  = (9 * rwd_cmps['rwd_rollAngle_error'] + 9 * rwd_cmps['rwd_rollAngle_error_Integral'] + 2 * rwd_cmps['rwd_aileron_cmd_travel_error']) / 20
             train_agent_elevator.remember(obs, act_elevator, elevator_reward, new_state, int(done))
             train_agent_elevator.learn()
             train_agent_aileron.remember(obs, act_aileron, aileron_reward, new_state, int(done))
@@ -176,6 +212,7 @@ if __name__ == "__main__":
             'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
 
         if episode% 5 == 0:
+            test_env.set_meta_information(episode_number = episode) #in fact, this is another episode, but with no training, so I don't increment it
             test_net(train_agent_elevator, train_agent_aileron, test_env, add_exploration_noise=False)
         
         # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
@@ -184,5 +221,6 @@ if __name__ == "__main__":
             
 
         # if i % 25 == 0:
-        #     train_agent_elevator.save_models()
-
+        #     train_agent.save_models()
+    env.close()
+    test_env.close()

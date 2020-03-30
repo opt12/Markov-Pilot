@@ -17,9 +17,13 @@ import gym_jsbsim.properties as prp
 ENV_ID = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 CHKPT_DIR = ENV_ID
 # CHKPT_DIR = "JSBSim-SteadyRollGlideTask-Cessna172P-Shaping.STANDARD-NoFG-v0"  #use this if you want to perform Flightgear Rendering
-CHKPT_DIR = CHKPT_DIR + "_500_episodes"
-CHKPT_POSTFIX = "with_setpoint_variation"
-SAVED_MODEL_DISCRIMINATOR = "roll_glide_sync_best"
+CHKPT_DIR = ENV_ID + "Dual_Agent"
+CHKPT_POSTFIX = "Retry_split_save"
+SAVED_MODEL_DISCRIMINATOR_AILERON = "dual_roll_best_overall"
+SAVED_MODEL_DISCRIMINATOR_ELEVATOR = "dual_glide_best_overall"
+# SAVED_MODEL_DISCRIMINATOR_AILERON = "dual_roll_best_aileron"
+# SAVED_MODEL_DISCRIMINATOR_AILERON = "dual_roll_566.91_overall_553.00"
+# SAVED_MODEL_DISCRIMINATOR_ELEVATOR = "dual_glide_best_elevator"
 # SAVED_MODEL_DISCRIMINATOR = "roll_glide_sync_+11.83"
 ENABLE_PARALLEL_PID = 1
 
@@ -52,7 +56,6 @@ if __name__ == "__main__":
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
     # env = VarySetpointsWrapper(env, modulation_amplitude = 10, modulation_period = 50)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    # env = PidWrapper(env, [aileron_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
 
     if ENABLE_PARALLEL_PID:
@@ -88,19 +91,24 @@ if __name__ == "__main__":
                                        , prp.initial_aoa_deg: initial_aoa_deg
                                       })
     # TODO: a of this stuff is unnecessary, but I need an agent right now.
-    play_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
+    play_agent_elevator = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
+    
+    play_agent_aileron = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
+              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = 1,
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX )  #TODO: action space should be env.action_space.shape[0]
     
     env.set_meta_information(env_info = 'ANN synchronous roll-glide Player')
-    env.set_meta_information(model_discriminator = SAVED_MODEL_DISCRIMINATOR)
+    env.set_meta_information(model_discriminator = 'dual agent')
 
     if ENABLE_PARALLEL_PID:
         env_pid.set_meta_information(env_info = 'PID synchronous roll-glide Player')
         env_pid.set_meta_information(model_discriminator = 'full PID control')
         env_pid.set_meta_information(model_type = 'PID')
     
-    play_agent.load_models(name_discriminator = SAVED_MODEL_DISCRIMINATOR)
+    play_agent_elevator.load_models(name_discriminator = SAVED_MODEL_DISCRIMINATOR_ELEVATOR)
+    play_agent_aileron.load_models(name_discriminator = SAVED_MODEL_DISCRIMINATOR_AILERON)
 
 
     np.random.seed(0)
@@ -120,7 +128,10 @@ if __name__ == "__main__":
     total_steps = 0
     ts = time.time()
     while not done:
-        act = play_agent.choose_action(obs_ann, add_exploration_noise=False)    #no noise when testing
+        act_elevator = play_agent_elevator.choose_action(obs_ann, add_exploration_noise=False)    #no noise when testing
+        act_aileron  = play_agent_aileron.choose_action(obs_ann, add_exploration_noise=False)    #no noise when testing
+        act = np.array([act_elevator[0], act_aileron[0]])
+
         obs_ann, reward_ann, done, info = env.step(act)
         score_ann += reward_ann
 
