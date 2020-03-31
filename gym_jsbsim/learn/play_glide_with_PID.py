@@ -16,11 +16,11 @@ import gym_jsbsim.properties as prp
 ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 CHKPT_DIR = ENV_ID
 # CHKPT_DIR = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-noFG-v0"  #use this if you want to perform Flightgear RenderingCHKPT_DIR = ENV_ID + "_integral_scaling_1"
-CHKPT_DIR = CHKPT_DIR + "_integral_scaling_1"
-CHKPT_POSTFIX = ""
+CHKPT_DIR = ENV_ID + "avoid_overshoot"
+CHKPT_POSTFIX = "no_integral"
 SAVED_MODEL_DISCRIMINATOR = "glide_best"
 # SAVED_MODEL_DISCRIMINATOR = "glide_+584.69"
-ENABLE_PARALLEL_PID = 0
+ENABLE_PARALLEL_PID = 1
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()

@@ -3,6 +3,8 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
 import time
+import random
+
 
 from ddpg_torch import Agent
 import gym
@@ -15,11 +17,11 @@ import gym_jsbsim.properties as prp
 ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 CHKPT_DIR = ENV_ID
 # CHKPT_DIR = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"  #use this if you want to perform Flightgear Rendering
-CHKPT_DIR = CHKPT_DIR + "integral_scaling_0_25"
-CHKPT_POSTFIX = "integral_decay_0_95"
+CHKPT_DIR = ENV_ID + "avoid_overshoot"
+CHKPT_POSTFIX = ""
 SAVED_MODEL_DISCRIMINATOR = "roll_best"
 # SAVED_MODEL_DISCRIMINATOR = "roll_+584.69"
-ENABLE_PARALLEL_PID = 1
+ENABLE_PARALLEL_PID = 0
 
 if __name__ == "__main__":
     # parser = argparse.ArgumentParser()
@@ -130,8 +132,8 @@ if __name__ == "__main__":
 
         # env.render('flightgear')  #when rendering in Flightgear, the environment must be changed as well
         total_steps += 1
-        if total_steps % 350 == 0:
-            tgt_roll_angle_deg = -tgt_roll_angle_deg
+        if total_steps % (20*INTERACTION_FREQ) == 0:
+            tgt_roll_angle_deg = random.uniform(-30, 30)
             env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                 , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
             if ENABLE_PARALLEL_PID:

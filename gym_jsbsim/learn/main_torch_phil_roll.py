@@ -15,7 +15,7 @@ import gym_jsbsim.properties as prp
 from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
+CHKPT_DIR = ENV_ID + "avoid_overshoot"
 CHKPT_POSTFIX = ""
 SAVED_MODEL_BASE_NAME = "roll"
 
@@ -112,6 +112,10 @@ if __name__ == "__main__":
             obs = new_state
             #env.render()
             steps += 1
+
+            # if not (steps% (INTERACTION_FREQ * 20)):    #every 20 seconds change setpoints
+            #     env.task.change_setpoints(env.sim, {prp.setpoint_roll_angle_deg: -env.sim[prp.setpoint_roll_angle_deg]})
+
         score_history.append(score)
         delta_t = time.time() - ts
 

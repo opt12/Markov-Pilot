@@ -3,6 +3,7 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
 import time
+import random
 
 from ddpg_torch import Agent
 import gym
@@ -15,8 +16,8 @@ import gym_jsbsim.properties as prp
 from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-CHKPT_DIR = ENV_ID + "_integral_scaling_1"
-CHKPT_POSTFIX = ""
+CHKPT_DIR = ENV_ID + "avoid_overshoot"
+CHKPT_POSTFIX = "no_integral"
 SAVED_MODEL_BASE_NAME = "glide"
 
 if __name__ == "__main__":
@@ -112,6 +113,10 @@ if __name__ == "__main__":
             obs = new_state
             #env.render()
             steps += 1
+
+            # if not (steps% (INTERACTION_FREQ * 20)):    #every 20 seconds change setpoints
+            #     env.task.change_setpoints(env.sim, {prp.setpoint_glide_angle_deg: random.uniform(-12, -5.5)})
+
         score_history.append(score)
         delta_t = time.time() - ts
 
