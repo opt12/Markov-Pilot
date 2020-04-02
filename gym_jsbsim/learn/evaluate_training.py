@@ -42,18 +42,15 @@ def test_net(agent, env, add_exploration_noise=False):
         if steps == int(0.5 *60* env.task.step_frequency_hz):
             tgt_flight_path_deg = -6.5
             tgt_roll_angle_deg  = -10
-            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg})
+            env.task.change_setpoints(env.sim, { prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg })
         if steps == int(1 *60* env.task.step_frequency_hz):
             tgt_flight_path_deg = -7.5
             tgt_roll_angle_deg  = -10
-            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg})
+            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg })
         if steps == int(1.5 *60* env.task.step_frequency_hz):
             tgt_flight_path_deg = -7.5
             tgt_roll_angle_deg  = 10
-            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                                    , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg})
+            env.task.change_setpoints(env.sim, { prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg })
 
         #env.render()
     print("\tTest yielded a score of %.2f" %score, ".")

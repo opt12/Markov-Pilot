@@ -3,6 +3,7 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
 import time
+import random
 
 from ddpg_torch import Agent
 import gym
@@ -15,7 +16,8 @@ import gym_jsbsim.properties as prp
 from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-CHKPT_DIR = ENV_ID + "_integral_scaling_1"
+CHKPT_DIR = ENV_ID
+CHKPT_DIR = CHKPT_DIR + "_avoid_overshoot_full_state_no_start_step"
 CHKPT_POSTFIX = ""
 SAVED_MODEL_BASE_NAME = "glide"
 
@@ -32,6 +34,7 @@ if __name__ == "__main__":
     LEARNING_RATE_CRITIC = 1e-3
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
+    MAX_STEPS = 1000000
     INTERACTION_FREQ = 5
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
@@ -82,7 +85,7 @@ if __name__ == "__main__":
 
     train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, input_dims = [env.observation_space.shape[0]], tau=0.001, env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, n_actions = env.action_space.shape[0],
-              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
+              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX, noise_sigma = 0.30)  #TODO: pass summary writer to Agent
 
     env.set_meta_information(env_info = 'glide Training')
     env.set_meta_information(model_base_name = SAVED_MODEL_BASE_NAME)
@@ -94,8 +97,10 @@ if __name__ == "__main__":
     score_history = []
 
     exploration_noise_flag = True
-
-    for episode in range(101):
+    steps_overall = 0
+    episode = 0
+    while True:
+        episode += 1
         obs = env.reset()
         done = False
         score = 0
@@ -112,16 +117,29 @@ if __name__ == "__main__":
             obs = new_state
             #env.render()
             steps += 1
+            steps_overall += 1
+
+            if steps_overall % 2000 == 0:
+                test_env.set_meta_information(episode_number = steps_overall) #in fact, this is another episode, but with no training, so I don't increment it
+                test_net(train_agent, test_env, add_exploration_noise=False)
+
+                # train_agent.reduce_noise_sigma(sigma_factor=0.98)   #reduce noise after a certain amount of steps
+
+
+
+
+            if not (steps% (INTERACTION_FREQ * 20)):    #every 20 seconds change setpoints
+                env.task.change_setpoints(env.sim, {prp.setpoint_roll_angle_deg: random.uniform(-20, 20)})
+
         score_history.append(score)
         delta_t = time.time() - ts
 
-        print('episode ', episode, 'score %.2f;' % score,
-              '%d' % steps, 'steps in %.2f' % delta_t, 'sec; That\'s %.2f' % (steps/delta_t),'steps/sec', 
-            'trailing 15 games avg %.3f' % np.mean(score_history[-15:]))
+        print('steps_overall', steps_overall, '; episode', episode, 'score/step %.3f;' % (score/steps),
+              '%d' % steps, 'steps in %.2f' % delta_t, 'sec; That\'s %.2f' % (steps/delta_t),'steps/sec')
 
-        if episode% 5 == 0:
-            test_env.set_meta_information(episode_number = episode) #in fact, this is another episode, but with no training, so I don't increment it
-            test_net(train_agent, test_env, add_exploration_noise=False)
+        # if episode% 5 == 0:
+        #     test_env.set_meta_information(episode_number = episode) #in fact, this is another episode, but with no training, so I don't increment it
+        #     test_net(train_agent, test_env, add_exploration_noise=False)
         
         # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
         #     exploration_noise_flag = False
@@ -130,5 +148,7 @@ if __name__ == "__main__":
 
         # if i % 25 == 0:
         #     train_agent.save_models()
+        if steps_overall > MAX_STEPS:
+            break
 env.close()
 test_env.close()

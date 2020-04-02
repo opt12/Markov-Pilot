@@ -112,9 +112,10 @@ class EpisodePlotterWrapper(gym.Wrapper):
         pElev.add_layout(LinearAxis(y_range_name="elevator", axis_label="Elevator Cmd [norm.]"), 'right')
 
         elevatorLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
+        deltaElevatorLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['info_delta_cmd_elevator'], line_width=1, y_range_name="elevator", color=Viridis4[2], legend_label = "Δ Elev. Cmd.")
         gammaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
         targetGammaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['setpoint_glide_angle_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
-        aoaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA")
+        aoaLine = pElev.line(data_frame.index/self.step_frequency_hz, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA", visible = False)
 
         # RollAngle and Aileron
         pAileron = figure(plot_width=800, plot_height=400, x_range=pElev.x_range)
@@ -156,12 +157,12 @@ class EpisodePlotterWrapper(gym.Wrapper):
             for idx, state_name in enumerate(self.presented_state):
                 if(data_frame[state_name].max() <= norm_state_extents and data_frame[state_name].min() >= -norm_state_extents):
                     normalized_state_lines.append(
-                        pState.line(data_frame.index/self.step_frequency_hz, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7])
+                        pState.line(data_frame.index/self.step_frequency_hz, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7], visible=False)
                     )
                     state_legend.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
                 else:     
                     state_lines.append(
-                        pState.line(data_frame.index/self.step_frequency_hz, data_frame[state_name], line_width=2, color=Inferno7[idx%7])
+                        pState.line(data_frame.index/self.step_frequency_hz, data_frame[state_name], line_width=2, color=Inferno7[idx%7], visible=False)
                     )
                     state_legend.append( (state_name, [state_lines[-1]]) )                    
             pState.y_range.renderers = state_lines

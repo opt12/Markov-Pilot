@@ -15,8 +15,11 @@ import gym_jsbsim.properties as prp
 from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
-CHKPT_DIR = ENV_ID + "integral_scaling_0_25"
-CHKPT_POSTFIX = ""
+CHKPT_DIR = ENV_ID + "avoid_overshoot"
+# CHKPT_POSTFIX = "travel_error"
+CHKPT_POSTFIX = "angular_veocity"     
+#it looks like the angular-velocity criterion is more helpful to avoid flittering. 
+#The control surface travel (derivative) must be presented to the ANN anyways.
 SAVED_MODEL_BASE_NAME = "roll"
 
 if __name__ == "__main__":
@@ -112,6 +115,10 @@ if __name__ == "__main__":
             obs = new_state
             #env.render()
             steps += 1
+
+            # if not (steps% (INTERACTION_FREQ * 20)):    #every 20 seconds change setpoints
+            #     env.task.change_setpoints(env.sim, {prp.setpoint_roll_angle_deg: -env.sim[prp.setpoint_roll_angle_deg]})
+
         score_history.append(score)
         delta_t = time.time() - ts
 
