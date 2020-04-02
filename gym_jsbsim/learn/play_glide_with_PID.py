@@ -16,8 +16,8 @@ import gym_jsbsim.properties as prp
 ENV_ID = "JSBSim-SteadyGlideAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 CHKPT_DIR = ENV_ID
 # CHKPT_DIR = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-noFG-v0"  #use this if you want to perform Flightgear RenderingCHKPT_DIR = ENV_ID + "_integral_scaling_1"
-CHKPT_DIR = ENV_ID + "avoid_overshoot"
-CHKPT_POSTFIX = "no_integral"
+CHKPT_DIR = CHKPT_DIR + "_avoid_overshoot_full_state_no_start_step"
+CHKPT_POSTFIX = ""
 SAVED_MODEL_DISCRIMINATOR = "glide_best"
 # SAVED_MODEL_DISCRIMINATOR = "glide_+584.69"
 ENABLE_PARALLEL_PID = 1
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     LEARNING_RATE_CRITIC = 1e-3
     REPLAY_SIZE = 1000000
     TEST_ITERS = 2000
-    INTERACTION_FREQ = 5
+    INTERACTION_FREQ = 15
 
     PRESENTED_STATE = ['error_rollAngle_error_deg', 'velocities_p_rad_sec', 'error_rollAngle_error_integral_deg_sec',  
                        'error_glideAngle_error_deg', 'velocities_q_rad_sec', 'error_glideAngle_error_integral_deg_sec',
@@ -132,14 +132,16 @@ if __name__ == "__main__":
 
         # env.render('flightgear')  #when rendering in Flightgear, the environment must be changed as well
         total_steps += 1
-        if total_steps % 350 == 0:
-            # tgt_roll_angle_deg = -tgt_roll_angle_deg
-            tgt_flight_path_deg = random.uniform(-12, -5.5)
-            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                                                , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
+        if total_steps % 200 == 0:
+            tgt_roll_angle_deg = random.uniform(-25, 25)
+            env.task.change_setpoints(env.sim, { prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
             if ENABLE_PARALLEL_PID:
-                env_pid.task.change_setpoints(env_pid.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                                                , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
+                env_pid.task.change_setpoints(env_pid.sim, { prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
+        if total_steps % 350 == 0:
+            tgt_flight_path_deg = random.uniform(-12, -5.5)
+            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg })
+            if ENABLE_PARALLEL_PID:
+                env_pid.task.change_setpoints(env_pid.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg })
     delta_t = time.time() - ts
 
     print('ANN: episode finished; score %.2f;' % score_ann,

@@ -41,6 +41,7 @@ class VarySetpointsWrapper(gym.Wrapper):
 
             initial_path_angle_gamma_deg = random.uniform(-12, -5.5)
             initial_roll_angle_phi_deg   = random.uniform(-15, 15)
+            # initial_roll_angle_phi_deg   = self.tgt_roll_angle_deg  #TODO: if there is a step at the beginning of the episode, an erroneous causality is founded
             initial_fwd_speed_KAS        = random.uniform(65, 110)
             # print(f"starting episode with KAS: {initial_fwd_speed_KAS}, initial glide angle: {initial_path_angle_gamma_deg}, initial roll angle: {initial_roll_angle_phi_deg}")
             # print(f"target glide angle: {tgt_flight_path_deg}, target roll angle: {self.tgt_roll_angle_deg}")

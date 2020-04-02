@@ -14,11 +14,14 @@ import gym_jsbsim
 from gym_jsbsim.wrappers import EpisodePlotterWrapper, PidWrapper, PidWrapperParams, PidParameters, StateSelectWrapper, VarySetpointsWrapper
 import gym_jsbsim.properties as prp
 
-ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
+ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-FG-v0"
 CHKPT_DIR = ENV_ID
-# CHKPT_DIR = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"  #use this if you want to perform Flightgear Rendering
-CHKPT_DIR = ENV_ID + "avoid_overshoot"
-CHKPT_POSTFIX = ""
+CHKPT_DIR = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"  #use this if you want to perform Flightgear Rendering
+CHKPT_DIR = CHKPT_DIR + "avoid_overshoot"
+# CHKPT_POSTFIX = "travel_error"
+CHKPT_POSTFIX = "angular_veocity"     
+#it looks like the angular-velocity criterion is more helpful to avoid flittering. 
+#The control surface travel (derivative) must be presented to the ANN anyways.
 SAVED_MODEL_DISCRIMINATOR = "roll_best"
 # SAVED_MODEL_DISCRIMINATOR = "roll_+584.69"
 ENABLE_PARALLEL_PID = 0
@@ -50,7 +53,7 @@ if __name__ == "__main__":
     aileron_wrap  = PidWrapperParams('fcs_aileron_cmd_norm',  'error_rollAngle_error_deg',  PidParameters(3.5e-2,    1e-2,   0.0))
 
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
-    # env = VarySetpointsWrapper(env, modulation_amplitude = 10, modulation_period = 50)     #to vary the setpoints during training
+    env = VarySetpointsWrapper(env, modulation_amplitude = 10, modulation_period = 50)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
     env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
@@ -139,6 +142,11 @@ if __name__ == "__main__":
             if ENABLE_PARALLEL_PID:
                 env_pid.task.change_setpoints(env_pid.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg
                                                 , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg  })
+        if total_steps % (25*INTERACTION_FREQ) == 0:
+            tgt_flight_path_deg = random.uniform(-5.5, -12.5)
+            env.task.change_setpoints(env.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg  })
+            if ENABLE_PARALLEL_PID:
+                env_pid.task.change_setpoints(env_pid.sim, { prp.setpoint_flight_path_deg: tgt_flight_path_deg })
     delta_t = time.time() - ts
 
     print('ANN: episode finished; score %.2f;' % score_ann,

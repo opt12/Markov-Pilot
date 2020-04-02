@@ -185,10 +185,10 @@ class ActorNetwork(nn.Module):
 class Agent(object):
     def __init__(self, lr_actor, lr_critic, input_dims, tau, env, gamma=0.99,
                  n_actions=2, max_size=1000000, layer1_size=400,
-                 layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix=''):
+                 layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
         #default values for noise
-        self.noise_sigma = 0.15
-        self.noise_theta = 0.2
+        self.noise_sigma = noise_sigma
+        self.noise_theta = noise_theta
 
         self.env = env #TODO: this is only to set the meta_information, so the env parameter could be eliminated entirely
 

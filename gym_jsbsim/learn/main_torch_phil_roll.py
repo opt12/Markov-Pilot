@@ -16,7 +16,10 @@ from evaluate_training import test_net
 
 ENV_ID = "JSBSim-SteadyRollAngleTask-Cessna172P-Shaping.STANDARD-NoFG-v0"
 CHKPT_DIR = ENV_ID + "avoid_overshoot"
-CHKPT_POSTFIX = ""
+# CHKPT_POSTFIX = "travel_error"
+CHKPT_POSTFIX = "angular_veocity"     
+#it looks like the angular-velocity criterion is more helpful to avoid flittering. 
+#The control surface travel (derivative) must be presented to the ANN anyways.
 SAVED_MODEL_BASE_NAME = "roll"
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ class SteadyRollGlideTask(FlightTask):
     """
     INTEGRAL_DECAY = 1   #just a starting value. TODO: make configurable if it works out
     ROLL_ANGLE_INT_DEG_MAX = 0.1
-    GLIDE_ANGLE_INT_DEG_MAX = 0.5
+    GLIDE_ANGLE_INT_DEG_MAX = 1
     TARGET_GLIDE_ANGLE_DEG_default = -6   #TODO: this is arbitrary
     TARGET_ROLL_ANGLE_DEG_default  = -10
     INITIAL_ALTITUDE_FT_default = 6000
@@ -40,7 +40,7 @@ class SteadyRollGlideTask(FlightTask):
     GLIDE_ANGLE_DEG_ERROR_SCALING = 1
     ROLL_ANGLE_DEG_ERROR_SCALING = 1
     MIN_STATE_QUALITY = 0.0  # terminate if state 'quality' is less than this
-    MAX_GLIDE_ANGLE_DEVIATION_DEG = 45
+    MAX_GLIDE_ANGLE_DEVIATION_DEG = 20  #check that this is in line with the applied setpoint steps.
     MAX_ROLL_ANGLE_DEVIATION_DEG = 90
     #those are additional properties going into the sim[] object
     prop_glide_angle_error_deg = BoundedProperty('error/glideAngle-error-deg',
@@ -214,12 +214,14 @@ class SteadyRollGlideTask(FlightTask):
         :param new_setpoints: A dictionary with new setpoints to be used. New values overwrite old ones.
         """
         if new_setpoints is not None:
-            print(f"new setpoints received: {new_setpoints}")
+            # print(f"new setpoints received: {new_setpoints}")
             for prop, value in new_setpoints.items():
                 if prop == prp.setpoint_flight_path_deg and self.setpoints[prop] != value:
                     sim[self.prop_glide_angle_error_integral_deg_sec] = 0 #reset associated error integral
+                    self._update_glideAngle_error(sim)
                 if prop == prp.setpoint_roll_angle_deg and self.setpoints[prop] != value:
                     sim[self.prop_roll_angle_error_integral_deg_sec]  = 0 #reset associated error integral
+                    self._update_rollAngle_error(sim)
                 sim[prop] = value   #update the setpoints in the simulation model
                 self.setpoints[prop] = value    #update the setpoints in the task class
 
@@ -243,8 +245,10 @@ class SteadyRollGlideTask(FlightTask):
         current_glide_angle_deg = sim[prp.flight_path_deg]
         error_deg = utils.reduce_reflex_angle_deg(current_glide_angle_deg - target_glide_angle_deg)
         sim[self.prop_glide_angle_error_deg] = error_deg
-        sim[self.prop_glide_angle_error_integral_deg_sec] = np.clip(
-                        sim[self.prop_glide_angle_error_integral_deg_sec] * self.INTEGRAL_DECAY + error_deg / self.step_frequency_hz, 
+        sim[self.prop_glide_angle_error_integral_deg_sec] = np.clip(    #clip the maximum amount of the integral
+                        sim[self.prop_glide_angle_error_integral_deg_sec] * self.INTEGRAL_DECAY + 
+                        # clip the rise value to maximally reach the max value within one second
+                        np.clip(error_deg, -self.GLIDE_ANGLE_INT_DEG_MAX, self.GLIDE_ANGLE_INT_DEG_MAX) / self.step_frequency_hz, 
                         -self.GLIDE_ANGLE_INT_DEG_MAX, self.GLIDE_ANGLE_INT_DEG_MAX
                     )
 
@@ -360,7 +364,8 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
         return self._select_assessor(base_components, shaping_components, shaping)
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
-        AILERON_CMD_TRAVEL_MAX = 2  #the max. absolute value of the delta-cmd
+        # AILERON_CMD_TRAVEL_MAX = 2  #the max. absolute value of the delta-cmd
+        ROLL_ANGULAR_VELOCITY_SCALING = 0.1
         base_components = (
             rewards.AsymptoticErrorComponent(name='rwd_rollAngle_error',
                                     prop=self.prop_roll_angle_error_deg,
@@ -376,13 +381,22 @@ class SteadyRollAngleTask(SteadyRollGlideTask):
                                     potential_difference_based=False,
                                     scaling_factor=self.ROLL_ANGLE_INT_DEG_MAX,
                                     weight=9),
-            rewards.LinearErrorComponent(name='rwd_aileron_cmd_travel_error',
-                                    prop=self.prp_delta_cmd_aileron,
+            #it looks like the angular-velocity criterion is more helpful to avoid flittering. 
+            #The control surface travel (derivative) must be presented to the ANN anyways.
+            rewards.LinearErrorComponent(name='rwd_roll_angular_velocity',
+                                    prop=prp.p_radps,
                                     state_variables=self.state_variables,
                                     target=0.0,
                                     potential_difference_based=False,
-                                    scaling_factor=AILERON_CMD_TRAVEL_MAX,
+                                    scaling_factor=ROLL_ANGULAR_VELOCITY_SCALING,
                                     weight=1),
+            # rewards.LinearErrorComponent(name='rwd_aileron_cmd_travel_error',
+            #                         prop=self.prp_delta_cmd_aileron,
+            #                         state_variables=self.state_variables,
+            #                         target=0.0,
+            #                         potential_difference_based=False,
+            #                         scaling_factor=AILERON_CMD_TRAVEL_MAX,
+            #                         weight=1),
         )
         return base_components
 
@@ -447,6 +461,7 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
 
     def _make_base_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
         ELEVATOR_CMD_TRAVEL_MAX = 2 #the maximum absolute value of the elevator travel
+        GLIDE_ANGULAR_VELOCITY_SCALING = 0.25
         base_components = (
             rewards.AsymptoticErrorComponent(name='rwd_glideAngle_error',
                         prop=self.prop_glide_angle_error_deg,
@@ -455,6 +470,20 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
                         potential_difference_based=False,
                         scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
                         weight=4),
+            # rewards.LinearErrorComponent(name='rwd_glideAngle_error_025',
+            #             prop=self.prop_glide_angle_error_deg,
+            #             state_variables=self.state_variables,
+            #             target=0.0,
+            #             potential_difference_based=False,
+            #             scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING,
+            #             weight=4),
+            # rewards.LinearErrorComponent(name='rwd_glideAngle_error_001',
+            #             prop=self.prop_glide_angle_error_deg,
+            #             state_variables=self.state_variables,
+            #             target=0.0,
+            #             potential_difference_based=False,
+            #             scaling_factor=self.GLIDE_ANGLE_DEG_ERROR_SCALING/4,
+            #             weight=4),
             rewards.LinearErrorComponent(name='rwd_glideAngle_error_Integral',
                         prop=self.prop_glide_angle_error_integral_deg_sec,
                         state_variables=self.state_variables,
@@ -468,7 +497,14 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
                         target=0.0,
                         potential_difference_based=False,
                         scaling_factor=ELEVATOR_CMD_TRAVEL_MAX,
-                        weight=1),
+                        weight=2),
+            # rewards.LinearErrorComponent(name='rwd_angular_velocity_q_rad',
+            #             prop=prp.q_radps,
+            #             state_variables=self.state_variables,
+            #             target=0.0,
+            #             potential_difference_based=False,
+            #             scaling_factor=GLIDE_ANGULAR_VELOCITY_SCALING,
+            #             weight=1),
         )
         return base_components
 
@@ -486,6 +522,8 @@ class SteadyGlideAngleTask(SteadyRollGlideTask):
 
     def _glide_out_of_bounds(self, sim: Simulation) -> bool:
         glidePathAngle_error_deg = sim[self.prop_glide_angle_error_deg]
-        return False    #TODO: this shall be evaluated
-        return (abs(glidePathAngle_error_deg) > self.MAX_GLIDE_ANGLE_DEVIATION_DEG)
-
+        glide_out_of_bounds = (abs(glidePathAngle_error_deg) > self.MAX_GLIDE_ANGLE_DEVIATION_DEG)
+        # return False    #TODO: this shall be evaluated
+        if glide_out_of_bounds:
+            print(f"Glide out of bounds: {glidePathAngle_error_deg}")
+        return glide_out_of_bounds
