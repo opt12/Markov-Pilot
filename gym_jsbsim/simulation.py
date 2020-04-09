@@ -158,7 +158,7 @@ class Simulation(object):
         All properties specified in the init_conditions-Dict: Property->Float are stored into the Simulation object.
 
         In case this property is not existing yet, it will be created by JSBSim. 
-        So the Simulation object can actually be used to stor own properties.
+        So the Simulation object can actually be used to store own properties.
 
         :param init_conditions: dict mapping properties to their initial values
         """

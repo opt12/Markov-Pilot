@@ -95,8 +95,8 @@ setpoint_flight_path_deg = BoundedProperty('setpoint/glide-angle_deg', 'the desi
 setpoint_roll_angle_deg  = BoundedProperty('setpoint/roll-angle_deg', 'the desired setpoint for the roll angle phi', roll_deg.min, roll_deg.max)
 
 #settings for the environment
-episode_steps = BoundedProperty('info/episode_steps', 'environment steps per episode', 0, 10000)
-steps_left    = BoundedProperty('info/steps_left', 'steps remaining in episode', 0, 10000)  #we need an upper bound as we add it to the state
+episode_steps = BoundedProperty('info/episode_steps', 'environment steps per episode', 0, float('Inf'))
+steps_left    = BoundedProperty('info/steps_left', 'steps remaining in episode', 0, float('Inf'))  #we need an upper bound as we add it to the state
 
 class Vector2(object):
     def __init__(self, x: float, y: float):

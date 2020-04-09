@@ -85,6 +85,7 @@ class PidWrapper(gym.Wrapper):
         self.state = self.original_env.reset()
         return self.state
 
+    #TODO: When change_setpoints is called for the PID controlled variables, the integrator and derivative shall be reset.
     
 
 

@@ -116,7 +116,7 @@ class PIDAgentSingleChannel(Agent):
     
     def act(self, error):
         #using the errors keeps the setpoint constantly at 0; The errors should vanish
-        control_out = self.controller(error, dt=self.dt)
+        control_out = self.controller(error, dt=self.dt)    #TODO: when changing setpoint in the task, the PID-integrator shall be reset!
 
         # print('PID output: {} => {}'.format(error, control_out))
 
