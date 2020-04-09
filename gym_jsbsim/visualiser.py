@@ -336,7 +336,7 @@ class FlightGearVisualiser(object):
     #seems to hve no effect though
     TIME = 'noon'
 
-    def __init__(self, sim: Simulation, print_props: Tuple[prp.Property], block_until_loaded=True):
+    def __init__(self, sim: Simulation, block_until_loaded=True):
         """
         Launches FlightGear in subprocess and starts figure for plotting actions.
 
@@ -347,9 +347,7 @@ class FlightGearVisualiser(object):
             FlightGear has loaded if True.
         """
         self.configure_simulation_output(sim)
-        self.print_props = print_props
         self.flightgear_process = self._launch_flightgear(sim.get_aircraft())
-        # self.figure = FigureVisualiser(sim, priknt_props)
         if block_until_loaded:
             # time.sleep(20)  #TODO: this must be possible in a more generic way
             self._block_until_flightgear_loaded()  #why not this here?
