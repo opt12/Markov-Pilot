@@ -54,7 +54,7 @@ class PID_Agent(AgentTrainer):
     def action(self, obs: np.ndarray) -> np.ndarray:
         error = obs[0]  #for the PID controller, the control deviation shall be the only input
         #using the errors keeps the setpoint constantly at 0; The errors should vanish
-        control_out = self.controller(error, dt=self.dt)    #TODO: when changing setpoint in the task, the PID-integrator shall be reset!
+        control_out = self.controller(error, dt=self.dt) 
         return [control_out]
 
     def process_experience(self, obs, act, rew, new_obs, done, terminal):

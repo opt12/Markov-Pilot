@@ -15,7 +15,7 @@ if __name__ == '__main__':
     elevator_pid_params = PidParameters( -5e-2, -6.5e-2, -1e-3)
     pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, pid_elevator_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
 
-    pid_aileron_AT = PID_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15})
+    pid_aileron_AT = PID_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -5})
     aileron_pid_params = PidParameters(3.5e-2,    1e-2,   0.0)
     pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
 
@@ -49,9 +49,10 @@ if __name__ == '__main__':
 
         if episode_step%150 == 0:
             pid_aileron_AT.change_setpoints({prp.roll_deg: -env.sim[prp.roll_deg]})
+
         if episode_step%180 == 0:
             pid_elevator_AT.change_setpoints({prp.flight_path_deg: env.sim[prp.flight_path_deg]+0.5})
-        
+
         # collect experience
         # for i, agent in enumerate(trainers):
         #     agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
