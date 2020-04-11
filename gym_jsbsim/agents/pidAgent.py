@@ -116,7 +116,7 @@ class PIDAgentSingleChannel(Agent):
     
     def act(self, error):
         #using the errors keeps the setpoint constantly at 0; The errors should vanish
-        control_out = self.controller(error, dt=self.dt)    #TODO: when changing setpoint in the task, the PID-integrator shall be reset!
+        control_out = self.controller(error, dt=self.dt)
 
         # print('PID output: {} => {}'.format(error, control_out))
 
@@ -125,6 +125,9 @@ class PIDAgentSingleChannel(Agent):
     def observe(self, state, action, reward, done):
         # this agent type does not learn in response to observations
         pass
+
+    def reset(self):
+        self.controller.reset()
 
 class RPYCClient(threading.Thread):
     def __init__(self):
