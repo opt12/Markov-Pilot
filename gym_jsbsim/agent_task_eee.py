@@ -8,6 +8,7 @@ from collections import namedtuple
 from abc import ABC, abstractmethod
 
 import gym_jsbsim.properties as prp
+from gym_jsbsim import assessors, rewards
 
 from gym_jsbsim.simulation import Simulation
 from gym_jsbsim.properties import BoundedProperty
@@ -24,7 +25,9 @@ class AgentTask(ABC):
 
     A List of AgentTasks is injected into a Multi-Agent environment to handle the observations, the rewards and the done flags.
     """
-    def __init__(self, name: str):
+    def __init__(self, name: str, 
+                 make_base_reward_components: Callable[['AgentTask'], Tuple[rewards.RewardComponent, ...]] = None,
+                 is_done: Callable[['AgentTask'], bool] = None):
         """ Each Agent Taskt needs those porperty lists initialized to be queried.
 
         The content of the lists must be set for each AgentTask individually.
@@ -34,8 +37,33 @@ class AgentTask(ABC):
         self.obs_props: List[BoundedProperty] = []          # properties returned to the Agent as observation. Either directly from JSBSim or from custom_props
         self.custom_props: List[BoundedProperty] = []       # properties calculated by the AgentTask. May or may not be part of the obs_props
         self.setpoints: Dict[BoundedProperty, float] = {}   # setpoints to use in the error/deviation calculation. May be (dynamically) changed in the course of the simulation. Stored into the sim-object
-        self.action_props: List[BoundedProperty] = []        # actions issued to JSBSim in each step from the associated Agent. Informative for AgentTask to e. g. incorporate it into reward calculation
+        self.action_props: List[BoundedProperty] = []       # actions issued to JSBSim in each step from the associated Agent. Informative for AgentTask to e. g. incorporate it into reward calculation
+        self.positive_rewards = True                        # determines whether only positive rewards are possible (see Gor-Ren's documentation)
 
+        if make_base_reward_components:
+            self._make_base_reward_components = make_base_reward_components.__get__(self)   # bind the injected function to the instance
+        #TODO: set assessor to some NullAssessor raising an exception explaining what went wrong
+        self.assessor = None                                # call self.assessor = self._make_assessor() in your constructor after preparing all properties
+
+        if is_done:
+            self._is_done = is_done.__get__(self)            # bind the injected function to the instance
+
+    def _make_assessor(self):
+        """
+        Returns an Assessor Object to evaluate the value of a state in the context of the AgentTask
+
+        In contrast to Gor-Ren's original implementation, only the STANDARD model 
+        is supported with no reward shaping nor sequential rewards. (If needed in the future, this
+        may be overridden in the future)
+
+        The function 
+        _make_base_reward_components(self)
+        shall be injected into the concrete AgentTask at construction time
+
+        """
+        base_components = self._make_base_reward_components()
+        return assessors.AssessorImpl(base_components, (), positive_rewards=self.positive_rewards)
+    
     def inject_environment(self, env: JsbSimEnv_multi_agent):
         """ Injects the environment, the AgentTask is acting in.
         Mostly used to have access to the env.sim object for data storage and retrieval.
@@ -48,10 +76,8 @@ class AgentTask(ABC):
         #store the setpoints to the sim object
         for sp_prop, sp_val in self.setpoints.items():
             self.sim[sp_prop] =sp_val
-
     
-    
-    def calculate(self) -> Tuple[float, bool, Dict]:
+    def assess(self, obs, last_obs) -> Tuple[float, bool, Dict]:
         """ Calculate the task specific reward from the actual observation and 
         checks end of episode wrt. the specific AgentTask. Additional info is 
         also determined (reward components).
@@ -65,24 +91,11 @@ class AgentTask(ABC):
         Each AgentTask may have individual termination conditions wrt. its own observations. 
         If one AgentTask detects the end of an episode, the episode for all agents must terminate
         """
-        done = self._check_end_of_episode()
-        rwd, rwd_components = self._calculate_reward()
+        done = self._is_done()
+        rwd, rwd_components = self.assessor.assess(obs, last_obs, done)
 
         return (rwd, done, {'reward_components': rwd_components})
-
-    def _check_for_done(self) -> bool:
-        """
-        Checks if the episode shall end due to any condition (e. g. properties is out of bounds.)
-
-        Shall be overridden in inherited classes or injected in individual instances as method.
-
-        :return: True if values are out of bounds and hence the episode should end.
-        """
-        return False
     
-    def _calculate_reward(self) -> Tuple[int, Dict[str, float]]:
-        raise NotImplementedError(self.__class__.__name__+'._calculate_reward(self) shall be implemented in subclass or injected into the instance.')
-
     def get_state_space(self) -> gym.Space:
         """ Get the task's state/observation space object. 
         
@@ -114,6 +127,40 @@ class AgentTask(ABC):
             self.setpoints[prop] = value    #update the setpoints in the AgentTask class
             #TODO: storing the setpoints to the sim object is delegated to the _change_setpoint_helper() for the moment
                 
+    def get_setpoints(self) -> Dict[BoundedProperty, float]:
+        """ just returns the setpoints of the AgentTask.
+        """
+        return self.setpoints
+
+    @abstractmethod
+    def _make_base_reward_components(self):
+        # pylint: disable=method-hidden
+        """ Defines the components used in the state assessment.
+        
+        This function shall be injected into the AgentTask at construction time as it is 
+        individual for each of them. The injected function is bound to the instantiated object 
+        and hence has access to all instance variables.
+        This seems to be more flexible than subclassing.
+
+        Alternatively, subclassing and overwriting _make_base_reward_components() is also possible.
+        """
+        raise NotImplementedError('_make_base_reward_components() must be injected into '+self.__class__+' at instantiation time.')
+
+    @abstractmethod
+    def _is_done(self) -> bool:
+        # pylint: disable=method-hidden
+        """
+        Checks if the episode shall end due to any condition (e. g. properties is out of bounds.)
+
+        Each AgentTask may have individual termination conditions wrt. its own observations. 
+        If one AgentTask detects the end of an episode, the episode for all agents must terminate
+
+        Shall be overridden in inherited classes or injected in individual instances as method.
+
+        :return: True if values are out of bounds and hence the episode should end.
+        """
+        return False
+
     @abstractmethod
     def _change_setpoint_helper(self, changed_setpoint: Tuple[BoundedProperty,float]):
         """ 
@@ -126,11 +173,6 @@ class AgentTask(ABC):
         """
         raise NotImplementedError('_change_setpoint_helper() must be imlemented in '+self.__class__+'. (Maybe just a "pass"-statement).')
     
-    def get_setpoints(self) -> Dict[BoundedProperty, float]:
-        """ just returns the setpoints of the AgentTask.
-        """
-        return self.setpoints
-
     @abstractmethod
     def initialize_custom_properties(self):
         """
@@ -168,18 +210,15 @@ class AgentTask(ABC):
         """
         return []
 
-
-class FlightAgentTask(AgentTask):   #implements the same interface like Go-Ren's Task, with the needed adapations to multi-agent setting
-    def __init__(self, name):
-        super(FlightAgentTask, self).__init__(name)
-        pass
-
-
-
+#TODO: get rid of this intermediate superclass. Why do we need it?
+# class FlightAgentTask(AgentTask):   #implements the same interface like Go-Ren's Task, with the needed adapations to multi-agent setting
+#     def __init__(self, name):
+#         super(FlightAgentTask, self).__init__(name)
+#         pass
 
 
 from gym_jsbsim.utils import reduce_reflex_angle_deg
-class PID_FlightAgentTask(FlightAgentTask):
+class PID_FlightAgentTask(AgentTask):
     """ A class to implement a PID controller for a certain actuation.
 
     The class PID_FlightAgentTask takes the value to be controlled as an input state. 
@@ -192,16 +231,28 @@ class PID_FlightAgentTask(FlightAgentTask):
     """
 
     def __init__(self, name: str, actuating_prop: BoundedProperty, setpoint: Dict[BoundedProperty, float], 
-                change_setpoint_callback: Callable[[float], None] = None, measurement_in_degrees = True, max_allowed_error = 30):
+                change_setpoint_callback: Callable[[float], None] = None, 
+                make_base_reward_components: Callable[['AgentTask'], Tuple[rewards.RewardComponent, ...]] = None,
+                is_done: Callable[['AgentTask'], bool] = None, 
+                measurement_in_degrees = True, max_allowed_error = 30):
         """
+
+        _make_base_reward_components and _check_for_done are overridden in the subclass
+
         :param actuating_prop: The actuation variable to be controlled
         :param setpoint: The setpoint property to be used for deviation calculation
         :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
             function to be notified on setpoint changes. This callback can reset the PID internal integrators.
+        :param _make_base_reward_components = None: if necessary inject a custom function to be bound to instance.
+            Not needed in case of PID control as _make_base_reward_components() is overwritten by default in subclass.
+        :param _check_for_done = None: if necessary inject a custom function to be bound to instance.
+            Not needed in case of PID control as _check_for_done() is overwritten by default in subclass to check for max_allowed_error.
         :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
         :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
         """
-        super(PID_FlightAgentTask, self).__init__(name)
+        super(PID_FlightAgentTask, self).__init__(name, 
+                                                  make_base_reward_components=make_base_reward_components,
+                                                  is_done=is_done)
 
         self.measurement_in_degrees = measurement_in_degrees
         self.max_allowed_error = max_allowed_error
@@ -229,6 +280,39 @@ class PID_FlightAgentTask(FlightAgentTask):
         self.change_setpoint_callback = change_setpoint_callback    #to notify the PID Agent that there is a new setpoint in effect
         self.change_setpoints(setpoint) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
 
+        self.assessor = self._make_assessor()   #this can only be called after the preparattion of all necessary props
+
+    def _make_base_reward_components(self):     #may be overwritten by injected custom function
+        # pylint: disable=method-hidden
+        """
+        Just adds an Asymptotic error component as standard reward to the PID_AgentTask.
+
+        May be overwritten by injected custom function.
+        """
+        ANGULAR_DEVIATION_SCALING = 0.5 #just a default value which neither fits glide nor roll angle really good
+        base_components = (
+            rewards.AngularAsymptoticErrorComponent(name='rwd_'+self.name+'_asymptotic_error',
+                                    prop=self.prop_error,
+                                    state_variables=self.obs_props,
+                                    target=0.0,
+                                    potential_difference_based=False,
+                                    scaling_factor=ANGULAR_DEVIATION_SCALING,
+                                    weight=1),
+            )
+        return base_components
+    
+    def _is_done(self):      #may be overwritten by injected custom function
+        # pylint: disable=method-hidden
+        """
+        Checks if the observed error is out of bounds.
+
+        :return: True if values are out of bounds and hence the episode should end.
+        """
+        if self.max_allowed_error:  
+            return abs(self.sim[self.prop_error]) >= self.max_allowed_error
+        else:
+            return False
+    
     def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
         self.setpoint_prop, self.setpoint_value = changed_setpoint
         if self.change_setpoint_callback:
@@ -258,25 +342,6 @@ class PID_FlightAgentTask(FlightAgentTask):
         self.sim[self.prop_setpoint] = self.setpoint_value 
         self.last_action = self.sim[self.actuating_prop]
 
-    def calculate(self) -> Tuple[float, bool, Dict]:
-        done = self._check_values_out_of_bounds()
-        rwd = -abs(self.sim[self.prop_error])     #this reward is negative and not normailzed. It is not suitable for training an RL agent, but it may be OK to compare algorithms
-        #TODO: why not create a reward measure to compare the quality of control algos in the testing phase. Include Overshoot oscillation and so on....
-        info = {'reward': rwd, 'reward_components': {self.name+'_err_rwd': rwd}}
-
-        return (rwd, done, info) 
-
-    def _check_values_out_of_bounds(self) -> bool:
-        """
-        Checks if any of the value in observed state or custom properties is out of bounds.
-
-        :return: True if values are out of bounds and hence the episode should end.
-        """
-        if self.max_allowed_error:  
-            return abs(self.sim[self.prop_error]) >= self.max_allowed_error
-        else:
-            return False
-    
     def get_props_to_output(self) -> List[prp.Property]:
         output_props = self.custom_props + [
             self.setpoint_prop

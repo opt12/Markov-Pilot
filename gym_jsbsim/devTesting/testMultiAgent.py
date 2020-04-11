@@ -7,15 +7,19 @@ from gym_jsbsim.environment_eee import JsbSimEnv_multi_agent
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
 import gym_jsbsim.properties as prp
 
+from gym_jsbsim.reward_funcs_eee import make_pitch_reward_components, make_roll_reward_components
+
 if __name__ == '__main__':
 
     agent_interaction_freq = 5
 
-    pid_elevator_AT = PID_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5})
+    pid_elevator_AT = PID_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5},
+                                make_base_reward_components= make_pitch_reward_components)
     elevator_pid_params = PidParameters( -5e-2, -6.5e-2, -1e-3)
     pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, pid_elevator_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
 
-    pid_aileron_AT = PID_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -5})
+    pid_aileron_AT = PID_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_reward_components)
     aileron_pid_params = PidParameters(3.5e-2,    1e-2,   0.0)
     pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
 

@@ -175,8 +175,10 @@ class JsbSimEnv_multi_agent(gym.Env):
         if self.flightgear_visualiser:
             self.flightgear_visualiser.configure_simulation_output(self.sim)
 
-        obs_n = self._get_obs_from_state(self.state)
-        return obs_n
+        self.obs_n = self._get_obs_from_state(self.state)
+        self.last_obs_n = self.obs_n #set the last observation the same as the first observation at start of each episode
+
+        return self.obs_n
 
     def _observe_first_state(self, sim: Simulation) -> np.ndarray:
         self._new_episode_init()
@@ -208,10 +210,6 @@ class JsbSimEnv_multi_agent(gym.Env):
         """
         #update environments custom_props
         self.sim[self.steps_left] -= 1  #decrement the remaining task steps
-
-        #update Task_Agent specific custom_props
-        for t in self.task_list:
-            t.update_custom_properties()
     
     def is_terminal(self):
          return not (self.sim[self.steps_left] > 0)
@@ -259,24 +257,19 @@ class JsbSimEnv_multi_agent(gym.Env):
         if len(actions_n) != len(self.task_list):
             raise ValueError('mismatch between action list and task list length')
 
-        #perform step in simulator
-        self.last_state = self.state
-        self.state = self._env_step(actions_n)
+        self.last_state = self.state                 #stash the last_state
+        self.last_obs_n = self.obs_n                 #stash the last observations
+        self.state = self._issue_actions(actions_n)  #issue actions to the simulator to update the state
+
         #calculate rewards for each task and check for dones, gather extra info contents
-        obs_n = self._get_obs_from_state(self.state)
-        rwd_n = []
-        done_n = []
-        info_n = []
-        for t in self.task_list:
-            rwd, done, info = t.calculate()
-            rwd_n.append(rwd)
-            done_n.append(done)
-            info_n.append(info)
+        self.obs_n = self._get_obs_from_state(self.state) #update the individual observations for each task
+        rwd_n, done_n, info_n = zip(*[t.assess(self.obs_n[i], self.last_obs_n[i]) for i, t in enumerate(self.task_list)])
+        
         #return the result tuple (obs_n, rwd_n, done_n, info_n)
-        return obs_n, rwd_n, done_n, info_n
+        return self.obs_n, rwd_n, done_n, info_n
         
     
-    def _env_step(self, actions_n: List[np.ndarray]) -> Tuple[NamedTuple]:
+    def _issue_actions(self, actions_n: List[np.ndarray]) -> Tuple[NamedTuple]:
         """
         Perform a simulation step in the environment and return the new state
 
@@ -297,16 +290,18 @@ class JsbSimEnv_multi_agent(gym.Env):
            the actions are ordered in the call to step. that's why we must not change the order of 
            actions in the __init__() constructor.
         '''
-        for prop, command in zip(self.action_props, actions):
-            self.sim[prop] = command
+        for prop, act in zip(self.action_props, actions):
+            self.sim[prop] = act
 
         # run simulation
         for _ in range(self.sim_steps_per_agent_step):
             if(not self.sim.run()):   #TODO: check return value. is it false if JSBSim encounters a problem
                 raise RuntimeError("JSBSim terminated")
         
-        #update the custom propeties of the env and of all tasks
+        #update the custom propeties of the env
         self._update_custom_properties()
+        #update Task_Agent specific custom_props
+        [t.update_custom_properties() for t in self.task_list]
         
         state_new: NamedTuple(float) = self.State(*(self.sim[prop] for prop in self.state_props))   # enter the values to a variable of the State class (named tuple)
         # if self.debug:
