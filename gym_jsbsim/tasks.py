@@ -39,8 +39,7 @@ class Task(ABC):
             done: bool, True if the episode is over else False
             info: dict, optional, containing diagnostic info for debugging etc.
         """
-
-    ...
+        ...
 
     @abstractmethod
     def observe_first_state(self, sim: Simulation) -> np.ndarray:

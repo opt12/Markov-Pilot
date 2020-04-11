@@ -112,7 +112,7 @@ class NormalisedComponent(RewardComponent, ABC):
         Depending on how target is specified, it may either be a constant, or a
         Property's value that needs to be retrieved from the State.
         """
-        if isinstance(target, float) or isinstance(target, int):
+        if isinstance(target, float) or isinstance(target, int):    #TODO: this distinction may be more elegant using the @singledispatch decorator
             self.constant_target = True
             self.target = target
         elif isinstance(target, prp.Property) or isinstance(target, prp.BoundedProperty):
