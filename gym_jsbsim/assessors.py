@@ -9,8 +9,11 @@ class Assessor(ABC):
     """ Interface for Assessors which calculate Rewards from States. """
 
     @abstractmethod
-    def assess(self, state: State, prev_state: State, is_terminal: bool) -> Reward:
-        """ Calculates reward from environment's state, previous state and terminal condition """
+    def assess(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[Reward, Dict[str, float]]:
+        """ Calculates reward from environment's state, previous state and terminal condition 
+        
+        :return: A tuple (reward, reward_components) containing the overall reward as flot and a dict of the individual reward components.
+        """
         ...
 
 
@@ -54,9 +57,10 @@ class AssessorImpl(Assessor):
 
     def assess(self, state: State, prev_state: State, is_terminal: bool) -> Reward:
         """ Calculates a Reward from the state transition. """
-        return Reward(self._base_rewards(state, prev_state, is_terminal),
+        return (Reward(self._base_rewards(state, prev_state, is_terminal),
                       self._potential_based_rewards(state, prev_state, is_terminal),
-                      self.base_weights, self.potential_weights)
+                      self.base_weights, self.potential_weights),
+                self.reward_dict)
 
     def _base_rewards(self, state: State, prev_state: State, is_terminal: bool) -> Tuple[float, ...]:
         cmp_values = [cmp.calculate(state, prev_state, is_terminal) for cmp in self.base_components]
