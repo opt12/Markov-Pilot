@@ -199,7 +199,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         #update Task_Agent specific custom_props
         [t.initialize_custom_properties() for t in self.task_list]
 
-    def _update_custom_properties(self, actions_n: List[np.ndarray]):
+    def _update_custom_properties(self):
         """
         Updates any custom properties.
 
@@ -210,8 +210,8 @@ class JsbSimEnv_multi_agent(gym.Env):
         self.sim[self.steps_left] -= 1  #decrement the remaining task steps
 
         #update Task_Agent specific custom_props
-        for i, t in enumerate(self.task_list):
-            t.update_custom_properties(actions_n[i])
+        for t in self.task_list:
+            t.update_custom_properties()
     
     def is_terminal(self):
          return not (self.sim[self.steps_left] > 0)
@@ -306,7 +306,7 @@ class JsbSimEnv_multi_agent(gym.Env):
                 raise RuntimeError("JSBSim terminated")
         
         #update the custom propeties of the env and of all tasks
-        self._update_custom_properties(actions_n)
+        self._update_custom_properties()
         
         state_new: NamedTuple(float) = self.State(*(self.sim[prop] for prop in self.state_props))   # enter the values to a variable of the State class (named tuple)
         # if self.debug:

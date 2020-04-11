@@ -142,7 +142,7 @@ class AgentTask(ABC):
         pass
 
     @abstractmethod
-    def update_custom_properties(self, action: np.ndarray):
+    def update_custom_properties(self):
         """ Updates state elements (custom properties) within the AgentTask's own responsibility.
 
         Is called from within the env.step() function for each AgentTask taking part in the environemnt. 
@@ -234,15 +234,15 @@ class PID_FlightAgentTask(FlightAgentTask):
         if self.change_setpoint_callback:
             self.change_setpoint_callback(self.setpoint_value)
         
-    def update_custom_properties(self, action: np.ndarray):
+    def update_custom_properties(self):
         error = self.sim[self.setpoint_prop] - self.setpoint_value
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
         self.sim[self.prop_error_integral] += error * self.dt
-        self.sim[self.prop_delta_cmd] = action[0] - self.last_action
+        self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self.last_action
         self.sim[self.prop_setpoint] = self.setpoint_value 
-        self.last_action = action[0]
+        self.last_action = self.sim[self.action_props[0]]
 
     def initialize_custom_properties(self):
         """ Initializes all the custom properties to start values
