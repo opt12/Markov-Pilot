@@ -148,14 +148,14 @@ class FlightTask(Task, ABC):
         self._update_custom_properties(sim)
         state: NamedTuple(float) = self.State(*(sim[prop] for prop in self.state_variables))   # enter the values to a variable of the State class (named tuple)
         done = self._is_terminal(sim)
-        reward = self.assessor.assess(state, self.last_state, done) #add the individual reward components to the simulation for plotting
+        reward, reward_components = self.assessor.assess(state, self.last_state, done) #add the individual reward components to the simulation for plotting
         if done:
             reward = self._reward_terminal_override(reward, sim)
         if self.debug:
             done  = done or self._validate_state(state, done, action, reward)   #returns true if state contains nan
         self._store_reward(reward, sim)
         self.last_state = state
-        info = {'reward': reward, 'reward_components': self.assessor.reward_dict }  #TODO: the reward_components should already be contained in the reward entry... Check rewards.py/__init__
+        info = {'reward': reward, 'reward_components': reward_components }  #TODO: the reward_components should already be contained in the reward entry... Check rewards.py/__init__
 
         return state, reward.agent_reward(), done, info
 
