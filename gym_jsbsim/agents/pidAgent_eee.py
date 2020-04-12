@@ -52,7 +52,7 @@ class PID_Agent(AgentTrainer):
         self.controller.reset()
 
     def action(self, obs: np.ndarray) -> np.ndarray:
-        error = obs[0]  #for the PID controller, the control deviation shall be the only input
+        error = obs[0]  #for the PID controller, the control deviation shall be the first input; all others wil be ignored
         #using the errors keeps the setpoint constantly at 0; The errors should vanish
         control_out = self.controller(error, dt=self.dt) 
         return [control_out]

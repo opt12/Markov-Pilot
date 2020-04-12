@@ -6,6 +6,11 @@ import numpy as np
 
 State = 'tasks.FlightTask.State'  # alias for type hint
 
+class RewardNotVisibleError(Exception):
+    def __init__(self, prop):
+        self.prop = prop
+    def __str__(self):
+        return repr(f"{self.prop} is not in list")
 
 class Reward(object):
     """
@@ -100,7 +105,10 @@ class NormalisedComponent(RewardComponent, ABC):
         """
         self.name = name
         self.weight = weight
-        self.state_index_of_value = state_variables.index(prop)
+        try:
+            self.state_index_of_value = state_variables.index(prop) #will raise an exception if prop is not part of the state_variables
+        except ValueError:
+            raise RewardNotVisibleError(prop)   #when catching this, the state_variables list can be extended.
         self.potential_difference_based = potential_difference_based
         self._set_target(target, state_variables)
 

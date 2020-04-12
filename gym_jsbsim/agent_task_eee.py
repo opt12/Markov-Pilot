@@ -61,7 +61,25 @@ class AgentTask(ABC):
         shall be injected into the concrete AgentTask at construction time
 
         """
-        base_components = self._make_base_reward_components()
+        while True:
+            try:
+                base_components = self._make_base_reward_components()
+            except rewards.RewardNotVisibleError as e:
+                #There is a property misssing in the presented state_variables, so we add it to self.obs_props:
+                if e.prop in self.obs_props:
+                    """
+                    you _must_ present 
+                            state_variables=self.obs_props
+                    in the reward components. Otherwise there is no point in adding them to self.obs_props
+                    """
+                    raise ValueError(f'{e.prop}  is not in list.')
+
+                self.obs_props.append(e.prop)
+                print(f"AgentTask: {self.name}: Added property {e.prop} to self.obs_props.")
+                continue
+            break
+
+
         return assessors.AssessorImpl(base_components, (), positive_rewards=self.positive_rewards)
     
     def inject_environment(self, env: JsbSimEnv_multi_agent):
@@ -131,6 +149,28 @@ class AgentTask(ABC):
         """ just returns the setpoints of the AgentTask.
         """
         return self.setpoints
+
+    def print_info(self):
+        """
+        Prints out all relevant information on the TaskAgent
+        """
+        print("********************************************")
+        print(f"TaskAgent '{self.name}':")
+        obs_props_list = [prop.name for prop in self.obs_props]
+        print(f"obs_props[{len(self.obs_props)}]:", end="")
+        print(*obs_props_list, sep = ", ")
+        print(f"Observation Space:\n", self.get_state_space(), "\nlow:  ", self.get_state_space().low, "\nhigh: ", self.get_state_space().high, sep="")
+
+        custom_props_list = [prop.name for prop in self.custom_props]
+        print(f"custom_props[{len(self.custom_props)}]:", end="")
+        print(*custom_props_list, sep = ", ")
+
+        action_props_list = [prop.name for prop in self.action_props]
+        print(f"action_props[{len(self.action_props)}]:", end="")
+        print(*action_props_list, sep = ", ")
+        print(f"Action Space: ", self.get_action_space(), "\nlow:  ", self.get_action_space().low, "\nhigh: ", self.get_action_space().high, sep="")
+
+        print("********************************************")
 
     @abstractmethod
     def _make_base_reward_components(self):
@@ -218,6 +258,7 @@ class AgentTask(ABC):
 
 
 from gym_jsbsim.utils import reduce_reflex_angle_deg
+'''
 class PID_FlightAgentTask(AgentTask):
     """ A class to implement a PID controller for a certain actuation.
 
@@ -231,9 +272,9 @@ class PID_FlightAgentTask(AgentTask):
     """
 
     def __init__(self, name: str, actuating_prop: BoundedProperty, setpoint: Dict[BoundedProperty, float], 
-                change_setpoint_callback: Callable[[float], None] = None, 
                 make_base_reward_components: Callable[['AgentTask'], Tuple[rewards.RewardComponent, ...]] = None,
                 is_done: Callable[['AgentTask'], bool] = None, 
+                change_setpoint_callback: Callable[[float], None] = None, 
                 measurement_in_degrees = True, max_allowed_error = 30):
         """
 
@@ -241,12 +282,12 @@ class PID_FlightAgentTask(AgentTask):
 
         :param actuating_prop: The actuation variable to be controlled
         :param setpoint: The setpoint property to be used for deviation calculation
-        :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
-            function to be notified on setpoint changes. This callback can reset the PID internal integrators.
         :param _make_base_reward_components = None: if necessary inject a custom function to be bound to instance.
             Not needed in case of PID control as _make_base_reward_components() is overwritten by default in subclass.
-        :param _check_for_done = None: if necessary inject a custom function to be bound to instance.
+        :param is_done = None: if necessary inject a custom function to be bound to instance.
             Not needed in case of PID control as _check_for_done() is overwritten by default in subclass to check for max_allowed_error.
+        :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
+            function to be notified on setpoint changes. This callback can reset the PID internal integrators.
         :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
         :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
         """
@@ -281,6 +322,138 @@ class PID_FlightAgentTask(AgentTask):
         self.change_setpoints(setpoint) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
 
         self.assessor = self._make_assessor()   #this can only be called after the preparattion of all necessary props
+        self.print_info()
+
+    def _make_base_reward_components(self):     #may be overwritten by injected custom function
+        # pylint: disable=method-hidden
+        """
+        Just adds an Asymptotic error component as standard reward to the PID_AgentTask.
+
+        May be overwritten by injected custom function.
+        """
+        ANGULAR_DEVIATION_SCALING = 0.5 #just a default value which neither fits glide nor roll angle really good
+        base_components = (
+            rewards.AngularAsymptoticErrorComponent(name='rwd_'+self.name+'_asymptotic_error',
+                                    prop=self.prop_error,
+                                    state_variables=self.obs_props,
+                                    target=0.0,
+                                    potential_difference_based=False,
+                                    scaling_factor=ANGULAR_DEVIATION_SCALING,
+                                    weight=1),
+            )
+        return base_components
+    
+    def _is_done(self):      #may be overwritten by injected custom function
+        # pylint: disable=method-hidden
+        """
+        Checks if the observed error is out of bounds.
+
+        :return: True if values are out of bounds and hence the episode should end.
+        """
+        if self.max_allowed_error:  
+            return abs(self.sim[self.prop_error]) >= self.max_allowed_error
+        else:
+            return False
+    
+    def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
+        self.setpoint_prop, self.setpoint_value = changed_setpoint
+        if self.change_setpoint_callback:
+            self.change_setpoint_callback(self.setpoint_value)
+        
+    def update_custom_properties(self):
+        error = self.sim[self.setpoint_prop] - self.setpoint_value
+        if self.measurement_in_degrees:
+            error = reduce_reflex_angle_deg(error)
+        self.sim[self.prop_error] = error
+        self.sim[self.prop_error_integral] += error * self.dt
+        self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self.last_action
+        self.sim[self.prop_setpoint] = self.setpoint_value 
+        self.last_action = self.sim[self.action_props[0]]
+
+    def initialize_custom_properties(self):
+        """ Initializes all the custom properties to start values
+
+        TODO: check if this can integrated with update_custom_properties
+        """
+        error = self.sim[self.setpoint_prop] - self.setpoint_value
+        if self.measurement_in_degrees:
+            error = reduce_reflex_angle_deg(error)
+        self.sim[self.prop_error] = error
+        self.sim[self.prop_error_integral] = error * self.dt    #TODO: is it correct to add the initial error to the integral or shold it be added just _after_ the next timestep
+        self.sim[self.prop_delta_cmd] = 0
+        self.sim[self.prop_setpoint] = self.setpoint_value 
+        self.last_action = self.sim[self.actuating_prop]
+
+    def get_props_to_output(self) -> List[prp.Property]:
+        output_props = self.custom_props + [
+            self.setpoint_prop
+        ]
+        return output_props
+'''
+class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be better to call it SingleAngularChannel_FlightAgentTask(AgentTask)
+    """ A class to implement a controller for a single channel actuation with a single error measurement.
+
+    The class SingleChannel_FlightAgentTask takes the value to be controlled as an input state. 
+
+    The SingleChannel_FlightAgentTask calculates the error wrt. the setpoint and some limited error integral to the custom properties. 
+    Additionally, the current action and the last actuator travel (Δ-Value) are added to the custom properties and the observation.
+
+    The reward uses the approach of Gor-Ren. The make_base_reward_components-Function shall be injected to the 
+    AgentTask object at instantiation time.
+    """
+
+    def __init__(self, name: str, actuating_prop: BoundedProperty,  setpoint: Dict[BoundedProperty, float], 
+                presented_state: List[BoundedProperty] = [], 
+                make_base_reward_components: Callable[['AgentTask'], Tuple[rewards.RewardComponent, ...]] = None,
+                is_done: Callable[['AgentTask'], bool] = None, 
+                change_setpoint_callback: Callable[[float], None] = None,
+                measurement_in_degrees = True, max_allowed_error = 30,
+                integral_limit = float('inf')):
+        """
+        :param actuating_prop: The actuation variable to be controlled
+        :param setpoint: The setpoint property to be used for deviation calculation
+        :param presented_state: The additional state properties that shall be presented to the Agent besides the props defined within the AgentTask. 
+        :param make_base_reward_components = None: Inject a custom function to be bound to instance.
+        :param is_done = None: Inject a custom function to be bound to instance.
+            Default just checks for max_allowed_error in the self.prop_error custom property.
+        :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
+            function to be notified on setpoint changes. This callback can reset the PID internal integrators.
+        :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
+        :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
+        :param integral_limit = float('inf'): the limiting value for the error integrator Error integral is clipped to [-integral_limit, integral_limit]
+        """
+        super(SingleChannel_FlightAgentTask, self).__init__(name, 
+                                            make_base_reward_components=make_base_reward_components,
+                                            is_done=is_done)
+
+        self.measurement_in_degrees = measurement_in_degrees
+        self.max_allowed_error = max_allowed_error
+
+        #custom properties 
+        self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -180, 180)
+        self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
+        self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
+                actuating_prop.min - actuating_prop.max, actuating_prop.max - actuating_prop.min)
+        self.prop_setpoint = BoundedProperty('setpoint/'+self.name+'_setpoint', 'the setpoint for the '+self.name+' controller', -180, 180)
+
+        self.actuating_prop = actuating_prop
+        self.last_action = 0
+        self.setpoint_prop, self.setpoint_value = list(setpoint.items())[0] #there's only one setpoint for the single channel controller
+            #TODO: the setpoint is now stored twice. Not really useful. Do I need this caching? Do I need the self.setpoints-dictionary?
+        
+        self.obs_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd] + presented_state
+        self.custom_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd, self.prop_setpoint]
+        self.action_props = [actuating_prop]
+
+        # the value of the setpoint_prop itself is not really relevant, it must be in the simulator object to be retrieved, but not passed anywhere
+        # if not all([setpoint_prop in (self.obs_props + self.custom_props) for setpoint_prop in setpoint.keys()]):
+        #     raise ValueError('All setpoints must match a property in obs_props or in custom_props')
+
+        self.change_setpoint_callback = change_setpoint_callback    #to notify the PID Agent that there is a new setpoint in effect
+        self.change_setpoints(setpoint) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
+
+        self.assessor = self._make_assessor()   #this can only be called after the preparattion of all necessary props
+        self.print_info()
 
     def _make_base_reward_components(self):     #may be overwritten by injected custom function
         # pylint: disable=method-hidden
@@ -348,90 +521,3 @@ class PID_FlightAgentTask(AgentTask):
         ]
         return output_props
 
-# class DDPG_FlightAgentTask(FlightAgentTask):
-#     """ A class to implement a DDPG based controller for a certain actuation.
-
-#     The class DDPG_FlightAgentTask takes the value to be controlled as an input state. 
-
-#     The DDPG_FlightAgentTask calculates the error wrt. the setpoint and some limited error integral to the custom properties. 
-#     Additionally, the current action and the last actuator travel (Δ-Value) are added to the custom properties and the observation.
-
-#     The reward calculation takes ... TODO:
-#     """
-
-#     def __init__(self, name: str, actuating_prop: BoundedProperty,  setpoint: Dict[BoundedProperty, float], 
-#                  observation_props: List[BoundedProperty], 
-#                  reward_function: Callable[...,[Tuple[float, Dict[str, float]]]] = None, 
-#                  out_of_bounds_check_function: Callable[...,[bool]] = None, 
-#                  measurement_in_degrees = True, max_allowed_error = 30):
-#         """
-#         :param actuating_prop: The actuation variable to be controlled
-#         :param setpoint: The setpoint property to be used for deviation calculation
-#         :param observation_props: The state properties that shall be presented to the DDPG Agent in the observation. Custom-Props
-#         :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
-#         :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
-#         """
-#         super(DDPG_FlightAgentTask, self).__init__(name)
-
-#         # inject the reward calculation and the values out of bounds check into the instance like explained here
-#         # https://tryolabs.com/blog/2013/07/05/run-time-method-patching-python/ and here
-#         # https://stackoverflow.com/questions/972/adding-a-method-to-an-existing-object-instance#comment66379065_2982 
-#         if reward_function:
-#             self._calc_reward = reward_function.__get__(self)
-#         if out_of_bounds_check_function:
-#             self._check_for_done = out_of_bounds_check_function.__get__(self)
-
-#         self.measurement_in_degrees = measurement_in_degrees
-#         self.max_allowed_error = max_allowed_error
-#         self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -180, 180)
-#         self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
-#         self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
-#                 actuating_prop.min - actuating_prop.max, actuating_prop.max - actuating_prop.min)
-#         self.prop_setpoint = BoundedProperty('setpoint/'+self.name+'_setpoint', 'the setpoint for the '+self.name+' controller', -180, 180)
-
-#         self.actuating_prop = actuating_prop
-#         self.last_action = 0
-#         self.setpoint_prop, self.setpoint_value = list(setpoint.items())[0] #there's only one setpoint for the PID controller
-#             #TODO: the setpoint is now stored twice. Not really useful. Do I need this caching? Do I need the self.setpoints-dictionary?
-        
-#         self.obs_props = presented_state + [self.prop_error, self.prop_error_integral, self.prop_delta_cmd]
-#         self.custom_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd, self.prop_setpoint]
-#         self.action_props = [actuating_prop]
-
-#         self.change_setpoints(setpoint)
-
-#     def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
-#         self.setpoint_prop, self.setpoint_value = changed_setpoint
-#         if self.change_setpoint_callback:
-#             self.change_setpoint_callback(self.setpoint_value)
-        
-#     def update_custom_properties(self, action: np.ndarray):
-#         error = self.sim[self.setpoint_prop] - self.setpoint_value
-#         if self.measurement_in_degrees:
-#             error = reduce_reflex_angle_deg(error)
-#         self.sim[self.prop_error] = error
-#         self.sim[self.prop_error_integral] += error * self.dt
-#         self.sim[self.prop_delta_cmd] = action[0] - self.last_action
-#         self.sim[self.prop_setpoint] = self.setpoint_value 
-#         self.last_action = action[0]
-
-#     def initialize_custom_properties(self):
-#         """ Initializes all the custom properties to start values
-
-#         TODO: check if this can integrated with update_custom_properties
-#         """
-#         error = self.sim[self.setpoint_prop] - self.setpoint_value
-#         if self.measurement_in_degrees:
-#             error = reduce_reflex_angle_deg(error)
-#         self.sim[self.prop_error] = error
-#         self.sim[self.prop_error_integral] = error * self.dt    #TODO: is it correct to add the initial error to the integral or shold it be added just _after_ the next timestep
-#         self.sim[self.prop_delta_cmd] = 0
-#         self.sim[self.prop_setpoint] = self.setpoint_value 
-#         self.last_action = self.sim[self.actuating_prop]
-    
-#     def get_props_to_output(self) -> List[prp.Property]:
-#         output_props = self.custom_props + [
-#             self.setpoint_prop
-#         ]
-#         return output_props
-            
