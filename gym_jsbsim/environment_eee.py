@@ -78,6 +78,7 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         self.aircraft = aircraft
         self.task_list = task_list
+        self.n = len(self.task_list)    #the number of AgentTasks registered for the environment
 
         self.inital_attitude: Dict[Property, float] = {     #the default initial conditions; shall be overwritten by calling set_initial_conditions()
               prp.initial_u_fps: self.aircraft.get_cruise_speed_fps()*0.9    #forward speed
@@ -267,7 +268,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         rwd_n, done_n, info_n = zip(*[t.assess(self.obs_n[i], self.last_obs_n[i]) for i, t in enumerate(self.task_list)])
         
         #return the result tuple (obs_n, rwd_n, done_n, info_n)
-        return self.obs_n, rwd_n, done_n, info_n
+        return self.obs_n, [rwd.agent_reward() for rwd in rwd_n], done_n, info_n
             
     def _issue_actions(self, actions_n: List[np.ndarray]) -> Tuple[NamedTuple]:
         """

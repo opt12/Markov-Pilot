@@ -1,10 +1,12 @@
 from .simple_pid import PID
+
 import gym
 import numpy as np
+from abc import ABC, abstractmethod
 
 from collections import namedtuple
 
-class AgentTrainer(object):
+class AgentTrainer(ABC):
     """ 
     Similar to the AgentTrainer interface defined in https://github.com/openai/maddpg/blob/master/maddpg/__init__.py
 
@@ -12,17 +14,30 @@ class AgentTrainer(object):
     # def __init__(self, name, model, obs_shape, act_space, args):
     #     raise NotImplementedError()
 
-    def action(self, obs: np.ndarray) -> np.ndarray:
+    @abstractmethod
+    def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
         raise NotImplementedError()
 
+    @abstractmethod
     def process_experience(self, obs, act, rew, new_obs, done, terminal):
         raise NotImplementedError()
 
+    @abstractmethod
     def preupdate(self):
         raise NotImplementedError()
 
+    @abstractmethod
     def update(self, agents):
         raise NotImplementedError()
+
+    def reset_notifier(self):   #TODO: get rid of this workaround if possible. Only needed for PID agents
+        """Called on environment reset. 
+        
+        Is needed for PID-Agents. Should not be needed for (MA)DDPG-Agents.
+
+        Overwrite at your convevnience.
+        """
+        pass
 
 
 # a parameter set for a PID controller
@@ -51,8 +66,8 @@ class PID_Agent(AgentTrainer):
         """
         self.controller.reset()
 
-    def action(self, obs: np.ndarray) -> np.ndarray:
-        error = obs[0]  #for the PID controller, the control deviation shall be the first input; all others wil be ignored
+    def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
+        error = obs[0]  #for the PID controller, the control deviation shall be the first element of the [obs]; all others wil be ignored
         #using the errors keeps the setpoint constantly at 0; The errors should vanish
         control_out = self.controller(error, dt=self.dt) 
         return [control_out]
