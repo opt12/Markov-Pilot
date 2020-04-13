@@ -104,18 +104,20 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         obs_props: prp.BoundedProperty = []
         self.custom_props: prp.BoundedProperty = [self.steps_left]
-        setpoints: prp.BoundedProperty = []
+        self.setpoint_props: prp.BoundedProperty = []
         self.action_props: prp.BoundedProperty = []
         self.observation_spaces: List[gym.spaces.Box] = []
         self.action_spaces: List[gym.spaces.Box] = []
         for t in self.task_list:
             obs_props.extend(t.obs_props)
             self.custom_props.extend(t.custom_props)
-            setpoints.extend(t.setpoints)
+            self.setpoint_props.extend(t.get_setpoint_props())
             self.action_props.extend(t.action_props)
         
-        self.setpoints = np.unique(setpoints)   #TODO: why unique? what do I want to do with this setpoints list? The values ar enot yet queried
-        # TODO: there should be a nice possibility to issue a single update setpoint to the environment which directs it to the assocviated task automatically
+        unique_setpoint_props = { sp_prop for sp_prop in self.setpoint_props }  #this is a set comprehension to convert the list of props into a set with unique entries
+        if len(self.setpoint_props) != len(unique_setpoint_props):
+            #the setpoint properties are not unique in between the tasks
+            raise ValueError('The setpoint properties in the different tasks must be unique\n')
 
         unique_custom_props = { c_prop for c_prop in self.custom_props }  #this is a set comprehension to convert the list of props into a set with unique entries
         if len(self.custom_props) != len(unique_custom_props):
@@ -221,7 +223,6 @@ class JsbSimEnv_multi_agent(gym.Env):
         obs_n = [state_array.take(self.obs_idxs[i]) for i in range(len(self.task_list))]
         return obs_n
 
-
     def _new_episode_init(self) -> None:
         """
         This method is called at the start of every episode. It is used to set
@@ -267,8 +268,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         
         #return the result tuple (obs_n, rwd_n, done_n, info_n)
         return self.obs_n, rwd_n, done_n, info_n
-        
-    
+            
     def _issue_actions(self, actions_n: List[np.ndarray]) -> Tuple[NamedTuple]:
         """
         Perform a simulation step in the environment and return the new state
@@ -308,7 +308,6 @@ class JsbSimEnv_multi_agent(gym.Env):
         #     self._validate_state(state_new)   #returns true if state contains nan
 
         return state_new
-
 
     def _init_new_sim(self, dt, aircraft, initial_conditions) -> Simulation:
         return Simulation(sim_frequency_hz=dt,
@@ -416,6 +415,13 @@ class JsbSimEnv_multi_agent(gym.Env):
     def set_meta_information(self, **kwargs):
         self.meta_dict = {**self.meta_dict, **kwargs}
 
+    def change_setpoints(self, setpoints: Dict[Property, float]):
+        """
+        Forwards the new setpoints to all AgentTasks. They decide on their own whether it matters for them.
+
+        (Why not just update the setpoints in the sim object? -> The AgentTasks read it from there, as we want to reset the integrators inside the AgentTasks)
+        """
+        [t.change_setpoints(setpoints) for t in self.task_list]
 
 # class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
 #     """

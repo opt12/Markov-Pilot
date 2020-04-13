@@ -52,10 +52,10 @@ if __name__ == '__main__':
         terminal = env.is_terminal()
 
         if episode_step%150 == 0:
-            pid_aileron_AT.change_setpoints({prp.roll_deg: -env.sim[prp.roll_deg]})
+            env.change_setpoints({prp.roll_deg: -env.sim[prp.roll_deg]})
 
         if episode_step%180 == 0:
-            pid_elevator_AT.change_setpoints({prp.flight_path_deg: env.sim[prp.flight_path_deg]+0.5})
+            env.change_setpoints({prp.flight_path_deg: env.sim[prp.flight_path_deg]+0.5})
 
         # collect experience
         # for i, agent in enumerate(trainers):

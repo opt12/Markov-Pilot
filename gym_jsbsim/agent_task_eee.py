@@ -36,7 +36,9 @@ class AgentTask(ABC):
         self.name = name                                    # name of the agent, used for the naming of properties
         self.obs_props: List[BoundedProperty] = []          # properties returned to the Agent as observation. Either directly from JSBSim or from custom_props
         self.custom_props: List[BoundedProperty] = []       # properties calculated by the AgentTask. May or may not be part of the obs_props
-        self.setpoints: Dict[BoundedProperty, float] = {}   # setpoints to use in the error/deviation calculation. May be (dynamically) changed in the course of the simulation. Stored into the sim-object
+        self.setpoint_props = ()                            # the properties assigned to the setpoints; subtract the value of setpoint prop from the base prop to calculate the error
+        self.initial_setpoint_values = ()                   # the initial setpoint values, used to store values to sim object, don't get updated on hange_setpoint
+        self.setpoint_value_props = []                      # setpoints to use in the error/deviation calculation. May be (dynamically) changed in the course of the simulation. Stored into the sim-object
         self.action_props: List[BoundedProperty] = []       # actions issued to JSBSim in each step from the associated Agent. Informative for AgentTask to e. g. incorporate it into reward calculation
         self.positive_rewards = True                        # determines whether only positive rewards are possible (see Gor-Ren's documentation)
 
@@ -91,9 +93,9 @@ class AgentTask(ABC):
         self.env = env
         self.sim = self.env.sim #for caching the simulator object used as data storage
         self.dt  = self.env.dt  #for caching the step-time to calculate the integral
-        #store the setpoints to the sim object
-        for sp_prop, sp_val in self.setpoints.items():
-            self.sim[sp_prop] =sp_val
+        #store the initial_setpoints to the sim object
+        for sp, val in zip(self.setpoint_value_props, self.initial_setpoint_values):
+            self.sim[sp] = val
     
     def assess(self, obs, last_obs) -> Tuple[float, bool, Dict]:
         """ Calculate the task specific reward from the actual observation and 
@@ -131,24 +133,22 @@ class AgentTask(ABC):
         action_highs = np.array([act_prop.max for act_prop in self.action_props])
         return gym.spaces.Box(low=action_lows, high=action_highs, dtype='float')
     
+    @abstractmethod
     def change_setpoints(self, new_setpoints: Dict[BoundedProperty, float]):
         """
         Changes the setpoints for the AgentTask. The changes will take effect within the next environment step. (call to env.step())
         The setpoint values are stored within a property in the env's sim object.
 
-        Implement _change_setpoint_helper() in derived classes to implement associated actions (e. g. integrals must be reset when changing the setpoints)
+        If needed, clean-up actions shall be performed here (like e. g. reset integrators)
 
         :param new_setpoints: A dictionary with new setpoints to be used. New values overwrite old ones.
         """
-        for prop, value in new_setpoints.items():
-            self._change_setpoint_helper( (prop, value) )    #implemented in subclass
-            self.setpoints[prop] = value    #update the setpoints in the AgentTask class
-            #TODO: storing the setpoints to the sim object is delegated to the _change_setpoint_helper() for the moment
+        pass
                 
-    def get_setpoints(self) -> Dict[BoundedProperty, float]:
-        """ just returns the setpoints of the AgentTask.
+    def get_setpoint_props(self) -> Dict[BoundedProperty, float]:
+        """ just returns the props with setpoints for the AgentTask
         """
-        return self.setpoints
+        return self.setpoint_value_props
 
     def print_info(self):
         """
@@ -201,17 +201,17 @@ class AgentTask(ABC):
         """
         return False
 
-    @abstractmethod
-    def _change_setpoint_helper(self, changed_setpoint: Tuple[BoundedProperty,float]):
-        """ 
-        Any actions regarding setpoint changes specific for the special task are implemented here. 
-        If needed, the setpoint storage to sim onject also happens here.
+    # @abstractmethod
+    # def _change_setpoint_helper(self, changed_setpoint: Tuple[BoundedProperty,float]):
+    #     """ 
+    #     Any actions regarding setpoint changes specific for the special task are implemented here. 
+    #     If needed, the setpoint storage to sim onject also happens here.
 
-        Called for each changed setpoint.
+    #     Called for each changed setpoint.
 
-        Reset Integrals, notify  dependant objects (e. g. by callback), store the new setpoint to the sim object...
-        """
-        raise NotImplementedError('_change_setpoint_helper() must be imlemented in '+self.__class__+'. (Maybe just a "pass"-statement).')
+    #     Reset Integrals, notify  dependant objects (e. g. by callback), store the new setpoint to the sim object...
+    #     """
+    #     raise NotImplementedError('_change_setpoint_helper() must be imlemented in '+self.__class__+'. (Maybe just a "pass"-statement).')
     
     @abstractmethod
     def initialize_custom_properties(self):
@@ -402,21 +402,21 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
     AgentTask object at instantiation time.
     """
 
-    def __init__(self, name: str, actuating_prop: BoundedProperty,  setpoint: Dict[BoundedProperty, float], 
+    def __init__(self, name: str, actuating_prop: BoundedProperty,  setpoints: Dict[BoundedProperty, float], 
                 presented_state: List[BoundedProperty] = [], 
                 make_base_reward_components: Callable[['AgentTask'], Tuple[rewards.RewardComponent, ...]] = None,
                 is_done: Callable[['AgentTask'], bool] = None, 
-                change_setpoint_callback: Callable[[float], None] = None,
+                # change_setpoint_callback: Callable[[float], None] = None, #TODO: we used to have that, but it's not used anymore, remove
                 measurement_in_degrees = True, max_allowed_error = 30,
                 integral_limit = float('inf'), integral_decay = 1):
         """
         :param actuating_prop: The actuation variable to be controlled
-        :param setpoint: The setpoint property to be used for deviation calculation
+        :param setpoints: The setpoint property to be used for deviation calculation
         :param presented_state: The additional state properties that shall be presented to the Agent besides the props defined within the AgentTask. 
         :param make_base_reward_components = None: Inject a custom function to be bound to instance.
         :param is_done = None: Inject a custom function to be bound to instance.
             Default just checks for max_allowed_error in the self.prop_error custom property.
-        :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
+        # :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
             function to be notified on setpoint changes. This callback can reset the PID internal integrators.
         :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
         :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
@@ -433,27 +433,30 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         self.integral_decay = integral_decay
 
         #custom properties 
-        self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -180, 180)
+        self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -float('inf'), float('inf'))
         self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
         self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
                 actuating_prop.min - actuating_prop.max, actuating_prop.max - actuating_prop.min)
-        self.prop_setpoint = BoundedProperty('setpoint/'+self.name+'_setpoint', 'the setpoint for the '+self.name+' controller', -180, 180)
-
+                
         self.actuating_prop = actuating_prop
         self.last_action = 0
-        self.setpoint_prop, self.setpoint_value = list(setpoint.items())[0] #there's only one setpoint for the single channel controller
+        # self.setpoint_value = list(setpoint.items())[0] #there's only one setpoint for the single channel controller
             #TODO: the setpoint is now stored twice. Not really useful. Do I need this caching? Do I need the self.setpoints-dictionary?
         
         self.obs_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd] + presented_state
-        self.custom_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd, self.prop_setpoint]
+        self.custom_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd]
         self.action_props = [actuating_prop]
 
         # the value of the setpoint_prop itself is not really relevant, it must be in the simulator object to be retrieved, but not passed anywhere
-        # if not all([setpoint_prop in (self.obs_props + self.custom_props) for setpoint_prop in setpoint.keys()]):
+        # if not all([prop in (self.obs_props + self.custom_props) for prop in setpoints]):
         #     raise ValueError('All setpoints must match a property in obs_props or in custom_props')
 
-        self.change_setpoint_callback = change_setpoint_callback    #to notify the PID Agent that there is a new setpoint in effect
-        self.change_setpoints(setpoint) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
+        # self.setpoints = setpoints
+        self.setpoint_props, self.initial_setpoint_values = zip(*setpoints.items())    #returns immutable tuples
+        self.setpoint_value_props = [sp.prefixed('setpoint') for sp in self.setpoint_props]
+
+        # self.change_setpoint_callback = change_setpoint_callback    #to notify the PID Agent that there is a new setpoint in effect
+        # self.change_setpoints(setpoints) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
 
         self.assessor = self._make_assessor()   #this can only be called after the preparattion of all necessary props
         self.print_info()
@@ -489,13 +492,13 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         else:
             return False
     
-    def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
-        self.setpoint_prop, self.setpoint_value = changed_setpoint
-        if self.change_setpoint_callback:
-            self.change_setpoint_callback(self.setpoint_value)
+    # def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
+    #     self.setpoint_prop, self.setpoint_value = changed_setpoint
+    #     if self.change_setpoint_callback:
+    #         self.change_setpoint_callback(self.setpoint_value)
         
     def update_custom_properties(self):
-        error = self.sim[self.setpoint_prop] - self.setpoint_value
+        error = self.sim[self.setpoint_props[0]] - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
@@ -504,7 +507,6 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                         -self.integral_limit, self.integral_limit
                     )
         self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self.last_action
-        self.sim[self.prop_setpoint] = self.setpoint_value 
         self.last_action = self.sim[self.action_props[0]]
 
     def initialize_custom_properties(self):
@@ -512,18 +514,32 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
 
         TODO: check if this can integrated with update_custom_properties
         """
-        error = self.sim[self.setpoint_prop] - self.setpoint_value
+        error = self.sim[self.setpoint_props[0]] - self.sim[self.setpoint_value_props[0]]    #only one setpoint in SingleChannel_FlightAgentTask
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
         self.sim[self.prop_error_integral] = error * self.dt    #TODO: is it correct to add the initial error to the integral or shold it be added just _after_ the next timestep
         self.sim[self.prop_delta_cmd] = 0
-        self.sim[self.prop_setpoint] = self.setpoint_value 
         self.last_action = self.sim[self.actuating_prop]
 
     def get_props_to_output(self) -> List[prp.Property]:
-        output_props = self.custom_props + [
-            self.setpoint_prop
-        ]
+        output_props = self.custom_props + [self.setpoint_value_props[0]]
         return output_props
 
+    def change_setpoints(self, new_setpoints: Dict[BoundedProperty, float]):
+        """
+        Changes the setpoints for the AgentTask. The changes will take effect within the next environment step. (call to env.step())
+        The setpoint values are stored within a property in the env's sim object.
+
+        If needed, clean-up actions shall be performed here (like e. g. reset integrators)
+
+        :param new_setpoints: A dictionary with new setpoints to be used. New values overwrite old ones.
+        """
+        for prop, value in new_setpoints.items():
+            try:
+                idx = self.setpoint_props.index(prop)
+                self.sim[self.setpoint_value_props[idx]] = value    #update the setpoints in the sim_object
+                self.sim[self.prop_error_integral] = 0              #reset the integal of the error
+            except ValueError:
+                #ok, it's not in the list, so it's not for me and I can ignore it
+                pass

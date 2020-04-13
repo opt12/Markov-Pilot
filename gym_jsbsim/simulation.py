@@ -46,7 +46,7 @@ class Simulation(object):
         self.initialise(self.sim_dt, self.aircraft.jsbsim_id, init_conditions)
         self.jsbsim.disable_output()
         self.wall_clock_dt = None
-
+    
     def __getitem__(self, prop: Union[prp.BoundedProperty, prp.Property]) -> float:
         """
         Retrieves specified simulation property.
@@ -58,9 +58,12 @@ class Simulation(object):
         :param prop: BoundedProperty, the property to be retrieved
         :return: float
         """
-        return self.jsbsim[prop.name]
+        if isinstance(prop, str):
+            return  self.jsbsim[prop]
+        else:
+            return self.jsbsim[prop.name]
 
-    def __setitem__(self, prop: Union[prp.BoundedProperty, prp.Property], value) -> None:
+    def __setitem__(self, prop: Union[prp.BoundedProperty, prp.Property, str], value) -> None:
         """
         Sets simulation property to specified value.
 
@@ -75,7 +78,10 @@ class Simulation(object):
         :param prop: BoundedProperty, the property to be retrieved
         :param value: object?, the value to be set
         """
-        self.jsbsim[prop.name] = value
+        if isinstance(prop, str):
+            self.jsbsim[prop] = value
+        else:
+            self.jsbsim[prop.name] = value
 
     def load_model(self, model_name: str) -> None:
         """

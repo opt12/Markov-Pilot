@@ -6,11 +6,24 @@ import gym_jsbsim.utils as utils
 class BoundedProperty(collections.namedtuple('BoundedProperty', ['name', 'description', 'min', 'max'])):
     def get_legal_name(self):
         return utils.AttributeFormatter.translate(self.name)
+    def prefixed(self, prefix: str) -> 'BoundedProperty':
+        """
+        returns a new BoundedProperty with the name prefixed by prefix/
 
+        Used to access e. g. setpoints correponding to existing properties in the simulator object
+        """
+        return BoundedProperty (prefix+'/'+self.name, self.description, self.min, self.max)
 
 class Property(collections.namedtuple('Property', ['name', 'description'])):
     def get_legal_name(self):
         return utils.AttributeFormatter.translate(self.name)
+    def prefixed(self, prefix: str) -> 'Property':
+        """
+        returns a new Property with the name prefixed by prefix/
+
+        Used to access e. g. setpoints correponding to existing properties in the simulator object
+        """
+        return Property (prefix+'/'+self.name, self.description)
 
 # to find out about valid properties use something like:
 # JSBSim --aircraft=c172p --catalog > c172p_catalog.txt (deactivate conda environment before!)

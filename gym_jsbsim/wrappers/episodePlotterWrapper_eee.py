@@ -142,7 +142,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         elevatorLine  = pElev.line(data_frame.index*self.step_time, data_frame['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
         errorIntElevLine = pElev.line(data_frame.index*self.step_time, data_frame['error_elevator_int'], line_width=1, color=Viridis4[2], legend_label = "Error Integral.")
         gammaLine = pElev.line(data_frame.index*self.step_time, data_frame['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
-        targetGammaLine = pElev.line(data_frame.index*self.step_time, data_frame['setpoint_elevator_setpoint'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
+        targetGammaLine = pElev.line(data_frame.index*self.step_time, data_frame['setpoint_flight_path_gamma_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
         # aoaLine = pElev.line(data_frame.index*self.step_time, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA", visible = False)
 
         # RollAngle and Aileron
@@ -156,7 +156,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # errorAilLine = pAileron.line(data_frame.index*self.step_time, data_frame['error_aileron_err'],    line_width=1, color=Viridis4[2], legend_label = "Roll angle dev.")
         # deltaAileronLine = pAileron.line(data_frame.index*self.step_time, data_frame['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
         phiLine = pAileron.line(data_frame.index*self.step_time, data_frame['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
-        targetPhiLine = pAileron.line(data_frame.index*self.step_time, data_frame['setpoint_aileron_setpoint'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
+        targetPhiLine = pAileron.line(data_frame.index*self.step_time, data_frame['setpoint_attitude_phi_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
         
 
         #Altitude over ground
