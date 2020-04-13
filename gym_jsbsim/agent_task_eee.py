@@ -408,7 +408,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                 is_done: Callable[['AgentTask'], bool] = None, 
                 change_setpoint_callback: Callable[[float], None] = None,
                 measurement_in_degrees = True, max_allowed_error = 30,
-                integral_limit = float('inf')):
+                integral_limit = float('inf'), integral_decay = 1):
         """
         :param actuating_prop: The actuation variable to be controlled
         :param setpoint: The setpoint property to be used for deviation calculation
@@ -421,6 +421,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
         :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
         :param integral_limit = float('inf'): the limiting value for the error integrator Error integral is clipped to [-integral_limit, integral_limit]
+        :param integral_decay = 1: the decay factor for the integral value
         """
         super(SingleChannel_FlightAgentTask, self).__init__(name, 
                                             make_base_reward_components=make_base_reward_components,
@@ -428,6 +429,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
 
         self.measurement_in_degrees = measurement_in_degrees
         self.max_allowed_error = max_allowed_error
+        self.integral_limit = integral_limit
+        self.integral_decay = integral_decay
 
         #custom properties 
         self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -180, 180)
@@ -496,7 +499,10 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
-        self.sim[self.prop_error_integral] += error * self.dt
+        self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
+                        self.sim[self.prop_error_integral] * self.integral_decay + error,   #TODO: check whether a slope limit is useful as well.
+                        -self.integral_limit, self.integral_limit
+                    )
         self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self.last_action
         self.sim[self.prop_setpoint] = self.setpoint_value 
         self.last_action = self.sim[self.action_props[0]]
