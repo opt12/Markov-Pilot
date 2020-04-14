@@ -5,6 +5,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from collections import namedtuple
+from typing import List
 
 class AgentTrainer(ABC):
     """ 
@@ -16,18 +17,38 @@ class AgentTrainer(ABC):
 
     @abstractmethod
     def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
+        """ determines the action to take from the observation.
+
+        :param obs: The observation to use for action determination
+        :param add_exploration_noise = False: flag to determine whether exploration noise shall be added to the calculated action
+        """
         raise NotImplementedError()
 
     @abstractmethod
     def process_experience(self, obs, act, rew, new_obs, done, terminal):
+        """ Stores the transition tupel (s,a,r,s',done) to the agent's private replay buffer.
+
+        It is up to the agent to classify the quality of the transition to e. g. use a priority replay buffer.
+        However, it is important, that all agents in a multi-agent setup use the training_step%buf_size as an index to
+        the stored transitions, so that the entire state of each step can be extracted form the observations of all agents.
+        """
         raise NotImplementedError()
 
     @abstractmethod
     def preupdate(self):
+        """ Any (clean-up) actions to be performed before the training step.
+        """
         raise NotImplementedError()
 
     @abstractmethod
-    def update(self, agents):
+    def update(self, agents: List['AgentTrainer'], t: int):
+        """ The training step of the agent.
+
+        The other agents can be queried for their experience to reconstruct the entire state in multi agent setups.
+
+        :param agents: The list of all agents taking part in the multi-agent setup. 
+        :param t: The current training step. May be used for delayed update of the target networks
+        """
         raise NotImplementedError()
 
     def reset_notifier(self):   #TODO: get rid of this workaround if possible. Only needed for PID agents
@@ -80,6 +101,6 @@ class PID_Agent(AgentTrainer):
         #PID agent doesn't learn anything and hence doesn't need any experience
         pass
 
-    def update(self, agents):
+    def update(self, agents, t):
         #PID agent doesn't learn anything and hence doesn't need any experience
-        pass
+        return None

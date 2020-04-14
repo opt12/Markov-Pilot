@@ -33,6 +33,9 @@ class AgentTask(ABC):
         The content of the lists must be set for each AgentTask individually.
         Each list entry shall be of type BoundedProperty (TODO: Do I need to define all of them in the properties.py file, or can there be local ones as well?)
         """
+        self.env = None     #we need a reference to the env later on. Shall be injected exactly once by a call to inject_environment() during environment setup
+        self.sim = None     #we need a reference to the sim later on. Shall be injected exactly once by a call to inject_environment() during environment setup
+
         self.name = name                                    # name of the agent, used for the naming of properties
         self.obs_props: List[BoundedProperty] = []          # properties returned to the Agent as observation. Either directly from JSBSim or from custom_props
         self.custom_props: List[BoundedProperty] = []       # properties calculated by the AgentTask. May or may not be part of the obs_props
@@ -90,6 +93,8 @@ class AgentTask(ABC):
         
         It's really easier to consider the AgentTasks as part of the environment with access to the sim object.
         """
+        if self.env:
+            raise ReferenceError('The inject_environment must be called exactly once per AgentTask. Looks like you called it twice.')
         self.env = env
         self.sim = self.env.sim #for caching the simulator object used as data storage
         self.dt  = self.env.dt  #for caching the step-time to calculate the integral

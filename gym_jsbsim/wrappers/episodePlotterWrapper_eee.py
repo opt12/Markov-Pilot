@@ -94,7 +94,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                         os.mkdir(csv_dir_name)
                     filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H:%M:%S")))
                     dataRecorder.to_csv(filename)
-                print(f"available properties for plotting:\n{dataRecorder.keys()}")   #this is handy if you want to change the plot to get the available data headings
+                # print(f"available properties for plotting:\n{dataRecorder.keys()}")   #this is handy if you want to change the plot to get the available data headings
                 self.showGraph(dataRecorder)
 
         return self.newObs_n

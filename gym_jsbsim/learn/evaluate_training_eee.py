@@ -5,11 +5,11 @@ sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? 
 import numpy as np
 import gym_jsbsim.properties as prp
 
-best_score_n = None  #we don't like globals, but it really helps here
+best_score_n = []  #we don't like globals, but it really helps here
 
 def test_net(agents, env, add_exploration_noise=False):
     global best_score_n 
-    if not best_score_n:
+    if len(best_score_n) != env.n:
         best_score_n = np.zeros(env.n)
 
     tgt_flight_path_deg = -6.5

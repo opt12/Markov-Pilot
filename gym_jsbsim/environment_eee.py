@@ -51,7 +51,7 @@ class JsbSimEnv_multi_agent(gym.Env):
     State: Type[namedtuple]
     Actions: Type[namedtuple]
 
-    def __init__(self, task_list, aircraft: Aircraft = cessna172P,
+    def __init__(self, task_list: List['Agent_Task'], aircraft: Aircraft = cessna172P,
                  agent_interaction_freq: int = 5, episode_time_s: float = DEFAULT_EPISODE_TIME_S):
         """
         Constructor. Inits some internal state, and calls JsbSimEnv_multi_agent.reset()
@@ -172,7 +172,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         :return: array, the initial observation of the space.
         """
         self.sim.reinitialise(self.inital_attitude)
-        self.state = self._observe_first_state(self.sim) #TODO: adapt this!
+        self.state = self._observe_first_state()
         self.last_state = self.state #set the last state the same as the first state at start of each episode
 
         if self.flightgear_visualiser:
@@ -183,10 +183,10 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         return self.obs_n
 
-    def _observe_first_state(self, sim: Simulation) -> np.ndarray:
+    def _observe_first_state(self) -> State:
         self._new_episode_init()
         self._initialize_custom_properties()
-        state: NamedTuple(float) = self.State(*(sim[prop] for prop in self.state_props))
+        state: NamedTuple(float) = self.State(*(self.sim[prop] for prop in self.state_props))
         return state
 
     def _initialize_custom_properties(self):
@@ -424,6 +424,8 @@ class JsbSimEnv_multi_agent(gym.Env):
         """
         [t.change_setpoints(setpoints) for t in self.task_list]
 
+    def get_task_list(self) ->List['Agent_Task']:
+        return self.task_list
 class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.

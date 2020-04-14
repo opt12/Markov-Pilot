@@ -5,6 +5,7 @@ plots/
 saves/
 runs/
 checkpoints/
+learning_curves/
 
 gym_jsbsim/__pycache__/
 
