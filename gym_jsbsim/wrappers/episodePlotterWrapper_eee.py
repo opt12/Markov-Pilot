@@ -5,12 +5,19 @@ import numpy as np
 import pandas as pd
 import datetime
 import os
+import math
 import shutil   #to have copyfile available
+from timeit import timeit
+
 from bokeh.io import output_file, show, reset_output, save, export_png
 from bokeh.models import ColumnDataSource, DataTable, TableColumn
-import math
-
-from timeit import timeit
+from bokeh.plotting import figure
+from bokeh.layouts import row, column, gridplot
+from bokeh.io import output_file, show, reset_output, save, export_png
+from bokeh.models.annotations import Title, Legend
+from bokeh.models.widgets.markups import Div
+from bokeh.models import LinearAxis, Range1d
+from bokeh.palettes import Viridis4, Inferno7
 
 class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
 
@@ -39,7 +46,20 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # self.state = np.empty(self.env.observation_space.shape)
         # self.reward = 0.0
         # self.done = False
-        
+
+        #stash away the properties for the individual panels for each AgentTask:
+        self.task_names = [t.name for t in env.task_list]
+        self.panel_contents = {}
+        for i, t in enumerate(env.task_list):
+            reward_component_names = [cmp.name for cmp in t.assessor.base_components]
+            self.panel_contents[t.name] = {'panel1': {'setpoint_value_prop': t.setpoint_value_props[0],
+                                                'action_prop': t.action_props[0],
+                                                'current_value_prop': t.setpoint_props[0]},
+                                           'panel2': {'reward_prop': reward_variables[i],
+                                                'reward_component_names': reward_component_names},
+                                           'panel3': {'obs_props': t.obs_props}
+                                        }
+
         # add the output props coming as step() params in a given order to the recorder dataset 
         step_param_props = state_variables \
                          + reward_variables \
@@ -72,7 +92,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         #let's move on to the next step
         self.newObs_n = self.env.step(actions_n)
         _, reward_n, done_n, info_n = self.newObs_n
-        reward_components_dict_n = [info['reward_components'] for info in info_n]  #TODO: this is all very hacky. Ther must be a smoother way to handle the reward components
+        reward_components_dict_n = [info['reward_components'] for info in info_n]  #TODO: this is all very hacky. There must be a smoother way to handle the reward components
         reward_components_dict = {}
         [reward_components_dict.update(comp_dict) for comp_dict in reward_components_dict_n]
         state = np.array(self.env.state)
@@ -124,112 +144,144 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
 
         return self.obs_n
     
-    def showGraph(self,data_frame):
-        from bokeh.plotting import figure
-        from bokeh.layouts import row, column, gridplot
-        from bokeh.io import output_file, show, reset_output, save, export_png
-        from bokeh.models.annotations import Title, Legend
-        from bokeh.models.widgets.markups import Div
-        from bokeh.models import LinearAxis, Range1d
-        from bokeh.palettes import Viridis4, Inferno7
+    def create_task_panels(self, data_frame):
+        panels = {}
+        top_left_x_range = None
+        for i, t in enumerate(self.env.task_list):
+            panels[t.name]={}
+            # Panel 1: Setpoint and command panel
+            pCtrl = figure(plot_width=800, plot_height=300)
+            ctrl_legend = []
+            # Setting the second y axis range name and range
+            pCtrl.extra_y_ranges = {t.name+'_cmd': Range1d(start=-1, end=1)} # this should query the action space
+            # Adding the second axis to the plot.  
+            pCtrl.add_layout(LinearAxis(y_range_name=t.name+'_cmd', axis_label=t.name+'_cmd [norm.]'), 'right')
+            name = self.panel_contents[t.name]['panel1']['action_prop'].get_legal_name() #maybe there are more entries in the future
+            action_Line  = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
+                                            line_width=1, y_range_name=t.name+'_cmd', color=Viridis4[1])
+            ctrl_legend.append( (t.name+' Cmd.', [action_Line]) )                                            
+            name = self.panel_contents[t.name]['panel1']['current_value_prop'].get_legal_name()
+            current_value_line = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
+                                            line_width=2, color=Viridis4[0])
+            ctrl_legend.append( (name, [current_value_line]) )                                            
+            name = self.panel_contents[t.name]['panel1']['setpoint_value_prop'].get_legal_name()
+            setpoint_value_line = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
+                                            line_width=2, color=Viridis4[3])
+            ctrl_legend.append( (name, [setpoint_value_line]) )                                            
+            
+            ctrl_lg = Legend(items = ctrl_legend, location=(0, 10), glyph_width = 25, label_width = 190)
+            ctrl_lg.click_policy="hide"
+            pCtrl.add_layout(ctrl_lg, 'right')
+            pCtrl.toolbar.active_scroll = pCtrl.toolbar.tools[1]    #this selects the WheelZoomTool instance                                          
+            # Add the title...
+            tCtrl = Title()
+            tCtrl.text = 'Controlled Value over Time'
+            pCtrl.title = tCtrl
+            pCtrl.xaxis.axis_label = 'timestep [s]'
+            pCtrl.yaxis[0].axis_label = 'Controlled Value'
 
-        # GlideAngle and Elevator
-        pElev = figure(plot_width=800, plot_height=400)
-        # Setting the second y axis range name and range
-        pElev.extra_y_ranges = {"elevator": Range1d(start=-1, end=1)}
-        # Adding the second axis to the plot.  
-        pElev.add_layout(LinearAxis(y_range_name="elevator", axis_label="Elevator Cmd [norm.]"), 'right')
-        elevatorLine  = pElev.line(data_frame.index*self.step_time, data_frame['fcs_elevator_cmd_norm'], line_width=1, y_range_name="elevator", color=Viridis4[1], legend_label = "Elevator Cmd.")
-        errorIntElevLine = pElev.line(data_frame.index*self.step_time, data_frame['error_elevator_int'], line_width=1, color=Viridis4[2], legend_label = "Error Integral.")
-        gammaLine = pElev.line(data_frame.index*self.step_time, data_frame['flight_path_gamma_deg'], line_width=2, color=Viridis4[0], legend_label="Path angle")
-        targetGammaLine = pElev.line(data_frame.index*self.step_time, data_frame['setpoint_flight_path_gamma_deg'], line_width=2, color=Viridis4[3], legend_label="Target Path angle")
-        # aoaLine = pElev.line(data_frame.index*self.step_time, data_frame['aero_alpha_deg'], line_width=1, color=Viridis4[2], legend_label="AoA", visible = False)
+            if not top_left_x_range:
+                top_left_x_range = pCtrl.x_range
+            else: 
+                pCtrl.x_range = top_left_x_range
+            panels[t.name].update({'panel1': pCtrl})
 
-        # RollAngle and Aileron
-        pAileron = figure(plot_width=800, plot_height=400, x_range=pElev.x_range)
-        # Setting the second y axis range name and range
-        pAileron.extra_y_ranges = {"aileron": Range1d(start=-1, end=1)}
-        # Adding the second axis to the plot.  
-        pAileron.add_layout(LinearAxis(y_range_name="aileron", axis_label="Aileron Cmd [norm.]"), 'right')
+            #Panel 2: Rewards and reward components
+            pRwd = figure(plot_width=1057, plot_height=300, x_range=top_left_x_range)
+            rwd_cmp_lines = []
+            reward_legend = []
 
-        aileronLine  = pAileron.line(data_frame.index*self.step_time, data_frame['fcs_aileron_cmd_norm'], line_width=1, y_range_name="aileron", color=Viridis4[1], legend_label = "Aileron Cmd.")
-        # errorAilLine = pAileron.line(data_frame.index*self.step_time, data_frame['error_aileron_err'],    line_width=1, color=Viridis4[2], legend_label = "Roll angle dev.")
-        # deltaAileronLine = pAileron.line(data_frame.index*self.step_time, data_frame['info_delta_cmd_aileron'], line_width=1, y_range_name="aileron", color=Viridis4[2], legend_label = "Δ Ail. Cmd.")
-        phiLine = pAileron.line(data_frame.index*self.step_time, data_frame['attitude_phi_deg'], line_width=2, color=Viridis4[0], legend_label="Roll angle")
-        targetPhiLine = pAileron.line(data_frame.index*self.step_time, data_frame['setpoint_attitude_phi_deg'], line_width=2, color=Viridis4[3], legend_label="Target Roll angle")
+            name = self.panel_contents[t.name]['panel2']['reward_prop'].get_legal_name()
+            reward_line = pRwd.line(data_frame.index*self.step_time, data_frame[name], line_width=2, color=Viridis4[3])
+            reward_legend.append( (name, [reward_line]) )
+
+            cmp_names = self.panel_contents[t.name]['panel2']['reward_component_names']
+            for idx, rwd_component in enumerate(cmp_names):
+                rwd_cmp_lines.append (
+                    pRwd.line(data_frame.index*self.step_time, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
+                )
+                reward_legend.append( (rwd_component, [rwd_cmp_lines[-1]]) )
+            reward_lg = Legend(items = reward_legend, location=(48, 10), glyph_width = 25, label_width = 190)
+            reward_lg.click_policy="hide"
+            pRwd.add_layout(reward_lg, 'right')
+            pRwd.toolbar.active_scroll = pRwd.toolbar.tools[1]    #this selects the WheelZoomTool instance                                          
+            #Add the title
+            tReward = Title()
+            tReward.text = f'{t.name}: actual Reward over {data_frame[name].size} Timesteps (∑ = {data_frame[name].sum():.2f})'
+            pRwd.title = tReward
+            pRwd.xaxis.axis_label = 'timestep [s]'
+            pRwd.yaxis[0].axis_label = 'actual Reward [norm.]'
+            panels[t.name].update({'panel2' : pRwd})
+
+
+            #Panel 3: Presented Observations
+            pState = figure(plot_width=1057, plot_height=300, x_range=top_left_x_range)
+            # Setting the second y axis range name and range
+            norm_state_extents = 10
+            pState.extra_y_ranges = {"normalized_data": Range1d(start=-norm_state_extents, end=norm_state_extents )}
+            # Adding the second axis to the plot.  
+            pState.add_layout(LinearAxis(y_range_name="normalized_data", axis_label="normalized data"), 'right')
+            state_lines = []
+            state_legend = []
+            normalized_state_lines = []
+            obs_props_names = [o_prp.get_legal_name() for o_prp in self.panel_contents[t.name]['panel3']['obs_props']]
+            for idx, state_name in enumerate(obs_props_names):
+                if(data_frame[state_name].max() <= norm_state_extents and data_frame[state_name].min() >= -norm_state_extents):
+                    normalized_state_lines.append(
+                        pState.line(data_frame.index*self.step_time, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7], visible=False)
+                    )
+                    state_legend.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
+                else:     
+                    state_lines.append(
+                        pState.line(data_frame.index*self.step_time, data_frame[state_name], line_width=2, color=Inferno7[idx%7], visible=False)
+                    )
+                    state_legend.append( (state_name, [state_lines[-1]]) )                    
+            pState.y_range.renderers = state_lines
+            pState.extra_y_ranges.renderers = normalized_state_lines    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
+
+            lg_state = Legend(items = state_legend, location=(0, 10), glyph_width = 25, label_width = 190)
+            lg_state.click_policy="hide"
+            pState.add_layout(lg_state, 'right')
+            pState.toolbar.active_scroll = pState.toolbar.tools[1]    #this selects the WheelZoomTool instance                                          
+            #Add the title
+            tState = Title()
+            tState.text = 'Actual Observation presented to Agent'
+            pState.title = tState
+            pState.xaxis.axis_label = 'timestep [s]'
+            pState.yaxis[0].axis_label = 'state data'
+
+            panels[t.name].update({'panel3': pState})
         
+        return panels
+
+
+    def showGraph(self,data_frame):
+
+        #create the plot panels for the Agent_Tasks
+        panels = self.create_task_panels(data_frame)
+
+        top_left_x_range = panels[list(panels.keys())[0]]['panel1'].x_range
 
         #Altitude over ground
-        pAltitude = figure(plot_width=800, plot_height=300, x_range=pElev.x_range)
+        pAltitude = figure(plot_width=800, plot_height=300, x_range=top_left_x_range)
+        alti_legend = []
         # Setting the second y axis range name and range
         pAltitude.extra_y_ranges = {"speed": Range1d(50, 120)}
         # Adding the second axis to the plot.  
         pAltitude.add_layout(LinearAxis(y_range_name="speed", axis_label="IAS, TAS [Knots]"), 'right')
 
-        altitudeLine = pAltitude.line(data_frame.index*self.step_time, data_frame['position_h_sl_ft'], line_width=2, color=Viridis4[2], legend_label = "Altitude [ftsl]")
-        kiasLine = pAltitude.line(data_frame.index*self.step_time, data_frame['velocities_vc_kts'], line_width=2, y_range_name="speed", color=Viridis4[1], legend_label = "Indicated Airspeed [KIAS]")
-        tasLine = pAltitude.line(data_frame.index*self.step_time, data_frame['velocities_vtrue_kts'], line_width=2, y_range_name="speed", color=Viridis4[0], legend_label = "True Airspeed [KAS]")
+        altitudeLine = pAltitude.line(data_frame.index*self.step_time, data_frame['position_h_sl_ft'], line_width=2, color=Viridis4[2])
+        alti_legend.append( ("Altitude [ftsl]", [altitudeLine]) ) 
+        kiasLine = pAltitude.line(data_frame.index*self.step_time, data_frame['velocities_vc_kts'], line_width=2, y_range_name="speed", color=Viridis4[1])
+        alti_legend.append( ("Indicated Airspeed [KIAS]", [kiasLine]) ) 
+        tasLine = pAltitude.line(data_frame.index*self.step_time, data_frame['velocities_vtrue_kts'], line_width=2, y_range_name="speed", color=Viridis4[0])
+        alti_legend.append( ("True Airspeed [KAS]", [tasLine]) ) 
         pAltitude.extra_y_ranges.renderers = [kiasLine, tasLine]    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
         pAltitude.y_range.renderers = [altitudeLine]
 
-        # # Presented state
-        # pState = figure(plot_width=1157, plot_height=300, x_range=pElev.x_range)
-        # # Setting the second y axis range name and range
-        # norm_state_extents = 10
-        # pState.extra_y_ranges = {"normalized_data": Range1d(start=-norm_state_extents, end=norm_state_extents )}
-        # # Adding the second axis to the plot.  
-        # pState.add_layout(LinearAxis(y_range_name="normalized_data", axis_label="normalized data"), 'right')
-        # state_lines = []
-        # state_legend = []
-        # normalized_state_lines = []
-        # if self.presented_state:
-        #     for idx, state_name in enumerate(self.presented_state):
-        #         if(data_frame[state_name].max() <= norm_state_extents and data_frame[state_name].min() >= -norm_state_extents):
-        #             normalized_state_lines.append(
-        #                 pState.line(data_frame.index*self.step_time, data_frame[state_name], line_width=2, y_range_name="normalized_data", color=Inferno7[idx%7], visible=False)
-        #             )
-        #             state_legend.append( ("norm_"+state_name, [normalized_state_lines[-1]]) )                    
-        #         else:     
-        #             state_lines.append(
-        #                 pState.line(data_frame.index*self.step_time, data_frame[state_name], line_width=2, color=Inferno7[idx%7], visible=False)
-        #             )
-        #             state_legend.append( (state_name, [state_lines[-1]]) )                    
-        #     pState.y_range.renderers = state_lines
-        #     pState.extra_y_ranges.renderers = normalized_state_lines    #this does not quite work: https://stackoverflow.com/questions/48631530/bokeh-twin-axes-with-datarange1d-not-well-scaling
-
-        # lg_state = Legend(items = state_legend, location=(0, 0), glyph_width = 25, label_width = 290)
-        # lg_state.click_policy="hide"
-        # pState.add_layout(lg_state, 'right')
-
-        # #Reward
-        # pReward = figure(plot_width=1157, plot_height=300, x_range=pElev.x_range)
-        # rwd_cmp_lines = []
-        # reward_legend = []
-        # rewardLine = pReward.line(data_frame.index*self.step_time, data_frame['reward'], line_width=2, color=Viridis4[3])
-        # reward_legend.append( ("actual Reward", [rewardLine]) )
-        # for idx, rwd_component in enumerate(self.reward_components_dict.keys()):
-        #     rwd_cmp_lines.append (
-        #         pReward.line(data_frame.index*self.step_time, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
-        #     )
-        #     reward_legend.append( (rwd_component, [rwd_cmp_lines[-1]]) )
-        # reward_lg = Legend(items = reward_legend, location=(48, 0), glyph_width = 25, label_width = 290)
-        # reward_lg.click_policy="hide"
-        # pReward.add_layout(reward_lg, 'right')
-
-
-        tElev = Title()
-        tElev.text = 'Flight Angle over Timesteps'
-        pElev.title = tElev
-        pElev.xaxis.axis_label = 'timestep [s]'
-        pElev.yaxis[0].axis_label = 'Glide Path Angle [deg]'
-        pElev.legend.click_policy="hide"
-
-        tAil = Title()
-        tAil.text = 'Roll Angle over Timesteps'
-        pAileron.title = tAil
-        pAileron.xaxis.axis_label = 'timestep [s]'
-        pAileron.yaxis[0].axis_label = 'Roll Angle [deg]'
-        pAileron.legend.click_policy="hide"
+        lg_alti = Legend(items = alti_legend, location=(0, 10), glyph_width = 25, label_width = 190)
+        lg_alti.click_policy="hide"
+        pAltitude.add_layout(lg_alti, 'right')
 
         tAlti = Title()
         tAlti.text = 'Altitude and Speed [IAS, TAS] over Timesteps'
@@ -237,29 +289,10 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         pAltitude.xaxis.axis_label = 'timestep [s]'
         pAltitude.yaxis[0].axis_label = 'Altitude [ftsl]'
         pAltitude.legend.location="center_right"
-        pAltitude.legend.click_policy="hide"
-
-        # tReward = Title()
-        # tReward.text = 'actual Reward over Timesteps'
-        # pReward.title = tReward
-        # pReward.xaxis.axis_label = 'timestep [s]'
-        # pReward.yaxis[0].axis_label = 'actual Reward [norm.]'
-
-
-        # tState = Title()
-        # tState.text = 'actual State presentation to Agent'
-        # # pState.title = tReward
-        # pState.xaxis.axis_label = 'timestep [s]'
-        # pState.yaxis[0].axis_label = 'state data'
-
 
         #activate the zooming on all plots
         #this is not nice, but this not either: https://stackoverflow.com/questions/49282688/how-do-i-set-default-active-tools-for-a-bokeh-gridplot
-        pElev.toolbar.active_scroll = pElev.toolbar.tools[1]    #this selects the WheelZoomTool instance 
-        pAileron.toolbar.active_scroll = pAileron.toolbar.tools[1]    #this selects the WheelZoomTool instance 
         pAltitude.toolbar.active_scroll = pAltitude.toolbar.tools[1]    #this selects the WheelZoomTool instance 
-        # pReward.toolbar.active_scroll = pReward.toolbar.tools[1]    #this selects the WheelZoomTool instance 
-        # pState.toolbar.active_scroll = pState.toolbar.tools[1]    #this selects the WheelZoomTool instance 
 
         reset_output()
 
@@ -269,7 +302,14 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # else: 
         #     discriminator = self.env.meta_dict['model_discriminator']
 
-        grid = gridplot([[pElev, pAileron], [pAltitude, None]])
+        panel_grid_t = [ [panels[name]['panel1'],panels[name]['panel2'],panels[name]['panel3']] for name in self.task_names]
+        panel_grid= list(zip(*panel_grid_t))
+
+        # add the additional plots
+        panel_grid.append([pAltitude, None])
+        
+        panel_grid_plot = gridplot(panel_grid, toolbar_location='left', sizing_mode='stretch_width')
+
         #for string formatting look here: https://pyformat.info/
 
         titleString = "Run Date: {}; ".format(datetime.datetime.now().strftime("%c"))
@@ -277,21 +317,22 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             titleString += "Episode: {}; ".format(self.env.meta_dict['episode_number'])
         # titleString += "Total Reward: {:.2f}; ".format(data_frame['reward'].sum())
         # titleString += "Model Discriminator: {};".format(self.env.meta_dict['model_discriminator'])
-        webpage = column(
+        header_col = column(
             Div(text="<h1>" + self.env.unwrapped.spec.id + 
             (" - " + self.env.meta_dict['env_info']) if 'env_info' in self.meta_dict else "" + 
             "</h1>"), 
-            Div(text="<h2>"+titleString+"</h2>"), 
-            grid)
+            Div(text="<h2>"+titleString+"</h2>")) 
+
+        grid = gridplot([[header_col],[panel_grid_plot]], toolbar_location=None, sizing_mode='stretch_width')
 
         html_output_name = os.path.join(self.dirname, 'glideAngle_Elevator_latest.html')
         if self.showNextPlotFlag:
             output_file(html_output_name, mode='absolute') #use mode='absolute' to make it work offline with the js and css installed in the bokeh package locally
             if self.firstRun:
-                show(webpage)  #opens up a new browser window
+                show(grid)  #opens up a new browser window
                 self.firstRun = False
             else:
-                save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
+                save(grid)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
 
         
         # if self.exportNextPlotFlag:
