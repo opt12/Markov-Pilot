@@ -19,8 +19,8 @@ def test_net(agents, env, add_exploration_noise=False):
     initial_fwd_speed_KAS        = 75
     initial_aoa_deg              = 1.0
 
-    env.change_setpoints({ prp.setpoint_flight_path_deg: tgt_flight_path_deg
-                         , prp.setpoint_roll_angle_deg:  tgt_roll_angle_deg
+    env.change_setpoints({ prp.flight_path_deg: tgt_flight_path_deg
+                         , prp.roll_deg:  tgt_roll_angle_deg
                         })
     env.set_initial_conditions( { prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
                                 , prp.initial_flight_path_deg: initial_path_angle_gamma_deg

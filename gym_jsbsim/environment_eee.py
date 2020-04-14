@@ -183,7 +183,7 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         return self.obs_n
 
-    def _observe_first_state(self) -> State:
+    def _observe_first_state(self) -> 'State':
         self._new_episode_init()
         self._initialize_custom_properties()
         state: NamedTuple(float) = self.State(*(self.sim[prop] for prop in self.state_props))

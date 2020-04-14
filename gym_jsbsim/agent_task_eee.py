@@ -517,13 +517,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
     def initialize_custom_properties(self):
         """ Initializes all the custom properties to start values
 
-        Resets the setpints to the initial values
-
         TODO: check if this can integrated with update_custom_properties
         """
-        #reset setpoints to initial values:
-        for sp, val in zip(self.setpoint_value_props, self.initial_setpoint_values):
-            self.sim[sp] = val
         #now set the custom_props to the start-of-episode values
         error = self.sim[self.setpoint_props[0]] - self.sim[self.setpoint_value_props[0]]    #only one setpoint in SingleChannel_FlightAgentTask
         if self.measurement_in_degrees:
