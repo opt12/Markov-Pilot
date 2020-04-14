@@ -463,7 +463,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         # self.change_setpoint_callback = change_setpoint_callback    #to notify the PID Agent that there is a new setpoint in effect
         # self.change_setpoints(setpoints) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
 
-        self.assessor = self._make_assessor()   #this can only be called after the preparattion of all necessary props
+        self.assessor = self._make_assessor()   #this can only be called after the preparation of all necessary props
         self.print_info()
 
     def _make_base_reward_components(self):     #may be overwritten by injected custom function
@@ -508,7 +508,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
         self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
-                        self.sim[self.prop_error_integral] * self.integral_decay + error,   #TODO: check whether a slope limit is useful as well.
+                        self.sim[self.prop_error_integral] * self.integral_decay + error * self.dt,   #TODO: check whether a slope limit is useful as well.
                         -self.integral_limit, self.integral_limit
                     )
         self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self.last_action
