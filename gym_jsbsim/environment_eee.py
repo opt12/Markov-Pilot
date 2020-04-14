@@ -45,7 +45,7 @@ class JsbSimEnv_multi_agent(gym.Env):
     INITIAL_HEADING_DEG_default = 270
     DEFAULT_EPISODE_TIME_S = 120.
 
-    metadata = {'render.modes': ['human', 'flightgear', 'timeline']}
+    metadata = {'render.modes': ['human', 'flightgear', 'timeline']}    # TODO:: fix the rendering and include the bokeh episode plotting
     state_props: Tuple[Property, ...]
     # action_variables: Tuple[Property, ...]
     State: Type[namedtuple]
@@ -316,7 +316,7 @@ class JsbSimEnv_multi_agent(gym.Env):
                           init_conditions=initial_conditions,
                           allow_flightgear_output=True)
     # @timeit
-    def render(self, mode='flightgear', flightgear_blocking=True):
+    def render(self, mode='flightgear', flightgear_blocking=True):  #TODO:: fix the rendering and include the bokeh episode plotting
         """Renders the environment.
         The set of supported modes varies per environment. (And some
         environments do not support rendering at all.) By convention,
@@ -424,25 +424,25 @@ class JsbSimEnv_multi_agent(gym.Env):
         """
         [t.change_setpoints(setpoints) for t in self.task_list]
 
-# class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
-#     """
-#     An RL environment for JSBSim with rendering to FlightGear disabled.
+class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
+    """
+    An RL environment for JSBSim with rendering to FlightGear disabled.
 
-#     This class exists to be used for training agents where visualisation is not
-#     required. Otherwise, restrictions in JSBSim output initialisation cause it
-#     to open a new socket for every single episode, eventually leading to
-#     failure of the network.
-#     """
-#     metadata = {'render.modes': ['human']}
+    This class exists to be used for training agents where visualisation is not
+    required. Otherwise, restrictions in JSBSim output initialisation cause it
+    to open a new socket for every single episode, eventually leading to
+    failure of the network.
+    """
+    metadata = {'render.modes': ['human', 'timeline']}  #TODO:: fix the rendering and include the bokeh episode plotting
 
-#     def _init_new_sim(self, dt: float, aircraft: Aircraft, initial_conditions: Dict):
-#         return Simulation(sim_frequency_hz=dt,
-#                           aircraft=aircraft,
-#                           init_conditions=initial_conditions,
-#                           allow_flightgear_output=False)
+    def _init_new_sim(self, dt: float, aircraft: Aircraft, initial_conditions: Dict):
+        return Simulation(sim_frequency_hz=dt,
+                          aircraft=aircraft,
+                          init_conditions=initial_conditions,
+                          allow_flightgear_output=False)
 
-#     def render(self, mode='human', flightgear_blocking=True):
-#         if mode == 'flightgear':
-#             raise ValueError('flightgear rendering is disabled for this class')
-#         else:
-#             super().render(mode, flightgear_blocking)
+    def render(self, mode='human', flightgear_blocking=True):   #TODO:: fix the rendering and include the bokeh episode plotting
+        if mode == 'flightgear':
+            raise ValueError('flightgear rendering is disabled for this class')
+        else:
+            super().render(mode, flightgear_blocking)
