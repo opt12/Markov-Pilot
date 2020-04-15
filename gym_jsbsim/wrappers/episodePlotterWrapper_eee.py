@@ -17,7 +17,7 @@ from bokeh.io import output_file, show, reset_output, save, export_png
 from bokeh.models.annotations import Title, Legend
 from bokeh.models.widgets.markups import Div
 from bokeh.models import LinearAxis, Range1d
-from bokeh.palettes import Viridis4, Inferno7
+from bokeh.palettes import Viridis7, Viridis4, Inferno7
 
 class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
 
@@ -191,16 +191,17 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             rwd_cmp_lines = []
             reward_legend = []
 
-            name = self.panel_contents[t.name]['panel2']['reward_prop'].get_legal_name()
-            reward_line = pRwd.line(data_frame.index*self.step_time, data_frame[name], line_width=2, color=Viridis4[3])
-            reward_legend.append( (name, [reward_line]) )
-
             cmp_names = self.panel_contents[t.name]['panel2']['reward_component_names']
             for idx, rwd_component in enumerate(cmp_names):
                 rwd_cmp_lines.append (
-                    pRwd.line(data_frame.index*self.step_time, data_frame[rwd_component], line_width=2, color=Viridis4[idx%4])
+                    pRwd.line(data_frame.index*self.step_time, data_frame[rwd_component], line_width=2, color=Viridis7[idx%6])
                 )
                 reward_legend.append( (rwd_component, [rwd_cmp_lines[-1]]) )
+
+            name = self.panel_contents[t.name]['panel2']['reward_prop'].get_legal_name()
+            reward_line = pRwd.line(data_frame.index*self.step_time, data_frame[name], line_width=2, color=Viridis7[6])
+            reward_legend.append( (name, [reward_line]) )
+
             reward_lg = Legend(items = reward_legend, location=(48, 10), glyph_width = 25, label_width = 190)
             reward_lg.click_policy="hide"
             pRwd.add_layout(reward_lg, 'right')
@@ -308,7 +309,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # add the additional plots
         panel_grid.append([pAltitude, None])
         
-        panel_grid_plot = gridplot(panel_grid, toolbar_location='left', sizing_mode='stretch_width')
+        panel_grid_plot = gridplot(panel_grid, toolbar_location='right', sizing_mode='stretch_width')
 
         #for string formatting look here: https://pyformat.info/
 
