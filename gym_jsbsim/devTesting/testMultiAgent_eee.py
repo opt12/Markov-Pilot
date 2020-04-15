@@ -3,11 +3,14 @@ sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? 
 
 import argparse
 import time
+import os
+import csv
+import datetime
 import pickle
 import numpy as np
 
 from gym_jsbsim.agent_task_eee import SingleChannel_FlightAgentTask
-from gym_jsbsim.agents.pidAgent_eee import PID_Agent, PidParameters
+from gym_jsbsim.agents.pidAgent_eee import PID_Agent, PidParameters, SingleDDPG_Agent
 from gym_jsbsim.environment_eee import NoFGJsbSimEnv_multi_agent
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
 import gym_jsbsim.properties as prp
@@ -27,7 +30,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Environment
     # parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
     parser.add_argument("--max-episode-len-sec", type=int, default=120, help="maximum episode length in seconds (steps = seconds*interaction frequ.)")
-    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes to train on")
+    parser.add_argument("--num-episodes", type=int, default=10000, help="number of episodes to train on")
     # parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     # parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     # parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
@@ -35,6 +38,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Core training parameters
     parser.add_argument("--lr_actor", type=float, default=1e-4, help="learning rate for the actor training Adam optimizer")
     parser.add_argument("--lr_critic", type=float, default=1e-3, help="learning rate for the critic training Adam optimizer")
+    parser.add_argument("--tau", type=float, default=0.0001, help="target network adaptation factor")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=64, help="number of episodes to optimize at the same time")
     parser.add_argument("--replay-size", type=int, default=1000000, help="size of the replay buffer")
@@ -51,6 +55,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     parser.add_argument("--testing-iters", type=int, default=2000, help="number of steps before running a performance test")
     parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
+    parser.add_argument("--base-dir", type=str, default="./", help="directory the test_run date is saved")
     return parser.parse_args()
 
 def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
@@ -58,10 +63,14 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     episode_time_s=arglist.max_episode_len_sec
 
     elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5},
+                                presented_state=[],
                                 make_base_reward_components= make_glide_angle_reward_components)
 
-    aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, max_allowed_error= 60, 
-                                make_base_reward_components= make_roll_angle_reward_components)
+    aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, 
+                                presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_reward_components,
+                                integral_limit = 0.25)
 
     agent_task_list = [elevator_AT, aileron_AT]
     
@@ -86,9 +95,13 @@ def get_trainers(env, arglist):
             pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
             trainers.append(pid_elevator_agent)
         if at.name == 'aileron':
-            aileron_pid_params = PidParameters(3.5e-2,    1e-2,   0.0)
-            pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            trainers.append(pid_aileron_agent)
+            input_shape = at.get_state_space().shape
+            n_actions = at.get_action_space().shape[0]
+            aileron_agent = SingleDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
+                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
+                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            trainers.append(aileron_agent)
     
     if len(trainers) != len(agent_tasks):
         raise LookupError('there must be an agent for each and every Agent_Task in the environment')
@@ -122,7 +135,7 @@ def train(arglist):
     print('Starting iterations...')
     while True:
         # get action
-        action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
+        action_n = [agent.action(obs, add_exploration_noise=True) for agent, obs in zip(trainers,obs_n)]
         # environment step
         new_obs_n, rew_n, done_n, _ = training_env.step(action_n)   #no need to process info_n
         episode_step += 1
@@ -153,9 +166,12 @@ def train(arglist):
 
         # for benchmarking learned policies run the current agents on the testing_env
         if train_step % arglist.testing_iters == 0:
+            t_end = time.time()
+            print(f"train_step {train_step}, Episode {episode_counter}: performed {arglist.testing_iters} steps in {t_end-t_start:.2f} seconds; that's {arglist.testing_iters/(t_end-t_start):.2f} steps/sec")
             testing_env.set_meta_information(episode_number = episode_counter)
             testing_env.showNextPlot(True)
             test_net(trainers, testing_env, add_exploration_noise=False)    #run the standardized test on the test_env
+            t_start = time.time()
 
         # env.render(mode='flightgear') #not really useful in training
 
@@ -196,12 +212,51 @@ def train(arglist):
             break
 
 
+def save_test_run(basedir, arglist, env, trainers):
+    """
+    - creates a suitable directory for the test run
+    - adds a sidecar file containing the meta information on the run (dict saved as pickle)
+    - adds a text file containing the meta information on the run
+    - add a line to the global csv-file for the test run
+    """
+    agent_task_names = '_'.join([t.name for t in env.task_list])
+    run_start = datetime.datetime.now()
+    date = run_start.strftime("%Y_%m_%d")
+    time = run_start.strftime("%H_%M")
+    path = os.path.join(basedir, 'testruns', env.aircraft.name, agent_task_names, date+'-'+time)
+    #create the base directory for this test_run
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    #create the directories for each agent_task
+    [os.makedirs(os.path.join(path, at.name), exist_ok=True) for at in env.task_list]
+
+    #create a sidecar file containing the meta information of the test_run
+    trainer_classes_dict = {tr.name: tr.__class__.__name__ for tr in trainers}
+    agent_task_classes_dict = {at.name: at.__class__.__name__ for at in env.task_list}
+    meta_dir = {
+        'date': run_start.strftime("%d.%m.%Y"),
+        'time': run_start.strftime("%H:%M:%S"),
+        'path': 'file://'+os.path.abspath(path), 
+        'trainer_classes': trainer_classes_dict,
+        'agent_task_classes': agent_task_classes_dict
+    }
+    meta_dir.update(vars(arglist))
+
+    csv_exists = os.path.isfile(os.path.join(basedir, 'testruns', 'lab_journal.csv'))
+    with open(os.path.join(basedir, 'testruns', 'lab_journal.csv'), 'a') as f:   # TODO: add some sensible information there
+        w = csv.DictWriter(f, ['date', 'time', 'path', 'agent_task_classes', 'trainer_classes'] + list(vars(arglist).keys()))
+        if not csv_exists:
+            w.writeheader()
+        w.writerow(meta_dir)    #look here for nested dicts
+
+
 if __name__ == '__main__':
     arglist = parse_args()
     training_env = setup_env(arglist)
-
     testing_env = setup_env(arglist)
     trainers = get_trainers(training_env, arglist)
+
+    save_test_run(arglist.base_dir, arglist, training_env, trainers)
+
     train(arglist)
     
     training_env.close()
