@@ -32,12 +32,12 @@ class OUActionNoise(object):
                                                             self.mu, self.sigma)
 
 class ReplayBuffer(object):
-    def __init__(self, max_size, input_shape, n_actions):
+    def __init__(self, max_size, input_shape, own_actions):
         self.mem_size = max_size
         self.mem_cntr = 0
         self.state_memory = np.zeros((self.mem_size, *input_shape))
         self.new_state_memory = np.zeros((self.mem_size, *input_shape))
-        self.action_memory = np.zeros((self.mem_size, n_actions))
+        self.action_memory = np.zeros((self.mem_size, own_actions))
         self.reward_memory = np.zeros(self.mem_size)
         self.terminal_memory = np.zeros(self.mem_size, dtype=np.float32)    #to save the done flags in terminal states
 
@@ -64,15 +64,15 @@ class ReplayBuffer(object):
         return states, actions, rewards, states_, terminal
 
 class CriticNetwork(nn.Module):
-    def __init__(self, beta, input_dims, fc1_dims, fc2_dims, n_actions, name,
+    def __init__(self, beta, own_input_dims, fc1_dims, fc2_dims, own_actions, name,
                  chkpt_dir='tmp/ddpg'):
         super(CriticNetwork, self).__init__()
-        self.input_dims = input_dims
+        self.own_input_dims = own_input_dims
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.n_actions = n_actions
+        self.own_actions = own_actions
         self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
-        self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)
+        self.fc1 = nn.Linear(*self.own_input_dims, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])     #weight initialization according to DDPD-paper
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
         T.nn.init.uniform_(self.fc1.bias.data, -f1, f1)
@@ -89,7 +89,7 @@ class CriticNetwork(nn.Module):
         #self.fc2.bias.data.uniform_(-f2, f2)
         self.bn2 = nn.LayerNorm(self.fc2_dims)
 
-        self.action_value = nn.Linear(self.n_actions, self.fc2_dims)
+        self.action_value = nn.Linear(self.own_actions, self.fc2_dims)
         f3 = 3e-3
         self.q = nn.Linear(self.fc2_dims, 1)        #the Critic output is just a single scalar Q-value;
         T.nn.init.uniform_(self.q.weight.data, -f3, f3)
@@ -125,15 +125,15 @@ class CriticNetwork(nn.Module):
         self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
 
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, input_dims, fc1_dims, fc2_dims, n_actions, name,
+    def __init__(self, alpha, own_input_dims, fc1_dims, fc2_dims, own_actions, name,
                  chkpt_dir='tmp/ddpg'):
         super(ActorNetwork, self).__init__()
-        self.input_dims = input_dims
+        self.own_input_dims = own_input_dims
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.n_actions = n_actions
+        self.own_actions = own_actions
         self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
-        self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)
+        self.fc1 = nn.Linear(*self.own_input_dims, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
         T.nn.init.uniform_(self.fc1.bias.data, -f1, f1)
@@ -152,7 +152,7 @@ class ActorNetwork(nn.Module):
 
         #f3 = 0.004
         f3 = 0.003
-        self.mu = nn.Linear(self.fc2_dims, self.n_actions)
+        self.mu = nn.Linear(self.fc2_dims, self.own_actions)
         T.nn.init.uniform_(self.mu.weight.data, -f3, f3)
         T.nn.init.uniform_(self.mu.bias.data, -f3, f3)
         #self.mu.weight.data.uniform_(-f3, f3)
@@ -183,45 +183,47 @@ class ActorNetwork(nn.Module):
         self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
 
 class Agent(object):
-    def __init__(self, lr_actor, lr_critic, input_dims, tau, env, gamma=0.99,
-                 n_actions=2, max_size=1000000, layer1_size=400,
+    def __init__(self, lr_actor, lr_critic, own_input_dims, tau, 
+                 #env, 
+                 gamma=0.99,
+                 own_actions=2, max_size=1000000, layer1_size=400,
                  layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
         #default values for noise
         self.noise_sigma = noise_sigma
         self.noise_theta = noise_theta
 
-        self.env = env #TODO: this is only to set the meta_information, so the env parameter could be eliminated entirely
+        # self.env = env #TODO: this is only to set the meta_information, so the env parameter could be eliminated entirely
 
-        self.n_actions = n_actions
+        self.own_actions = own_actions
         self.gamma = gamma
         self.tau = tau
-        self.memory = ReplayBuffer(max_size, input_dims, n_actions)
+        self.memory = ReplayBuffer(max_size, own_input_dims, own_actions)
         self.batch_size = batch_size
         
         self.chkpt_postfix = '_'+chkpt_postfix if chkpt_postfix != '' else ''
-        self.chkpt_dir= f"checkpoints/{chkpt_dir}/inputs_{input_dims}_actions_{n_actions}/layer1_{layer1_size}_layer2_{layer2_size}/"
+        self.chkpt_dir= f"checkpoints/{chkpt_dir}/inputs_{own_input_dims}_actions_{own_actions}/layer1_{layer1_size}_layer2_{layer2_size}/"
         Path(self.chkpt_dir).mkdir(parents=True, exist_ok=True)
         
         print(f"set checkpoint directory to: {self.chkpt_dir}")
 
-        self.actor = ActorNetwork(lr_actor, input_dims, layer1_size,
-                                  layer2_size, n_actions=n_actions,
+        self.actor = ActorNetwork(lr_actor, own_input_dims, layer1_size,
+                                  layer2_size, own_actions=own_actions,
                                   name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
-        self.critic = CriticNetwork(lr_critic, input_dims, layer1_size,
-                                    layer2_size, n_actions=n_actions,
+        self.critic = CriticNetwork(lr_critic, own_input_dims, layer1_size,
+                                    layer2_size, own_actions=own_actions,
                                     name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
 
-        self.target_actor = ActorNetwork(lr_actor, input_dims, layer1_size,
-                                         layer2_size, n_actions=n_actions,
+        self.target_actor = ActorNetwork(lr_actor, own_input_dims, layer1_size,
+                                         layer2_size, own_actions=own_actions,
                                          name='TargetActor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
-        self.target_critic = CriticNetwork(lr_critic, input_dims, layer1_size,
-                                           layer2_size, n_actions=n_actions,
+        self.target_critic = CriticNetwork(lr_critic, own_input_dims, layer1_size,
+                                           layer2_size, own_actions=own_actions,
                                            name='TargetCritic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
 
-        # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)
-        self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
+        # self.noise = OUActionNoise(mu=np.zeros(own_actions),sigma=0.15, theta=.2, dt=1/5.)
+        self.noise = OUActionNoise(mu=np.zeros(own_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
 
-        writer_name = f"GLIDE-DDPG_input_dims-{input_dims}_n_actions-{n_actions}_lr_actor-{lr_actor}_lr_critic-{lr_critic}_batch_size-{batch_size}"
+        writer_name = f"GLIDE-DDPG_input_dims-{own_input_dims}_n_actions-{own_actions}_lr_actor-{lr_actor}_lr_critic-{lr_critic}_batch_size-{batch_size}"
         self.writer = SummaryWriter(comment=writer_name)
 
         print(self.actor)
@@ -231,10 +233,10 @@ class Agent(object):
         self.global_step = 0
         self.episode_counter = 0
 
-        #add the agent's settings to the env meta-information:
-        env.set_meta_information(lr_actor=lr_actor, lr_critic=lr_critic, input_dims = input_dims, tau=tau, 
-                batch_size=batch_size,  layer1_size=layer1_size, layer2_size=layer2_size, n_actions = n_actions,
-                chkpt_dir=chkpt_dir, chkpt_postfix=chkpt_postfix, summary_writer = writer_name)
+        # #add the agent's settings to the env meta-information:
+        # env.set_meta_information(lr_actor=lr_actor, lr_critic=lr_critic, own_input_dims = own_input_dims, tau=tau, 
+        #         batch_size=batch_size,  layer1_size=layer1_size, layer2_size=layer2_size, own_actions = own_actions,
+        #         chkpt_dir=chkpt_dir, chkpt_postfix=chkpt_postfix, summary_writer = writer_name)
 
 
     def choose_action(self, observation, add_exploration_noise = True):
@@ -279,11 +281,7 @@ class Agent(object):
         target_critic_next_value = self.target_critic.forward(new_state, target_next_actions) #calculate the target critic value of the new_state for Bellmann equation
         critic_value = self.critic.forward(state, actual_action)       #calculate the base critic value of chosen action
 
-        target_value = []
-        for j in range(self.batch_size):    #TODO: this could also be done in vectorized implementation (efficiency)
-            target_value.append(reward[j] + self.gamma*target_critic_next_value[j]*done[j])    #zero at the end of an episode
-        target_value = T.tensor(target_value).to(self.critic.device)
-        target_value = target_value.view(self.batch_size, 1)    #reshape (why?)
+        target_value = reward.view(self.batch_size, 1) + self.gamma*target_critic_next_value*done.view(self.batch_size, 1)
 
         self.critic.train()         #switch critic back to training mode
         self.critic.optimizer.zero_grad()
@@ -375,7 +373,7 @@ class Agent(object):
         self.noise_sigma *= sigma_factor
         self.noise_theta *= theta_factor
         print('Noise set to sigma=%f, theta=%f' % (self.noise_sigma, self.noise_theta))
-        self.noise = OUActionNoise(mu=np.zeros(self.n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
+        self.noise = OUActionNoise(mu=np.zeros(self.own_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
         self.noise.reset()
 
     # def check_actor_params(self):

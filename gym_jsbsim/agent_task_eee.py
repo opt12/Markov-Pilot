@@ -144,7 +144,7 @@ class AgentTask(ABC):
         Changes the setpoints for the AgentTask. The changes will take effect within the next environment step. (call to env.step())
         The setpoint values are stored within a property in the env's sim object.
 
-        If needed, clean-up actions shall be performed here (like e. g. reset integrators)
+        If needed, clean-up actions shall be performed here (like e. g. reset integrators which is most likely undesired see commment in SingleChannel_FlightAgentTask)
 
         :param new_setpoints: A dictionary with new setpoints to be used. New values overwrite old ones.
         """
@@ -206,18 +206,6 @@ class AgentTask(ABC):
         """
         return False
 
-    # @abstractmethod
-    # def _change_setpoint_helper(self, changed_setpoint: Tuple[BoundedProperty,float]):
-    #     """ 
-    #     Any actions regarding setpoint changes specific for the special task are implemented here. 
-    #     If needed, the setpoint storage to sim onject also happens here.
-
-    #     Called for each changed setpoint.
-
-    #     Reset Integrals, notify  dependant objects (e. g. by callback), store the new setpoint to the sim object...
-    #     """
-    #     raise NotImplementedError('_change_setpoint_helper() must be imlemented in '+self.__class__+'. (Maybe just a "pass"-statement).')
-    
     @abstractmethod
     def initialize_custom_properties(self):
         """
@@ -360,11 +348,6 @@ class PID_FlightAgentTask(AgentTask):
         else:
             return False
     
-    def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
-        self.setpoint_prop, self.setpoint_value = changed_setpoint
-        if self.change_setpoint_callback:
-            self.change_setpoint_callback(self.setpoint_value)
-        
     def update_custom_properties(self):
         error = self.sim[self.setpoint_prop] - self.setpoint_value
         if self.measurement_in_degrees:
@@ -497,11 +480,6 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         else:
             return False
     
-    # def _change_setpoint_helper(self, changed_setpoint:Tuple[BoundedProperty,float]):
-    #     self.setpoint_prop, self.setpoint_value = changed_setpoint
-    #     if self.change_setpoint_callback:
-    #         self.change_setpoint_callback(self.setpoint_value)
-        
     def update_custom_properties(self):
         error = self.sim[self.setpoint_props[0]] - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
         if self.measurement_in_degrees:
@@ -524,7 +502,11 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
-        self.sim[self.prop_error_integral] = error * self.dt    #TODO: is it correct to add the initial error to the integral or shold it be added just _after_ the next timestep
+        #TODO: is it correct to add the initial error to the integral or shold it be added just _after_ the next timestep
+        self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
+                        error * self.dt,
+                        -self.integral_limit, self.integral_limit
+                    )
         self.sim[self.prop_delta_cmd] = 0
         self.last_action = self.sim[self.actuating_prop]
 
@@ -545,7 +527,11 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
             try:
                 idx = self.setpoint_props.index(prop)
                 self.sim[self.setpoint_value_props[idx]] = value    #update the setpoints in the sim_object
-                self.sim[self.prop_error_integral] = 0              #reset the integal of the error
+                # TODO: don't reset the error integral as this would be contraproductive in hierarchical \
+                # settings where the setpoints are changed by a superodinate controller which will most likely apply only slight changes in each step. \
+                # With reset of the integral, this would most likely lead to undesired behavior. This integrator wind-up should be \
+                # mitigated by limiting the integral value to suitable bounds (see also https://en.wikipedia.org/wiki/Integral_windup)
+                # self.sim[self.prop_error_integral] = 0              #reset the integral of the error
             except ValueError:
                 #ok, it's not in the list, so it's not for me and I can ignore it
                 pass

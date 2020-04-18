@@ -426,6 +426,7 @@ class JsbSimEnv_multi_agent(gym.Env):
 
     def get_task_list(self) ->List['Agent_Task']:
         return self.task_list
+
 class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.
