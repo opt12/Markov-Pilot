@@ -291,9 +291,29 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         pAltitude.yaxis[0].axis_label = 'Altitude [ftsl]'
         pAltitude.legend.location="center_right"
 
+        pSideslip = figure(plot_width=800, plot_height=300, x_range=top_left_x_range)
+        slip_legend = []
+
+        slip_skid_line = pSideslip.line(data_frame.index*self.step_time, data_frame['aero_beta_deg'], line_width=2, color=Viridis4[2])
+        slip_legend.append( ("Sideslip", [slip_skid_line]) ) 
+        pSideslip.y_range.renderers = [slip_skid_line]
+
+        lg_slip = Legend(items = slip_legend, location=(0, 10), glyph_width = 25, label_width = 190)
+        lg_slip.click_policy="hide"
+        pSideslip.add_layout(lg_slip, 'right')
+
+        tSlip = Title()
+        tSlip.text = 'Sideslip'
+        pSideslip.title = tSlip
+        pSideslip.xaxis.axis_label = 'timestep [s]'
+        pSideslip.yaxis[0].axis_label = 'Sideslip [deg]'
+        pSideslip.legend.location="center_right"
+
+
         #activate the zooming on all plots
         #this is not nice, but this not either: https://stackoverflow.com/questions/49282688/how-do-i-set-default-active-tools-for-a-bokeh-gridplot
         pAltitude.toolbar.active_scroll = pAltitude.toolbar.tools[1]    #this selects the WheelZoomTool instance 
+        pSideslip.toolbar.active_scroll = pSideslip.toolbar.tools[1]    #this selects the WheelZoomTool instance 
 
         reset_output()
 
@@ -307,7 +327,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         panel_grid= list(zip(*panel_grid_t))
 
         # add the additional plots
-        panel_grid.append([pAltitude, None])
+        panel_grid.append([pAltitude, pSideslip])
         
         panel_grid_plot = gridplot(panel_grid, toolbar_location='right', sizing_mode='stretch_width')
 
