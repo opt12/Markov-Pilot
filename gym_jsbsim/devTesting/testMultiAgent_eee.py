@@ -78,8 +78,12 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 integral_limit = 0.25)
 
     agent_task_list = [elevator_AT, aileron_AT]
+    agent_task_types = ['PID', 'PID']
+    agent_task_types = ['PID', 'DDPG']
+    # agent_task_types = ['DDPG', 'MADDPG']
+    agent_task_types = ['MADDPG', 'MADDPG']
     
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
+    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
     env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
@@ -91,38 +95,55 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     return env
 
 def get_trainers(env, arglist):
-    trainers = []
-    agent_tasks = env.get_task_list()
 
-    elevator_pid_params = PidParameters( -5e-2, -6.5e-2, -1e-3)
-    aileron_pid_params  = PidParameters(3.5e-2,    1e-2,   0.0)
-
-    for at in agent_tasks:
-        if at.name == 'aileron':
-            # pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            # trainers.append(pid_aileron_agent)
-            input_shape = at.get_state_space().shape
-            n_actions = at.get_action_space().shape[0]
-            aileron_agent = MultiDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
-                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
-                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
-            trainers.append(aileron_agent)
-        if at.name == 'elevator':
-            # pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            # trainers.append(pid_elevator_agent)
-            input_shape = at.get_state_space().shape
-            n_actions = at.get_action_space().shape[0]
-            elevator_agent = MultiDDPG_Agent('elevator', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
-                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
-                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
-            trainers.append(elevator_agent)
+    pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
+                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
     
-    if len(trainers) != len(agent_tasks):
+    agent_spec = {'PID':    PID_Agent,
+                  'DDPG':   SingleDDPG_Agent,
+                  'MADDPG': MultiDDPG_Agent}
+
+    agent_tasks = env.get_task_list()
+    agent_task_info = env.get_agent_task_info()
+    name_n, obs_space_n, action_space_n, task_type_n = zip(*agent_task_info)
+
+    trainers_n = []
+
+    for i in range(len(name_n)):
+        if task_type_n[i] == 'PID':
+            trainers_n.append(
+                PID_Agent(name_n[i], pid_params[name_n[i]], action_space_n[i], agent_interaction_freq = arglist.interaction_frequency)
+            )
+            continue
+        if task_type_n[i] == 'DDPG':
+            trainers_n.append(
+                SingleDDPG_Agent(name_n[i], lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, own_input_shape=obs_space_n[i].shape, 
+                                action_space= action_space_n[i], tau=arglist.tau, gamma=arglist.gamma,
+                                max_size=arglist.replay_size, 
+                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            )
+            continue
+        if task_type_n[i] == 'MADDPG':
+            own_input_shape = obs_space_n[i].shape
+            other_idxs = list(range(len(obs_space_n)))
+            other_idxs.remove(i)
+            other_input_shapes = [obs_space_n[idx].shape for idx in other_idxs]
+            other_actions_shapes = [action_space_n[idx].shape for idx in other_idxs]
+            trainers_n.append(
+                MultiDDPG_Agent(name_n[i], lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, 
+                                own_input_shape = own_input_shape, action_space= action_space_n[i], 
+                                other_input_shapes = other_input_shapes, other_actions_shapes = other_actions_shapes,
+                                tau=arglist.tau, gamma=arglist.gamma, max_size=arglist.replay_size, 
+                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            )
+            continue
+
+    if len(trainers_n) != len(agent_tasks) :
         raise LookupError('there must be an agent for each and every Agent_Task in the environment')
 
-    return trainers
+    return trainers_n
     
 
 def train(arglist):
@@ -188,6 +209,7 @@ def train(arglist):
             t_end = time.time()
             print(f"train_step {train_step}, Episode {episode_counter}: performed {arglist.testing_iters} steps in {t_end-t_start:.2f} seconds; that's {arglist.testing_iters/(t_end-t_start):.2f} steps/sec")
             testing_env.set_meta_information(episode_number = episode_counter)
+            testing_env.set_meta_information(train_step = train_step)
             testing_env.showNextPlot(True)
             test_net(trainers, testing_env, add_exploration_noise=False)    #run the standardized test on the test_env
             t_start = time.time()

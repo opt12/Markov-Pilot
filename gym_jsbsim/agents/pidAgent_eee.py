@@ -5,7 +5,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from collections import namedtuple
-from typing import List
+from typing import List, Tuple
 
 class AgentTrainer(ABC):
     """ 
@@ -114,12 +114,12 @@ class SingleDDPG_Agent(AgentTrainer):
 
     """
 
-    def __init__(self, name, lr_actor, lr_critic, input_shape, tau, gamma=0.99,
-                 n_actions=2, max_size=1000000, layer1_size=400,
+    def __init__(self, name, lr_actor, lr_critic, own_input_shape, action_space, tau, gamma=0.99,
+                 max_size=1000000, layer1_size=400,
                  layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
         self.name = name
-        self.agent = Agent_Single(lr_actor, lr_critic, input_shape, tau, gamma=gamma,
-                 own_actions=n_actions, max_size=max_size, layer1_size=layer1_size,
+        self.agent = Agent_Single(lr_actor, lr_critic, own_input_shape, action_space, tau, gamma=gamma,
+                 max_size=max_size, layer1_size=layer1_size,
                  layer2_size=layer2_size, batch_size=batch_size, chkpt_dir=chkpt_dir+'_'+self.name, chkpt_postfix=chkpt_postfix, noise_sigma = noise_sigma, noise_theta = noise_theta)
                  
     def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
@@ -168,17 +168,21 @@ class MultiDDPG_Agent(SingleDDPG_Agent):
 
     """
 
-    def __init__(self, name, lr_actor, lr_critic, input_shape, tau, gamma=0.99,
-                 n_actions=2, max_size=1000000, layer1_size=400,
+    def __init__(self, name, lr_actor, lr_critic, own_input_shape, action_space, 
+                 other_input_shapes: List[Tuple], other_actions_shapes: List[Tuple],
+                 tau, gamma=0.99,
+                 max_size=1000000, layer1_size=400,
                  layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
         self.name = name
-        self.agent = Agent_Multi(lr_actor, lr_critic, input_shape, tau, 
-                 other_input_dims = 6,  #TODO: get this from the env
+
+        self.agent = Agent_Multi(lr_actor, lr_critic, own_input_shape, action_space=action_space, tau = tau, 
+                 other_input_shapes = other_input_shapes,
+                 other_actions_shapes = other_actions_shapes,
                  gamma=gamma,
-                 own_actions=n_actions, 
-                 other_actions = 1,     #TODO: get this from the env
                  max_size=max_size, layer1_size=layer1_size,
-                 layer2_size=layer2_size, batch_size=batch_size, chkpt_dir=chkpt_dir+'_'+self.name, chkpt_postfix=chkpt_postfix, noise_sigma = noise_sigma, noise_theta = noise_theta)
+                 layer2_size=layer2_size, batch_size=batch_size, 
+                 chkpt_dir=chkpt_dir+'_'+self.name, chkpt_postfix=chkpt_postfix, 
+                 noise_sigma = noise_sigma, noise_theta = noise_theta)
                  
     def update(self, agents: List['AgentTrainer'], t: int, own_idx):
         """ The training step of the agent.

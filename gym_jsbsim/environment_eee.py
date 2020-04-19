@@ -51,13 +51,14 @@ class JsbSimEnv_multi_agent(gym.Env):
     State: Type[namedtuple]
     Actions: Type[namedtuple]
 
-    def __init__(self, task_list: List['Agent_Task'], aircraft: Aircraft = cessna172P,
+    def __init__(self, task_list: List['Agent_Task'], task_types: List['str'], aircraft: Aircraft = cessna172P,
                  agent_interaction_freq: int = 5, episode_time_s: float = DEFAULT_EPISODE_TIME_S):
         """
         Constructor. Inits some internal state, and calls JsbSimEnv_multi_agent.reset()
         for a first time to prepare the internal simulation sim object.
 
         :param task_list: the list of Task_multi_agent instances to take part in the Markov Game
+        :param task_types: the list of task types for each task in the task_list. maybe 'PID', 'DDPG' or 'MADDPG'
         :param aircraft: the JSBSim aircraft to be used
         :param agent_interaction_freq: int, how many times per second the agent
             should interact with environment.
@@ -78,6 +79,7 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         self.aircraft = aircraft
         self.task_list = task_list
+        self.task_types = task_types
         self.n = len(self.task_list)    #the number of AgentTasks registered for the environment
 
         self.inital_attitude: Dict[Property, float] = {     #the default initial conditions; shall be overwritten by calling set_initial_conditions()
@@ -164,6 +166,12 @@ class JsbSimEnv_multi_agent(gym.Env):
         # set visualisation objects
         self.flightgear_visualiser: FlightGearVisualiser = None
         self.meta_dict = {'model_type': 'trained', 'model_discriminator': 'no file'} #to store additional meta information (e. g. used ny Episode Plotter Wrapper)
+
+    def get_agent_task_info(self) -> List[Tuple[str, 'Box', 'Box', str]]:
+        """
+        :return: a list of Tuples (name, obs_space, action_space, task_type) which can be used to initilize the agents
+        """
+        return [(at.name, at.get_state_space(), at.get_action_space(), tt) for at, tt in zip(self.task_list, self.task_types)]
 
     def reset(self) -> List[np.ndarray]:
         """
