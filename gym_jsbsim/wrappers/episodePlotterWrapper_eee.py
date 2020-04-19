@@ -334,6 +334,9 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         #for string formatting look here: https://pyformat.info/
 
         titleString = "Run Date: {}; ".format(datetime.datetime.now().strftime("%c"))
+        
+        if 'train_step' in self.env.meta_dict:
+            titleString += "Training Step: {}; ".format(self.env.meta_dict['train_step'])
         if 'episode_number' in self.env.meta_dict:
             titleString += "Episode: {}; ".format(self.env.meta_dict['episode_number'])
         # titleString += "Total Reward: {:.2f}; ".format(data_frame['reward'].sum())
