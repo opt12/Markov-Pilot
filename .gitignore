@@ -6,6 +6,8 @@ saves/
 runs/
 checkpoints/
 learning_curves/
+testruns/
+
 
 gym_jsbsim/__pycache__/
 
@@ -140,4 +142,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-testruns/lab_journal.csv

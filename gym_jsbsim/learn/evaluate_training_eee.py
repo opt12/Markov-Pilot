@@ -2,12 +2,14 @@
 import sys            
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
+import csv
 import numpy as np
 import gym_jsbsim.properties as prp
 
 best_score_n = []  #we don't like globals, but it really helps here
+eval_number = 0
 
-def test_net(agents, env, add_exploration_noise=False):
+def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
     global best_score_n 
     if len(best_score_n) != env.n:
         best_score_n = np.zeros(env.n)
@@ -38,12 +40,17 @@ def test_net(agents, env, add_exploration_noise=False):
         # get action
         action_n = [agent.action(obs, exploration_noise) for agent, obs in zip(agents,obs_n)]
 
-        new_state_n, reward_n, done_n, info_n = env.step(action_n)
+        new_obs_n, reward_n, done_n, info_n = env.step(action_n)
 
-        # agent.remember(obs, act, reward, new_state, int(terminal))  #TODO: is it a good idea to remember the test episodes? Why not?
+        terminal = env.is_terminal()   #there may be agent independent terminal conditions like the number of episode steps
+
+        if store_evaluation_experience:
+            # also store the evaluation experience into the replay buffer. this is valid experience, so use it
+            [agent.process_experience(obs_n[i], action_n[i], reward_n[i], new_obs_n[i], done_n[i], terminal) for i, agent in enumerate(agents)]
+
+        obs_n = new_obs_n
 
         score_n += reward_n     # the action includes noise!!!
-        obs_n = new_state_n
         steps += 1
         if steps == int(0.5 *60 / env.dt):
             tgt_flight_path_deg = -6.5
@@ -58,18 +65,28 @@ def test_net(agents, env, add_exploration_noise=False):
             tgt_roll_angle_deg  = 10
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg })
 
-        terminal = any(done_n) or env.is_terminal()
+        terminal = any(done_n) or terminal
         #env.render()
     print("\tTest yielded a score of : [", end="")
     print(*["%.2f"%sc for sc in score_n], sep = ", ", end="")
     print("].")
+
+    if lab_journal:
+        for i, ag in enumerate(agents):
+            eval_dict = {
+                'entry_type': ag.name,
+                'reward': '{:.2f}'.format(score_n[i]),
+                'steps': ag.train_steps,
+            }
+            lab_journal.append_evaluation_data(eval_dict)
+
+        #TODO: save the agent state
 
     for idx, score in enumerate(score_n):
         if best_score_n[idx] < score:
             print("%s: Best score updated: %.3f -> %.3f" % (agents[idx].name, best_score_n[idx], score))
             # agent.save_models(name_discriminator= name + '_best')
             best_score_n[idx] = score
-
 
     # name = env.meta_dict['model_base_name']
     # discriminator = env.meta_dict['model_discriminator']
@@ -80,6 +97,8 @@ def test_net(agents, env, add_exploration_noise=False):
     #         print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
     #     agent.save_models(name_discriminator= name + '_best')
     #     best_reward = score
+
+
 
 if __name__ == '__main__':
 
@@ -104,10 +123,11 @@ if __name__ == '__main__':
     pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
 
     agent_task_list = [pid_elevator_AT, pid_aileron_AT]
+    agent_task_types = ['PID', 'PID']
     trainers = [pid_elevator_agent, pid_aileron_agent]
 
-    env = JsbSimEnv_multi_agent(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s=120)
-    env = EpisodePlotterWrapper_multi_agent(env)
+    env = JsbSimEnv_multi_agent(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s=120)
+    env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
     
     env.set_initial_conditions({prp.initial_flight_path_deg: -1.5}) #just an example, sane defaults are already set in env.__init()__ constructor
@@ -120,5 +140,5 @@ if __name__ == '__main__':
 
     env.showNextPlot(show = True)
 
-    test_net(trainers, env, add_exploration_noise=False)
+    evaluate_training(trainers, env, add_exploration_noise=False)
 

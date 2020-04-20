@@ -1,4 +1,6 @@
 import numpy as np
+import os
+import inspect
 import gym
 import random
 import types
@@ -33,6 +35,14 @@ class AgentTask(ABC):
         The content of the lists must be set for each AgentTask individually.
         Each list entry shall be of type BoundedProperty (TODO: Do I need to define all of them in the properties.py file, or can there be local ones as well?)
         """
+
+        #save the call parameters to init_dict for lab journal
+        self.init_dict = {
+            'name': name, 
+            'make_base_reward_components': f'{name}_make_base_reward_components.py',  #this will be the filename we save the function to
+        }
+
+
         self.env = None     #we need a reference to the env later on. Shall be injected exactly once by a call to inject_environment() during environment setup
         self.sim = None     #we need a reference to the sim later on. Shall be injected exactly once by a call to inject_environment() during environment setup
 
@@ -243,6 +253,16 @@ class AgentTask(ABC):
         """
         return []
 
+    def save_make_base_reward_components(self, basedir):
+        """
+        saves the source code of the passed make_base_reward_components function to a file in the basedir
+        
+        :param basedir: the directory to save the source code file to
+        """
+        filename = os.path.join(basedir, f'{self.name}_make_base_reward_components.py')
+        with open(filename, 'w') as file:  
+            file.write(inspect.getsource(self._make_base_reward_components))
+
 #TODO: get rid of this intermediate superclass. Why do we need it?
 # class FlightAgentTask(AgentTask):   #implements the same interface like Go-Ren's Task, with the needed adapations to multi-agent setting
 #     def __init__(self, name):
@@ -414,6 +434,17 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         super(SingleChannel_FlightAgentTask, self).__init__(name, 
                                             make_base_reward_components=make_base_reward_components,
                                             is_done=is_done)
+
+        self.init_dict.update({
+            'actuating_prop': actuating_prop,  
+            'setpoint_props': list(setpoints.keys()), 
+            'setpoint_values': list(setpoints.values()), 
+            'presented_state': presented_state,   
+            'measurement_in_degrees': measurement_in_degrees, 
+            'max_allowed_error': max_allowed_error,
+            'integral_limit': integral_limit, 
+            'integral_decay': integral_decay
+        })
 
         self.measurement_in_degrees = measurement_in_degrees
         self.max_allowed_error = max_allowed_error

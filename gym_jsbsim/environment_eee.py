@@ -1,6 +1,9 @@
 import gym
 import numpy as np
 import math
+import os
+import json
+
 from collections import namedtuple
 
 import types
@@ -63,6 +66,20 @@ class JsbSimEnv_multi_agent(gym.Env):
         :param agent_interaction_freq: int, how many times per second the agent
             should interact with environment.
         """
+        #save the call parameters to init_dict for lab journal
+        self.init_dict = {
+            'task_list': [{'name': at.name, 
+                           'class': at.__class__.__name__
+                           , 'params': at.init_dict
+                           } for at in task_list], 
+            'task_names': [at.name for at in task_list], 
+            'task_types': task_types, 
+            'aircraft': aircraft,
+            'agent_interaction_freq': agent_interaction_freq, 
+            'episode_time_s': episode_time_s,
+            'wrappers': []
+        }
+
         if agent_interaction_freq > self.JSBSIM_DT_HZ:
             raise ValueError('agent interaction frequency must be less than '
                              'or equal to JSBSim integration frequency of '
@@ -435,6 +452,29 @@ class JsbSimEnv_multi_agent(gym.Env):
     def get_task_list(self) ->List['Agent_Task']:
         return self.task_list
 
+    def save_env_data(self, arglist, base_dir):
+        """
+        Saves a JSON file with environment data.
+
+        :param base_dir: The directory to store the JSON file to
+        """
+        os.makedirs(os.path.dirname(base_dir), exist_ok=True)
+        filename = os.path.join(base_dir, 'environment_data.json')
+        
+        data_to_save = {
+            'arglist': vars(arglist),
+            'init_dict': self.init_dict,
+        }
+
+        with open(filename, 'w') as file:
+            file.write(json.dumps(data_to_save, indent=4))
+        
+        #save the source files for make_base_reward_components
+        [at.save_make_base_reward_components(base_dir) for at in self.task_list]
+
+    @property
+    def get_save_dict(self):
+        return self.init_dict
 class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.

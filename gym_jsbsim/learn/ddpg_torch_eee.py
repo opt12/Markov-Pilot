@@ -72,14 +72,12 @@ class ReplayBuffer(object):
         return obs, actions, rewards, obs_next, terminal
 
 class CriticNetwork(nn.Module):
-    def __init__(self, beta, n_inputs, fc1_dims, fc2_dims, action_shape, name,
-                 chkpt_dir='tmp/ddpg'):
+    def __init__(self, beta, n_inputs, fc1_dims, fc2_dims, action_shape):
         super(CriticNetwork, self).__init__()
         self.n_inputs = n_inputs
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
         self.action_shape = action_shape
-        self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
         self.fc1 = nn.Linear(self.n_inputs, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])     #weight initialization according to DDPD-paper
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
@@ -124,23 +122,13 @@ class CriticNetwork(nn.Module):
 
         return state_action_value   #scalar value
 
-    def save_checkpoint(self, name_suffix=''):
-        print('... saving checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
-        T.save(self.state_dict(), self.checkpoint_file+'_'+name_suffix)
-
-    def load_checkpoint(self, name_suffix = ''):
-        print('... loading checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
-        self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
-
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, n_inputs: int, fc1_dims, fc2_dims, n_actions:int, name,
-                 chkpt_dir='tmp/ddpg'):
+    def __init__(self, alpha, n_inputs: int, fc1_dims, fc2_dims, n_actions:int):
         super(ActorNetwork, self).__init__()
         self.n_inputs = n_inputs
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
         self.n_actions = n_actions
-        self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
         self.fc1 = nn.Linear(self.n_inputs, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
@@ -183,14 +171,6 @@ class ActorNetwork(nn.Module):
 
         return x
 
-    def save_checkpoint(self, name_suffix=''):
-        print('... saving checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
-        T.save(self.state_dict(), self.checkpoint_file+'_'+name_suffix)
-
-    def load_checkpoint(self, name_suffix=''):
-        print('... loading checkpoint ... '+self.checkpoint_file+'_'+name_suffix)
-        self.load_state_dict(T.load(self.checkpoint_file+'_'+name_suffix))
-
 class Agent_Multi(object):
     def __init__ (self, lr_actor, lr_critic, own_input_shape: int, action_space: Box, tau, 
                  # env, 
@@ -198,7 +178,25 @@ class Agent_Multi(object):
                  other_actions_shapes: List[Tuple] = [(0, )],  #added the number of other agents' actions which are part of the state
                  gamma=0.99,
                  max_size=1000000, layer1_size=400,
-                 layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
+                 layer2_size=300, batch_size=64, noise_sigma = 0.15, noise_theta = 0.2):
+        
+        self.init_dict = {
+            'lr_actor': lr_actor, 
+            'lr_critic': lr_critic, 
+            'own_input_shape': own_input_shape, 
+            'action_space': action_space, 
+            'tau': tau, 
+            'other_input_shapes': other_input_shapes,
+            'other_actions_shapes': other_actions_shapes,
+            'gamma': gamma,
+            'max_size': max_size,
+            'layer1_size': layer1_size,
+            'layer2_size': layer2_size,
+            'batch_size': batch_size,
+            'noise_sigma': noise_sigma,
+            'noise_theta': noise_theta
+        }
+        
         #default values for noise
         self.noise_sigma = noise_sigma
         self.noise_theta = noise_theta
@@ -216,29 +214,19 @@ class Agent_Multi(object):
         self.tau = tau
         self.memory = ReplayBuffer(max_size, own_input_shape, action_space.shape)
         self.batch_size = batch_size
-
-        self.chkpt_postfix = '_'+chkpt_postfix if chkpt_postfix != '' else ''
-        self.chkpt_dir= f"checkpoints/{chkpt_dir}/inputs_{own_input_shape}_actions_{action_space.shape}/layer1_{layer1_size}_layer2_{layer2_size}/"
-        Path(self.chkpt_dir).mkdir(parents=True, exist_ok=True)
         
-        print(f"set checkpoint directory to: {self.chkpt_dir}")
-
         # in pytorch multi-dimensional inputs are separated along the last coordinate, https://pytorch.org/docs/stable/nn.html#linear, https://stackoverflow.com/a/58591606/2682209
         self.actor = ActorNetwork(lr_actor, own_input_shape[-1], layer1_size,
-                                  layer2_size, n_actions=action_space.shape[-1],
-                                  name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                                  layer2_size, n_actions=action_space.shape[-1])
         self.critic = CriticNetwork(lr_critic, 
                         (own_input_shape[-1] + sum([od[-1] for od in other_input_shapes]) + sum([ad[-1] for ad in other_actions_shapes])),
-                        layer1_size, layer2_size, action_shape=action_space.shape,
-                        name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                        layer1_size, layer2_size, action_shape=action_space.shape)
 
         self.target_actor = ActorNetwork(lr_actor, own_input_shape[-1], layer1_size,
-                                  layer2_size, n_actions=action_space.shape[-1],
-                                  name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                                  layer2_size, n_actions=action_space.shape[-1])
         self.target_critic = CriticNetwork(lr_critic, 
                         (own_input_shape[-1] + sum([od[-1] for od in other_input_shapes]) + sum([ad[-1] for ad in other_actions_shapes])),
-                                layer1_size,layer2_size, action_shape=action_space.shape,
-                                name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                                layer1_size,layer2_size, action_shape=action_space.shape)
 
         # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)
         self.noise = OUActionNoise(mu=np.zeros(action_space.shape),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
@@ -253,12 +241,6 @@ class Agent_Multi(object):
         self.global_step = 0
         self.episode_counter = 0
 
-        #add the agent's settings to the env meta-information:
-        # env.set_meta_information(lr_actor=lr_actor, lr_critic=lr_critic, n_inputs = n_inputs, tau=tau, 
-        #         batch_size=batch_size,  layer1_size=layer1_size, layer2_size=layer2_size, n_actions = n_actions,
-        #         chkpt_dir=chkpt_dir, chkpt_postfix=chkpt_postfix, summary_writer = writer_name)
-
-
     def choose_action(self, observation, add_exploration_noise = True):
         self.actor.eval()   #don't calc statistics for layer normalization in action selection
         observation = T.tensor(observation, dtype=T.float).to(self.actor.device)    #convert to Tensor
@@ -271,7 +253,6 @@ class Agent_Multi(object):
             mu_np = mu_np + self.noise()
         mu_np = mu_np * self.scale + self.shift
         return mu_np
-
 
     def remember(self, obs, action, reward, new_obs, done):
         if self.writer:
@@ -390,18 +371,35 @@ class Agent_Multi(object):
         input()
         """
 
-    def save_models(self, name_discriminator = ''):
-        self.actor.save_checkpoint(name_discriminator)
-        self.target_actor.save_checkpoint(name_discriminator)
-        self.critic.save_checkpoint(name_discriminator)
-        self.target_critic.save_checkpoint(name_discriminator)
+    def save_models(self, filename):
+        agent_networks_state_dict = {
+            'init_dict': self.init_dict,
+            'actor': self.actor.state_dict(),
+            'critic': self.critic.state_dict(),
+            'target_actor': self.target_actor.state_dict(),
+            'target_critic': self.target_critic.state_dict(),
+            'actor_optimizer': self.actor.optimizer.state_dict(),
+            'critic_optimizer': self.critic.optimizer.state_dict()
+        }
+        
+        T.save(agent_networks_state_dict)
 
-    def load_models(self, name_discriminator = ''):
-        self.actor.load_checkpoint(name_discriminator)
-        self.target_actor.load_checkpoint(name_discriminator)
-        self.critic.load_checkpoint(name_discriminator)
-        self.target_critic.load_checkpoint(name_discriminator)
-        self.env.set_meta_information(model_type = 'loaded')
+    @classmethod
+    def init_from_save(cls, filename):
+        """
+        Instantiate instance of this class from file created by 'save_models' method
+        """
+        save_dict = torch.load(filename)
+        instance = cls(**save_dict['init_dict'])
+        instance.init_dict = save_dict['init_dict']
+        instance.actor.load_state_dict(save_dict['actor'])
+        instance.critic.load_state_dict(save_dict['critic'])
+        instance.target_actor.load_state_dict(save_dict['target_actor'])
+        instance.target_critic.load_state_dict(save_dict['target_critic'])
+        instance.actor.optimizer.load_state_dict(save_dict['actor_optimizer'])
+        instance.critic.optimizer.load_state_dict(save_dict['critic_optimizer'])
+
+        return instance
 
     def reset_noise_source(self):
         self.noise.reset()
@@ -429,12 +427,28 @@ class Agent_Multi(object):
     #         print(param, T.equal(original_critic_dict[param], current_critic_dict[param]))
     #     input()
 
-class Agent_Single(Agent_Multi):
+class Agent_Single(Agent_Multi):    #TODO: unify this with Multi-Agent this is just stupid!
     def __init__(self, lr_actor, lr_critic, own_input_shape: int, action_space: Box, tau, 
                  # env, 
                  gamma=0.99,
                  max_size=1000000, layer1_size=400,
                  layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
+        
+        self.init_dict = {
+            'lr_actor': lr_actor, 
+            'lr_critic': lr_critic, 
+            'own_input_shape': own_input_shape, 
+            'action_space': action_space, 
+            'tau': tau, 
+            'gamma': gamma,
+            'max_size': max_size,
+            'layer1_size': layer1_size,
+            'layer2_size': layer2_size,
+            'batch_size': batch_size,
+            'noise_sigma': noise_sigma,
+            'noise_theta': noise_theta
+        }
+        
         #default values for noise
         self.noise_sigma = noise_sigma
         self.noise_theta = noise_theta
@@ -460,22 +474,18 @@ class Agent_Single(Agent_Multi):
         print(f"set checkpoint directory to: {self.chkpt_dir}")
 
         self.actor = ActorNetwork(lr_actor, own_input_shape[-1], layer1_size,
-                                  layer2_size, n_actions=action_space.shape[-1],
-                                  name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                                  layer2_size, n_actions=action_space.shape[-1])
         self.critic = CriticNetwork(lr_critic, 
                         own_input_shape[-1],
                         layer1_size, layer2_size, 
-                        action_shape=action_space.shape,
-                        name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                        action_shape=action_space.shape)
 
         self.target_actor = ActorNetwork(lr_actor, own_input_shape[-1], layer1_size,
-                                  layer2_size, n_actions=action_space.shape[-1],
-                                  name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                                  layer2_size, n_actions=action_space.shape[-1])
         self.target_critic = CriticNetwork(lr_critic, 
                                 own_input_shape[-1],
                                 layer1_size, layer2_size, 
-                                action_shape=action_space.shape,
-                                name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
+                                action_shape=action_space.shape)
 
 
         # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)

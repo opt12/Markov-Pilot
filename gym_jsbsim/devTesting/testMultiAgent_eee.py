@@ -5,6 +5,7 @@ import argparse
 import time
 import os
 import csv
+import json
 import datetime
 import pickle
 import numpy as np
@@ -15,7 +16,8 @@ from gym_jsbsim.environment_eee import NoFGJsbSimEnv_multi_agent
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
 import gym_jsbsim.properties as prp
 
-from gym_jsbsim.learn.evaluate_training_eee import test_net
+from gym_jsbsim.learn.evaluate_training_eee import evaluate_training
+from gym_jsbsim.devTesting.lab_journal import LabJournal
 
 from gym_jsbsim.reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
 
@@ -121,7 +123,7 @@ def get_trainers(env, arglist):
                                 action_space= action_space_n[i], tau=arglist.tau, gamma=arglist.gamma,
                                 max_size=arglist.replay_size, 
                                 layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+                                noise_sigma = 0.15, noise_theta = 0.2)
             )
             continue
         if task_type_n[i] == 'MADDPG':
@@ -136,7 +138,7 @@ def get_trainers(env, arglist):
                                 other_input_shapes = other_input_shapes, other_actions_shapes = other_actions_shapes,
                                 tau=arglist.tau, gamma=arglist.gamma, max_size=arglist.replay_size, 
                                 layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+                                noise_sigma = 0.15, noise_theta = 0.2)
             )
             continue
 
@@ -145,7 +147,6 @@ def get_trainers(env, arglist):
 
     return trainers_n
     
-
 def train(arglist):
 
     # # Load previous results, if necessary #TODO: need to add some save/restore code compatible to pytorch
@@ -211,7 +212,8 @@ def train(arglist):
             testing_env.set_meta_information(episode_number = episode_counter)
             testing_env.set_meta_information(train_step = train_step)
             testing_env.showNextPlot(True)
-            test_net(trainers, testing_env, add_exploration_noise=False)    #run the standardized test on the test_env
+            #TODO: the global save_path is not a really brilliant idea
+            evaluate_training(trainers, testing_env, lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env
             t_start = time.time()
 
         # env.render(mode='flightgear') #not really useful in training
@@ -252,46 +254,44 @@ def train(arglist):
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
             break
 
-
-def save_test_run(basedir, arglist, env, trainers):
+def save_test_run(basedir, arglist, env, agents):
     """
     - creates a suitable directory for the test run
     - adds a sidecar file containing the meta information on the run (dict saved as pickle)
     - adds a text file containing the meta information on the run
     - add a line to the global csv-file for the test run
     """
+    def save_agents(agents, arglist, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        filename = os.path.join(path, 'agents_data.json')
+
+        data_to_save = {'arglist': vars(arglist)}
+        for ag in agents:
+            agent_dict = ag.get_agent_dict()
+            data_to_save[ag.name] = agent_dict
+        with open(filename, 'w') as file:
+            file.write(json.dumps(data_to_save, indent=4))
+
     agent_task_names = '_'.join([t.name for t in env.task_list])
     run_start = datetime.datetime.now()
     date = run_start.strftime("%Y_%m_%d")
     time = run_start.strftime("%H_%M")
-    path = os.path.join(basedir, 'testruns', env.aircraft.name, agent_task_names, date+'-'+time)
+    save_path = os.path.join(basedir, 'testruns', env.aircraft.name, agent_task_names, date+'-'+time)
     #create the base directory for this test_run
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     #create the directories for each agent_task
-    [os.makedirs(os.path.join(path, at.name), exist_ok=True) for at in env.task_list]
+    [os.makedirs(os.path.join(save_path, at.name), exist_ok=True) for at in env.task_list]
 
-    #create a sidecar file containing the meta information of the test_run
-    trainer_classes_dict = {tr.name: tr.__class__.__name__ for tr in trainers}
-    agent_task_classes_dict = {at.name: at.__class__.__name__ for at in env.task_list}
-    meta_dir = {
-        'date': run_start.strftime("%d.%m.%Y"),
-        'time': run_start.strftime("%H:%M:%S"),
-        'path': 'file://'+os.path.abspath(path), 
-        'trainer_classes': trainer_classes_dict,
-        'agent_task_classes': agent_task_classes_dict
-    }
-    meta_dir.update(vars(arglist))
+    lab_journal.append_run_data(env, agents, run_start, save_path)
 
-    csv_exists = os.path.isfile(os.path.join(basedir, 'testruns', 'lab_journal.csv'))
-    with open(os.path.join(basedir, 'testruns', 'lab_journal.csv'), 'a') as f:   # TODO: add some sensible information there
-        w = csv.DictWriter(f, ['date', 'time', 'path', 'agent_task_classes', 'trainer_classes'] + list(vars(arglist).keys()))
-        if not csv_exists:
-            w.writeheader()
-        w.writerow(meta_dir)    #look here for nested dicts
+    training_env.save_env_data(arglist, save_path)
+    save_agents(agents, arglist, save_path)
+
 
 
 if __name__ == '__main__':
     arglist = parse_args()
+    lab_journal = LabJournal(arglist.base_dir, arglist)
     training_env = setup_env(arglist)
     testing_env = setup_env(arglist)
     trainers = get_trainers(training_env, arglist)
