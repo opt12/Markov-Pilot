@@ -21,7 +21,13 @@ class AgentTrainer(ABC):
     """
     @abstractmethod
     def __init__(self, name, model, obs_shape, act_space, args):
-        self.agent_dict = {}
+        self.agent_dict = {
+            'name': name,
+            'model': model,
+            'obs_shape': obs_shape,
+            'act_space': act_space,
+            'args': args,
+        }
         self.train_steps = 1
         raise NotImplementedError()
 
@@ -82,10 +88,13 @@ class AgentTrainer(ABC):
     def save_agent_state_to_file(self, filename):
         raise NotImplementedError()
 
+    def set_save_path(self, path):
+        self.agent_save_path = path
+        
 # a parameter set for a PID controller
 PidParameters = namedtuple('PidParameters', ['Kp', 'Ki', 'Kd'])
 
-class PID_Agent(AgentTrainer):
+class Do_not_use_PID_Agent(AgentTrainer):   # Use the PID_Agent_no_State class as this here maintains internal state and hence does not play well with MADDPG
     """ An agent that realizes a PID controller.
 
     The PID control agent can be used as a Benchmark.
@@ -102,10 +111,8 @@ class PID_Agent(AgentTrainer):
             'action_space': box2dict(action_space),
             'agent_interaction_freq': agent_interaction_freq,
         }
-
-        self.train_steps = 1
-
         
+        self.train_steps = 1
         self.inverted = True if pid_params.Kp <0 else False
         self.controller = PID(sample_time=None, 
                     Kp=pid_params.Kp, 
@@ -145,6 +152,65 @@ class PID_Agent(AgentTrainer):
     def save_agent_state_to_file(self, filename):
         raise NotImplementedError()
     
+class PID_Agent_no_State(AgentTrainer):
+    """ An agent that realizes a PID controller.
+
+    The PID control agent can be used as a Benchmark.
+    The PID control Agent connects to a ControlGUI.py application to change the parameters interactively.
+    """
+
+    def __init__(self, name: str, pid_params: PidParameters, action_space: gym.Space, agent_interaction_freq=5):
+        self.name = name
+
+        self.agent_dict = {
+            'name': name, 
+            'type': self.__class__.__name__,
+            'pid_params': pid_params, 
+            'action_space': box2dict(action_space),
+            'agent_interaction_freq': agent_interaction_freq,
+        }
+        
+        self.pid_params = pid_params
+
+        self.train_steps = 1
+        self.inverted = True if pid_params.Kp <0 else False
+        self.output_limits = (action_space.low[0], action_space.high[0])
+        self.dt = 1.0/agent_interaction_freq    #the step time between two agent interactions in [sec] (for the PID controller)
+
+    def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
+        error = obs[0]  #for the PID controller, the order of the obs is relevant!
+        derivative = obs[1]
+        integral = obs[2]
+        
+        #using the errors instead of the current values keeps the PID-setpoint constantly at 0; The errors should vanish
+
+        # compute output
+        # signs are in line with the formerly used PID.py module. Therefore the minus-signs
+        output = - self.pid_params.Kp * error - self.pid_params.Ki*integral + self.pid_params.Kd * derivative
+        output = np.clip(output, self.output_limits[0], self.output_limits[1])
+
+        return np.array([output])
+
+    def process_experience(self, obs, act, rew, new_obs, done, terminal):
+        #PID agent doesn't learn anything and hence doesn't need any experience
+        pass
+
+    def preupdate(self):
+        #PID agent doesn't learn anything and hence doesn't need any experience
+        pass
+
+    def update(self, agents, t, own_idx):
+        #PID agent doesn't learn anything and hence doesn't need any experience
+        return None
+    
+    #TODO:
+    def restore_agent_state_from_file(self, filename):
+        raise NotImplementedError()
+
+    #TODO:
+    def save_agent_state_to_file(self, filename):
+        raise NotImplementedError()
+    
 from gym_jsbsim.learn.ddpg_torch_eee import Agent_Single
 class SingleDDPG_Agent(AgentTrainer):
     """ 
@@ -154,11 +220,11 @@ class SingleDDPG_Agent(AgentTrainer):
 
     def __init__(self, name, lr_actor, lr_critic, own_input_shape, action_space, tau, gamma=0.99,
                  max_size=1000000, layer1_size=400,
-                 layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2):
+                 layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2,
+                 initialize_new_networks = True):
         
         self.agent_dict = {
             'name': name, 
-            'type': self.__class__.__name__,
             'lr_actor': lr_actor,
             'lr_critic': lr_critic, 
             'own_input_shape': own_input_shape, 
@@ -171,6 +237,7 @@ class SingleDDPG_Agent(AgentTrainer):
             'batch_size': batch_size, 
             'noise_sigma': noise_sigma, 
             'noise_theta': noise_theta
+            #'initialize_new_networks' #we leave out this parameter as it shall be set manually during creation or restoring
         }
         self.train_steps = 1
 
@@ -178,7 +245,8 @@ class SingleDDPG_Agent(AgentTrainer):
         self.agent = Agent_Single(lr_actor, lr_critic, own_input_shape, action_space, tau, gamma=gamma,
                  max_size=max_size, layer1_size=layer1_size,
                  layer2_size=layer2_size, batch_size=batch_size, 
-                 noise_sigma = noise_sigma, noise_theta = noise_theta)
+                 noise_sigma = noise_sigma, noise_theta = noise_theta,
+                 initialize_new_networks = initialize_new_networks)
                  
     def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
         """ determines the action to take from the observation.
