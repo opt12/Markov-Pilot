@@ -432,8 +432,6 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         :param make_base_reward_components = None: Inject a custom function to be bound to instance.
         :param is_done = None: Inject a custom function to be bound to instance.
             Default just checks for max_allowed_error in the self.prop_error custom property.
-        # :param change_setpoint_callback: For the PID_FlightAgentTask, the Agent should pass in a callback 
-            function to be notified on setpoint changes. This callback can reset the PID internal integrators.
         :param measurement_in_degrees: indicates if the controlled property and the setpoint is given in degrees
         :param max_allowed_error = 30: The maximum absolute error, before an episode ends. Be careful with setpoint changes! Can be set to None to disable checking.
         :param integral_limit = float('inf'): the limiting value for the error integrator Error integral is clipped to [-integral_limit, integral_limit]
@@ -458,35 +456,44 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         self.max_allowed_error = max_allowed_error
         self.integral_limit = integral_limit
         self.integral_decay = integral_decay
-
-        #custom properties 
-        self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -float('inf'), float('inf'))
-        self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
-        self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
-                actuating_prop.min - actuating_prop.max, actuating_prop.max - actuating_prop.min)
-                
+        self.presented_state = presented_state
         self.actuating_prop = actuating_prop
-        self.last_action = 0
-        # self.setpoint_value = list(setpoint.items())[0] #there's only one setpoint for the single channel controller
-            #TODO: the setpoint is now stored twice. Not really useful. Do I need this caching? Do I need the self.setpoints-dictionary?
-        
-        self.obs_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd] + presented_state
-        self.custom_props = [self.prop_error, self.prop_error_integral, self.prop_delta_cmd]
+
+        self.define_custom_properties()
+        self.define_obs_props()
         self.action_props = [actuating_prop]
 
-        # the value of the setpoint_prop itself is not really relevant, it must be in the simulator object to be retrieved, but not passed anywhere
-        # if not all([prop in (self.obs_props + self.custom_props) for prop in setpoints]):
-        #     raise ValueError('All setpoints must match a property in obs_props or in custom_props')
-
-        # self.setpoints = setpoints
+        # the value of the setpoint_prop itself is not really relevant, it must be in the simulator object to be retrieved, 
+        # but no need to have it in the obs_props. It's only relevant to be retrieved in the error calculation in update_custom_properties() 
         self.setpoint_props, self.initial_setpoint_values = zip(*setpoints.items())    #returns immutable tuples
         self.setpoint_value_props = [sp.prefixed('setpoint') for sp in self.setpoint_props]
 
-        # self.change_setpoint_callback = change_setpoint_callback    #to notify the PID Agent that there is a new setpoint in effect
-        # self.change_setpoints(setpoints) #TODO: How to reset the Agent's internal integrator Use the info field? No, it's too late for one step then. Add a special function to the PID-Agent!!!
-
         self.assessor = self._make_assessor()   #this can only be called after the preparation of all necessary props
         self.print_info()
+
+    def define_custom_properties(self):
+        """
+        defines the custom properties that are calculated by the SingleChannel_FlightAgentTask
+        """
+        #custom properties 
+        self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -float('inf'), float('inf'))
+        self.prop_error_derivative = BoundedProperty('error/'+self.name+'_deriv', 'derivative of the error divided by timestep', -float('inf'), +float('inf'))
+        self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
+        
+        self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
+                self.actuating_prop.min - self.actuating_prop.max, self.actuating_prop.max - self.actuating_prop.min)
+
+        self.custom_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral, self.prop_delta_cmd]
+
+    def define_obs_props(self):
+        """
+        Defines the obs_props presented to the agent
+
+        Additionally, the props, which are evaluated in the reward components will automatically be added
+        """
+        # no need to add the self.prop_delta_cmd to the standard set of obs_props as it will be added if it is evaluated in the reward function
+        # self.obs_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral, self.prop_delta_cmd] + self.presented_state
+        self.obs_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral] + self.presented_state
 
     def _make_base_reward_components(self):     #may be overwritten by injected custom function
         # pylint: disable=method-hidden
@@ -520,16 +527,23 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
             return False
     
     def update_custom_properties(self):
-        error = self.sim[self.setpoint_props[0]] - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
+        cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
+        error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
+
+        new_derivative = (cur_value - self._last_value) / self.dt
+        self.sim[self.prop_error_derivative] = new_derivative
+
         self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
-                        self.sim[self.prop_error_integral] * self.integral_decay + error * self.dt,   #TODO: check whether a slope limit is useful as well.
+                        self.sim[self.prop_error_integral] * self.integral_decay + error * self.dt,
                         -self.integral_limit, self.integral_limit
                     )
-        self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self.last_action
-        self.last_action = self.sim[self.action_props[0]]
+        self._last_value = cur_value
+
+        self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self._last_action
+        self._last_action = self.sim[self.action_props[0]]
 
     def initialize_custom_properties(self):
         """ Initializes all the custom properties to start values
@@ -537,17 +551,23 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         TODO: check if this can integrated with update_custom_properties
         """
         #now set the custom_props to the start-of-episode values
-        error = self.sim[self.setpoint_props[0]] - self.sim[self.setpoint_value_props[0]]    #only one setpoint in SingleChannel_FlightAgentTask
+        cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
+        error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
         if self.measurement_in_degrees:
             error = reduce_reflex_angle_deg(error)
         self.sim[self.prop_error] = error
-        #TODO: is it correct to add the initial error to the integral or shold it be added just _after_ the next timestep
+
+        new_derivative = 0
+        self.sim[self.prop_error_derivative] = new_derivative
+
         self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
                         error * self.dt,
                         -self.integral_limit, self.integral_limit
                     )
+        self._last_value = cur_value
+
         self.sim[self.prop_delta_cmd] = 0
-        self.last_action = self.sim[self.actuating_prop]
+        self._last_action = self.sim[self.actuating_prop]
 
     def get_props_to_output(self) -> List[prp.Property]:
         output_props = self.custom_props + [self.setpoint_value_props[0]]
