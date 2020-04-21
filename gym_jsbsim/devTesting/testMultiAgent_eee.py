@@ -9,8 +9,12 @@ import json
 import datetime
 import pickle
 import numpy as np
+import importlib
+
+from typing import Union, List
 
 from gym_jsbsim.agent_task_eee import SingleChannel_FlightAgentTask
+TASK_AGENT_MODULE = 'gym_jsbsim.agent_task_eee' #TODO: make this smarter
 from gym_jsbsim.agents.pidAgent_eee import PID_Agent, PidParameters, SingleDDPG_Agent, MultiDDPG_Agent
 from gym_jsbsim.environment_eee import NoFGJsbSimEnv_multi_agent
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
@@ -95,6 +99,108 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                     }) #just an example, sane defaults are already set in env.__init()__ constructor
     
     return env
+
+def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
+    ENV_PICKLE = 'environment_init.pickle'
+    TAG_PICKLE ='task_agent.pickle'
+
+    ln = line_numbers if isinstance(line_numbers, int) else line_numbers[0]
+
+    #get run protocol
+    try:
+        model_file = lab_journal.get_model_filename(ln)
+        run_protocol_path = lab_journal.find_associated_run_path(model_file)
+    except TypeError:
+        print(f"there was no run protocol found that is associated with line_number {ln}")
+        exit()
+
+    #load the TAG_PICKLE and restore the task_list
+    with open(os.path.join(run_protocol_path, TAG_PICKLE), 'rb') as infile:
+        task_agent_data = pickle.load(infile)
+    
+    task_agents = []
+    for idx in range(len(task_agent_data['task_list_class_names'])):
+        task_list_init = task_agent_data['task_list_init'][idx]
+        task_list_class_name = task_agent_data['task_list_class_names'][idx]
+        make_base_reward_components_file = task_agent_data['make_base_reward_components_file'][idx]
+        make_base_reward_components_fn = task_agent_data['make_base_reward_components_fn'][idx]
+
+        #load the make_base_reward_components function
+        #load function from given filepath  https://stackoverflow.com/a/67692/2682209
+        spec = importlib.util.spec_from_file_location("make_base_rwd", os.path.join(run_protocol_path, make_base_reward_components_file))
+        func_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(func_module)
+        make_base_reward_components = getattr(func_module, make_base_reward_components_fn)
+
+        #get the class for the task_agent https://stackoverflow.com/a/17960039/2682209
+        class_ = getattr(sys.modules[__name__], task_list_class_name)
+        #add the make_base_reward_components function to the parameter dict
+        task_list_init.update({'make_base_reward_components': make_base_reward_components})
+        #transform the setpoint_props and setpoint_values lists to setpoints dict
+        task_list_init.update({'setpoints': dict(zip(task_list_init['setpoint_props'], task_list_init['setpoint_values']))})
+        del task_list_init['setpoint_props']
+        del task_list_init['setpoint_values']
+        ta = class_(**task_list_init)
+        task_agents.append(ta)
+
+    #the task_agents are now ready, so now let's prepare the environment
+    #load the ENV_PICKLE and restore the task_list
+    with open(os.path.join(run_protocol_path, ENV_PICKLE), 'rb') as infile:
+        env_data = pickle.load(infile)
+
+    env_init_dicts = env_data['init_dicts']
+    env_classes = env_data['env_classes']
+
+    #create the innermost environment with the task_list added
+    #load the env class
+    env_class_ = getattr(sys.modules[__name__], env_classes[0])
+    env_init = env_init_dicts[0]
+    env_init.update({'task_list':task_agents})
+
+    env = env_class_(**env_init)
+    
+    #apply wrappers if available
+    for idx in range(1, len(env_init_dicts)):
+        wrapper_class_ = getattr(sys.modules[__name__], env_classes[idx])
+        wrap_init = env_init_dicts[idx]
+        wrap_init.update({'env': env})
+        env = wrapper_class_(**wrap_init)
+    
+    return env
+
+# def restore_agents_from_journal(line_numbers: Union[int, List[int]]):
+#     AG_JSON    = 'agents_data.json'
+#     AG_PICKLE  = 'agents_data.pickle'
+
+#     ln = line_numbers if isinstance(line_numbers, int) else line_numbers[0]
+
+#     #get run protocol
+#     try:
+#         model_file = lab_journal.get_model_filename(ln)
+#         run_protocol_path = lab_journal.find_associated_run_path(model_file)
+#     except TypeError:
+#         print(f"there was no run protocol found that is associated with line_number {ln}")
+#         exit()
+
+#     #restore the agents from saved pickle
+
+#     # the agents are restored with either
+#     # - data specified by a line number
+#     # - pristine networks
+#     # - _best networks
+#     # - _latest networks
+#     # if not all agents are specified by line numbers, the missing ones are restored with either 
+#     # - pristine
+#     # - _best 
+#     # - _latest
+#     # networks from the environment_description
+
+#     #first restore the agent objects without the networks
+    # #load the AG_PICKLE and restore the task_list
+    # with open(os.path.join(run_protocol_path, AG_PICKLE), 'rb') as infile:
+    #     agent_data = pickle.load(infile)
+    
+    # trainers_n = []
 
 def get_trainers(env, arglist):
 
@@ -212,7 +318,6 @@ def train(arglist):
             testing_env.set_meta_information(episode_number = episode_counter)
             testing_env.set_meta_information(train_step = train_step)
             testing_env.showNextPlot(True)
-            #TODO: the global save_path is not a really brilliant idea
             evaluate_training(trainers, testing_env, lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env
             t_start = time.time()
 
@@ -267,6 +372,7 @@ def save_test_run(basedir, arglist, env, agents):
 
         data_to_save = {'arglist': vars(arglist)}
         for ag in agents:
+            ag.set_save_path(path)
             agent_dict = ag.get_agent_dict()
             data_to_save[ag.name] = agent_dict
         with open(filename, 'w') as file:
@@ -280,18 +386,28 @@ def save_test_run(basedir, arglist, env, agents):
     #create the base directory for this test_run
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     #create the directories for each agent_task
-    [os.makedirs(os.path.join(save_path, at.name), exist_ok=True) for at in env.task_list]
+    for a in agents:
+        agent_path = os.path.join(save_path, a.name)
+        os.makedirs(os.path.join(save_path, a.name), exist_ok=True)
+        a.set_save_path(agent_path)
 
     lab_journal.append_run_data(env, agents, run_start, save_path)
 
     training_env.save_env_data(arglist, save_path)
     save_agents(agents, arglist, save_path)
 
-
-
 if __name__ == '__main__':
+
     arglist = parse_args()
     lab_journal = LabJournal(arglist.base_dir, arglist)
+
+    # training_env = restore_env_from_journal(221)
+    # testing_env = restore_env_from_journal(221)
+
+    # trainers = restore_agents_from_journal(221)
+
+    # exit(0)
+
     training_env = setup_env(arglist)
     testing_env = setup_env(arglist)
     trainers = get_trainers(training_env, arglist)

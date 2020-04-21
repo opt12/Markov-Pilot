@@ -3,6 +3,8 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
 import csv
+import os
+from shutil import copyfile
 import numpy as np
 import gym_jsbsim.properties as prp
 
@@ -78,15 +80,19 @@ def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=Fal
                 'reward': '{:.2f}'.format(score_n[i]),
                 'steps': ag.train_steps,
             }
+
+            #save the agents' state
+            if ag.agent_save_path:
+                filename = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_rwd-{score_n[i]:06.2f}_steps-{ag.train_steps}')
+                ag.agent.save_models(filename)
+                eval_dict.update({'path': 'file://'+filename})
+                if best_score_n[i] < score_n[i]:
+                    print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_n[i]))
+                    bestname = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_best')
+                    copyfile(filename, bestname)
+                    best_score_n[i] = score_n[i]
+
             lab_journal.append_evaluation_data(eval_dict)
-
-        #TODO: save the agent state
-
-    for idx, score in enumerate(score_n):
-        if best_score_n[idx] < score:
-            print("%s: Best score updated: %.3f -> %.3f" % (agents[idx].name, best_score_n[idx], score))
-            # agent.save_models(name_discriminator= name + '_best')
-            best_score_n[idx] = score
 
     # name = env.meta_dict['model_base_name']
     # discriminator = env.meta_dict['model_discriminator']

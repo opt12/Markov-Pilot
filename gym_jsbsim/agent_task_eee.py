@@ -39,7 +39,6 @@ class AgentTask(ABC):
         #save the call parameters to init_dict for lab journal
         self.init_dict = {
             'name': name, 
-            'make_base_reward_components': f'{name}_make_base_reward_components.py',  #this will be the filename we save the function to
         }
 
 
@@ -261,7 +260,16 @@ class AgentTask(ABC):
         """
         filename = os.path.join(basedir, f'{self.name}_make_base_reward_components.py')
         with open(filename, 'w') as file:  
+            file.write('from gym_jsbsim import rewards\n')
+            file.write('import gym_jsbsim.properties as prp\n')
+            file.write('from typing import List, Dict, Tuple, Callable, Optional\n')
+            file.write('\n')
             file.write(inspect.getsource(self._make_base_reward_components))
+
+        return {
+            'make_base_reward_components_file': f'{self.name}_make_base_reward_components.py',
+            'make_base_reward_components_fn': self._make_base_reward_components.__name__,
+        }
 
 #TODO: get rid of this intermediate superclass. Why do we need it?
 # class FlightAgentTask(AgentTask):   #implements the same interface like Go-Ren's Task, with the needed adapations to multi-agent setting

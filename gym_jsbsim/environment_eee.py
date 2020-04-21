@@ -3,6 +3,7 @@ import numpy as np
 import math
 import os
 import json
+import pickle
 
 from collections import namedtuple
 
@@ -67,18 +68,21 @@ class JsbSimEnv_multi_agent(gym.Env):
             should interact with environment.
         """
         #save the call parameters to init_dict for lab journal
-        self.init_dict = {
-            'task_list': [{'name': at.name, 
-                           'class': at.__class__.__name__
-                           , 'params': at.init_dict
-                           } for at in task_list], 
-            'task_names': [at.name for at in task_list], 
-            'task_types': task_types, 
+        # self.init_dict = {
+        #     'aircraft': aircraft,
+        #     'agent_interaction_freq': agent_interaction_freq, 
+        #     'episode_time_s': episode_time_s,
+        # }
+        # self.class_name = self.__class__.__name__
+        #to restore the environment, a list of class_names and init_dicts is constructed which represent the env with surrounding wrappers
+        self.env_init_dicts = [{
+            'task_types': task_types,
             'aircraft': aircraft,
             'agent_interaction_freq': agent_interaction_freq, 
             'episode_time_s': episode_time_s,
-            'wrappers': []
-        }
+        }]
+        self.env_classes = [self.__class__.__name__]
+
 
         if agent_interaction_freq > self.JSBSIM_DT_HZ:
             raise ValueError('agent interaction frequency must be less than '
@@ -454,23 +458,52 @@ class JsbSimEnv_multi_agent(gym.Env):
 
     def save_env_data(self, arglist, base_dir):
         """
-        Saves a JSON file with environment data.
+        Saves a JSON file with environment data. Also saves pickle files from 
+        env.init_dict and the agent_tasks in task_list
 
         :param base_dir: The directory to store the JSON file to
         """
         os.makedirs(os.path.dirname(base_dir), exist_ok=True)
-        filename = os.path.join(base_dir, 'environment_data.json')
+        json_filename = os.path.join(base_dir, 'environment_data.json')
         
         data_to_save = {
             'arglist': vars(arglist),
-            'init_dict': self.init_dict,
+            'init_dicts': self.env_init_dicts,
+            'env_classes': self.env_classes
         }
 
-        with open(filename, 'w') as file:
-            file.write(json.dumps(data_to_save, indent=4))
-        
         #save the source files for make_base_reward_components
-        [at.save_make_base_reward_components(base_dir) for at in self.task_list]
+        ld = [at.save_make_base_reward_components(base_dir) for at in self.task_list]
+        #convert list of dictionaries to dictionary of lists https://stackoverflow.com/a/33046935/2682209
+        reward_components_info_dict = {k: [dic[k] for dic in ld] for k in ld[0]}
+        data_to_save.update(reward_components_info_dict)
+
+        #save the init_dict and the arglist without the task_list and task_types to a pickle file
+        with open(os.path.join(base_dir, 'environment_init.pickle'), 'wb') as file:
+            pickle.dump(data_to_save, file)
+
+        #add additional data for JSON
+        data_to_save.update({
+            'task_list': [{'name': at.name, 
+                           'class': at.__class__.__name__,
+                           'params': at.init_dict,
+                           } for at in self.task_list], 
+            'task_names': [at.name for at in self.task_list], 
+            'task_types': self.task_types, 
+        })
+        with open(json_filename, 'w') as file:
+            file.write(json.dumps(data_to_save, indent=4))
+
+        #save the task_list init_data to a pickle file:
+        task_agent_dict = {
+            'task_list_init': [t.init_dict for t in self.task_list],
+            'task_list_class_names': [t.__class__.__name__ for t in self.task_list],
+        }
+        task_agent_dict.update(reward_components_info_dict)
+
+        with open(os.path.join(base_dir, 'task_agent.pickle'), 'wb') as file:
+            pickle.dump(task_agent_dict, file)
+
 
     @property
     def get_save_dict(self):

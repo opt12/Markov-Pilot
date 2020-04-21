@@ -32,12 +32,11 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
     def __init__(self, env, output_props = []):
         super(EpisodePlotterWrapper_multi_agent, self).__init__(env)
 
-        wrapper_dict = {
-            'name': self.__class__.__name__,
-            'wrapped_env': env.__class__.__name__,
+        #append the restore data
+        self.env_init_dicts.append({
             'output_props': output_props
-        }
-        self.init_dict['wrappers'].append(wrapper_dict)
+        })
+        self.env_classes.append(self.__class__.__name__)
 
         self.env = env
         self.step_time = self.env.dt  #use this to scale the x-axis
