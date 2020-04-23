@@ -1,8 +1,21 @@
 import functools
 import operator
-from typing import Tuple
+import numpy as np
+
+from typing import Tuple, List
 from gym_jsbsim.aircraft import cessna172P, a320, f15
 from typing import Dict, Iterable
+from gym.spaces import Box
+
+
+def aggregate_gym_boxes(ac_spcs_n: List[Box]) -> Box:
+    """
+    :return: the combined action space from the input list
+    """
+    lows_n = list(map(lambda bx: bx.low, ac_spcs_n))
+    highs_n = list(map(lambda bx: bx.high, ac_spcs_n))
+
+    return Box(np.concatenate(lows_n), np.concatenate(highs_n))
 
 
 class AttributeFormatter(object):
