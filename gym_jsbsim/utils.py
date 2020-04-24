@@ -17,6 +17,29 @@ def aggregate_gym_boxes(ac_spcs_n: List[Box]) -> Box:
 
     return Box(np.concatenate(lows_n), np.concatenate(highs_n))
 
+def box2dict(space):    #only supports 1 dimensional 
+    return {
+                'shape': space.shape, 
+                'low': list(space.low),
+                'high': list(space.high),
+            }
+
+def dict2Box(boxdict: Dict) -> Box:
+    return Box(boxdict['low'], boxdict['high'])
+
+# https://github.com/ikostrikov/pytorch-ddpg-naf/blob/master/ddpg.py#L11
+def soft_update(target, source, tau):
+    """
+    Perform DDPG soft update (move target params toward source based on weight
+    factor tau)
+    Inputs:
+        target (torch.nn.Module): Net to copy parameters to
+        source (torch.nn.Module): Net whose parameters to copy
+        tau (float, 0 < x < 1): Weight factor for update
+    """
+    for target_param, param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+
 
 class AttributeFormatter(object):
     """

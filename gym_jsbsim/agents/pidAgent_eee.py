@@ -7,12 +7,7 @@ from abc import ABC, abstractmethod
 from collections import namedtuple
 from typing import List, Tuple
 
-def box2dict(action_space):
-    return {
-                'shape': action_space.shape, 
-                'low': list(action_space.low),
-                'high': list(action_space.high),
-            }
+from gym_jsbsim.utils import box2dict
 
 class AgentTrainer(ABC):
     """ 
