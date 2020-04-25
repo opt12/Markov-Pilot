@@ -540,12 +540,8 @@ class Agent_Single(Agent_Multi):    #TODO: unify this with Multi-Agent this is j
             grad_means = np.mean(grad_means_n)
             self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
+        
         self.critic.optimizer.step()
-
-        self.writer.add_scalar("critic grad_l2",  grad_means / grad_count, global_step=self.global_step)
-        self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
-        self.critic.optimizer.step()
-
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
         self.actor.optimizer.zero_grad()
         mu = self.actor.forward(state)

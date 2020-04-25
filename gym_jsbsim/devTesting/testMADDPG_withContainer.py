@@ -50,7 +50,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Core training parameters
     parser.add_argument("--lr_actor", type=float, default=1e-4, help="learning rate for the actor training Adam optimizer")
     parser.add_argument("--lr_critic", type=float, default=1e-3, help="learning rate for the critic training Adam optimizer")
-    parser.add_argument("--tau", type=float, default=0.0001, help="target network adaptation factor")
+    parser.add_argument("--tau", type=float, default=0.001, help="target network adaptation factor")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=64, help="number of episodes to optimize at the same time")
     parser.add_argument("--replay-size", type=int, default=1000000, help="size of the replay buffer")
