@@ -42,7 +42,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Core training parameters
     parser.add_argument("--lr_actor", type=float, default=1e-4, help="learning rate for the actor training Adam optimizer")
     parser.add_argument("--lr_critic", type=float, default=1e-3, help="learning rate for the critic training Adam optimizer")
-    parser.add_argument("--tau", type=float, default=0.0001, help="target network adaptation factor")
+    parser.add_argument("--tau", type=float, default=0.001, help="target network adaptation factor")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=64, help="number of episodes to optimize at the same time")
     parser.add_argument("--replay-size", type=int, default=1000000, help="size of the replay buffer")
@@ -68,14 +68,15 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
     elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
+                                max_allowed_error= 180, 
                                 make_base_reward_components= make_glide_angle_reward_components,
-                                integral_limit = 0.5)
+                                integral_limit = 1)
 
     aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
-                                max_allowed_error= 60, 
+                                max_allowed_error= 180, 
                                 make_base_reward_components= make_roll_angle_reward_components,
-                                integral_limit = 0.25)
+                                integral_limit = 0.1)
 
     agent_task_list = [elevator_AT, aileron_AT]
     
@@ -99,15 +100,15 @@ def get_trainers(env, arglist):
 
     for at in agent_tasks:
         if at.name == 'aileron':
-            pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            trainers.append(pid_aileron_agent)
-            # input_shape = at.get_state_space().shape
-            # n_actions = at.get_action_space().shape[0]
-            # aileron_agent = SingleDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
-            #                     tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
-            #                     layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-            #                     chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
-            # trainers.append(aileron_agent)
+            # pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
+            # trainers.append(pid_aileron_agent)
+            input_shape = at.get_state_space().shape
+            n_actions = at.get_action_space().shape[0]
+            aileron_agent = SingleDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
+                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
+                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            trainers.append(aileron_agent)
         if at.name == 'elevator':
             pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
             trainers.append(pid_elevator_agent)
