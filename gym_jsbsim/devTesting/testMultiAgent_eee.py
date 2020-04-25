@@ -99,25 +99,25 @@ def get_trainers(env, arglist):
 
     for at in agent_tasks:
         if at.name == 'aileron':
-            # pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            # trainers.append(pid_aileron_agent)
-            input_shape = at.get_state_space().shape
-            n_actions = at.get_action_space().shape[0]
-            aileron_agent = MultiDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
-                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
-                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
-            trainers.append(aileron_agent)
+            pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
+            trainers.append(pid_aileron_agent)
+            # input_shape = at.get_state_space().shape
+            # n_actions = at.get_action_space().shape[0]
+            # aileron_agent = SingleDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
+            #                     tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
+            #                     layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+            #                     chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            # trainers.append(aileron_agent)
         if at.name == 'elevator':
-            # pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            # trainers.append(pid_elevator_agent)
-            input_shape = at.get_state_space().shape
-            n_actions = at.get_action_space().shape[0]
-            elevator_agent = MultiDDPG_Agent('elevator', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
-                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
-                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
-            trainers.append(elevator_agent)
+            pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
+            trainers.append(pid_elevator_agent)
+            # input_shape = at.get_state_space().shape
+            # n_actions = at.get_action_space().shape[0]
+            # elevator_agent = MultiDDPG_Agent('elevator', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
+            #                     tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
+            #                     layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+            #                     chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            # trainers.append(elevator_agent)
     
     if len(trainers) != len(agent_tasks):
         raise LookupError('there must be an agent for each and every Agent_Task in the environment')
@@ -143,6 +143,8 @@ def train(arglist):
     final_ep_ag_rewards = []  # agent rewards for training curve
     # saver = tf.train.Saver()  #TODO: need to add some save/restore code compatible to pytorch
     obs_n = training_env.reset()
+    [ag.reset_notifier() for ag in trainers]
+
     episode_step = 0
     episode_counter = 0
     train_step = 0
@@ -168,6 +170,8 @@ def train(arglist):
         if done or terminal:        #episode is over
             episode_counter += 1
             obs_n = training_env.reset()    #start new episode
+            [ag.reset_notifier() for ag in trainers]
+
             
             showPlot = False    #this is here for debugging purposes
             training_env.showNextPlot(show = showPlot)

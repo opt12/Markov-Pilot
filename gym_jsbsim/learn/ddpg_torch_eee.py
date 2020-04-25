@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from tensorboardX import SummaryWriter
-from statistics import mean
 
 class OUActionNoise(object):
     def __init__(self, mu, sigma=0.15, theta=.2, dt=1e-2, x0=None):
@@ -328,7 +327,7 @@ class Agent_Multi(object):
         if self.calculate_grad_norms:   #TODO: 
             grad_max_n, grad_means_n = zip(*[(p.grad.abs().max().item(), (p.grad ** 2).mean().sqrt().item())  for p in list(self.critic.parameters())])
             grad_max = max(grad_max_n)
-            grad_means = mean(grad_means_n)
+            grad_means = np.mean(grad_means_n)
             self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
         self.critic.optimizer.step()
@@ -398,7 +397,7 @@ class Agent_Multi(object):
         self.target_actor.load_checkpoint(name_discriminator)
         self.critic.load_checkpoint(name_discriminator)
         self.target_critic.load_checkpoint(name_discriminator)
-        self.env.set_meta_information(model_type = 'loaded')
+        # self.env.set_meta_information(model_type = 'loaded')
 
     def reset_noise_source(self):
         self.noise.reset()
@@ -407,7 +406,7 @@ class Agent_Multi(object):
         self.noise_sigma *= sigma_factor
         self.noise_theta *= theta_factor
         print('Noise set to sigma=%f, theta=%f' % (self.noise_sigma, self.noise_theta))
-        self.noise = OUActionNoise(mu=np.zeros(self.n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
+        self.noise = OUActionNoise(mu=np.zeros(self.own_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
         self.noise.reset()
 
     # def check_actor_params(self):
@@ -526,13 +525,13 @@ class Agent_Single(Agent_Multi):
         if self.calculate_grad_norms:   #TODO: 
             grad_max_n, grad_means_n = zip(*[(p.grad.abs().max().item(), (p.grad ** 2).mean().sqrt().item())  for p in list(self.critic.parameters())])
             grad_max = max(grad_max_n)
-            grad_means = mean(grad_means_n)
+            grad_means = np.mean(grad_means_n)
             self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
-        self.critic.optimizer.step()
+            self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
+            self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
 
-        self.writer.add_scalar("critic grad_l2",  grad_means / grad_count, global_step=self.global_step)
-        self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
+        self.critic.optimizer.step()
         self.critic.optimizer.step()
 
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
