@@ -68,13 +68,13 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
     elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
-                                max_allowed_error= 180, 
+                                max_allowed_error= 30, 
                                 make_base_reward_components= make_glide_angle_reward_components,
                                 integral_limit = 1)
 
     aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
-                                max_allowed_error= 180, 
+                                max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components,
                                 integral_limit = 0.1)
 
@@ -104,21 +104,21 @@ def get_trainers(env, arglist):
             # trainers.append(pid_aileron_agent)
             input_shape = at.get_state_space().shape
             n_actions = at.get_action_space().shape[0]
-            aileron_agent = SingleDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
+            aileron_agent = MultiDDPG_Agent('aileron', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
                                 tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
                                 layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
                                 chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
             trainers.append(aileron_agent)
         if at.name == 'elevator':
-            pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
-            trainers.append(pid_elevator_agent)
-            # input_shape = at.get_state_space().shape
-            # n_actions = at.get_action_space().shape[0]
-            # elevator_agent = MultiDDPG_Agent('elevator', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
-            #                     tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
-            #                     layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-            #                     chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
-            # trainers.append(elevator_agent)
+            # pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, at.get_action_space(), agent_interaction_freq = arglist.interaction_frequency)
+            # trainers.append(pid_elevator_agent)
+            input_shape = at.get_state_space().shape
+            n_actions = at.get_action_space().shape[0]
+            elevator_agent = MultiDDPG_Agent('elevator', lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, input_shape=input_shape, 
+                                tau=arglist.tau, gamma=0.99, n_actions= n_actions, max_size=arglist.replay_size, 
+                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
+                                chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2)
+            trainers.append(elevator_agent)
     
     if len(trainers) != len(agent_tasks):
         raise LookupError('there must be an agent for each and every Agent_Task in the environment')
