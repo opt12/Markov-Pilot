@@ -104,6 +104,100 @@ def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=Fal
     #     agent.save_models(name_discriminator= name + '_best')
     #     best_reward = score
 
+def evaluate_training_with_agent_container(agent_container, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
+    global best_score_n 
+    if len(best_score_n) != env.n:
+        best_score_n = np.zeros(env.n)
+
+    tgt_flight_path_deg = -6.5
+    tgt_roll_angle_deg  = 10
+    initial_path_angle_gamma_deg = 0
+    initial_roll_angle_phi_deg   = 0
+    initial_fwd_speed_KAS        = 75
+    initial_aoa_deg              = 1.0
+
+    env.change_setpoints({ prp.flight_path_deg: tgt_flight_path_deg
+                         , prp.roll_deg:  tgt_roll_angle_deg
+                        })
+    env.set_initial_conditions( { prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
+                                , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
+                                , prp.initial_roll_deg: initial_roll_angle_phi_deg
+                                , prp.initial_aoa_deg: initial_aoa_deg
+                                })
+
+    exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
+    obs_n = env.reset()
+    env.showNextPlot(True, True)
+    terminal = False
+    score_m = np.zeros(env.n)
+    steps = 0
+    while not terminal:
+        # get action
+        actions_n = agent_container.get_action(obs_n, add_exploration_noise=exploration_noise)
+        # environment step
+        new_obs_n, rew_n, done_n, info_n = env.step(actions_n) 
+
+        terminal = env.is_terminal()   #there may be agent independent terminal conditions like the number of episode steps
+
+        if store_evaluation_experience:
+            # also store the evaluation experience into the replay buffer. this is valid experience, so use it
+            # collect experience, store to per-agent-replay buffers
+            agent_experience_m = agent_container.remember(obs_n, actions_n, rew_n, new_obs_n, done_n)
+
+        obs_n = new_obs_n
+
+        score_m += [exp.rew for exp in agent_experience_m]
+        steps += 1
+        if steps == int(0.5 *60 / env.dt):
+            tgt_flight_path_deg = -6.5
+            tgt_roll_angle_deg  = -10
+            env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg })
+        if steps == int(1 *60 / env.dt):
+            tgt_flight_path_deg = -7.5
+            tgt_roll_angle_deg  = -10
+            env.change_setpoints({ prp.flight_path_deg: tgt_flight_path_deg })
+        if steps == int(1.5 *60 / env.dt):
+            tgt_flight_path_deg = -7.5
+            tgt_roll_angle_deg  = 10
+            env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg })
+
+        terminal = any(done_n) or terminal
+        #env.render()
+    print("\tTest yielded a score of : [", end="")
+    print(*["%.2f"%sc for sc in score_m], sep = ", ", end="")
+    print("].")
+
+    # if lab_journal:
+    #     for i, ag in enumerate(agents):
+    #         eval_dict = {
+    #             'entry_type': ag.name,
+    #             'reward': '{:.2f}'.format(score_n[i]),
+    #             'steps': ag.train_steps,
+    #         }
+
+    #         #save the agents' state
+    #         if ag.agent_save_path:
+    #             filename = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_rwd-{score_n[i]:06.2f}_steps-{ag.train_steps}')
+    #             ag.agent.save_models(filename)
+    #             eval_dict.update({'path': 'file://'+filename})
+    #             if best_score_n[i] < score_n[i]:
+    #                 print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_n[i]))
+    #                 bestname = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_best')
+    #                 copyfile(filename, bestname)
+    #                 best_score_n[i] = score_n[i]
+
+    #         lab_journal.append_evaluation_data(eval_dict)
+
+    # name = env.meta_dict['model_base_name']
+    # discriminator = env.meta_dict['model_discriminator']
+    # env.set_meta_information(model_discriminator = discriminator)
+    # agent.save_models(name_discriminator=discriminator)    
+    # if best_reward is None or best_reward < score:
+    #     if best_reward is not None:
+    #         print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
+    #     agent.save_models(name_discriminator= name + '_best')
+    #     best_reward = score
+
 
 
 if __name__ == '__main__':

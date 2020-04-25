@@ -13,7 +13,7 @@ from collections import namedtuple
 from typing import List, Tuple, Dict
 
 from gym_jsbsim.helper import ReplayBuffer, OUNoise
-from networks import ActorNetwork, CriticNetwork
+from .networks import ActorNetwork, CriticNetwork
 from gym_jsbsim.utils import soft_update
 
 Experience = namedtuple('Experience', ['obs', 'act', 'rew', 'next_obs', 'done'])
@@ -58,7 +58,7 @@ class AgentTrainer(ABC):
         self.scaled_noise = OUNoise(mu=self.act_shift,sigma=self.scaled_noise_sigma, theta=self.scaled_noise_theta, dt = self.dt, scaling=self.act_scale)
 
     @abstractmethod
-    def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
+    def get_action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
         raise NotImplementedError
 
     @abstractmethod
@@ -67,6 +67,14 @@ class AgentTrainer(ABC):
         :return: Returns the Tensor of actions predicted by the target network of the agent given the observation tensor. 
         """
         raise NotImplementedError()
+
+    def rwd_aggregator(self, rwd_list):
+        """
+        If more than one task is associated to an agent, the rewards must be aggregated somehow.
+
+        Overwrite at your convenience for special agents
+        """
+        return rwd_list.sum()
 
     def store_experience(self, experience: Experience):
         self.replay_buffer.store_transition(*experience)
@@ -91,7 +99,7 @@ class AgentTrainer(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def update(self, agents: List['AgentTrainer'], own_idx: int):
+    def train(self, agents_m: List['AgentTrainer'], own_idx: int):
         """ The training step of the agent.
 
         The other agents can be queried for their experience to reconstruct the entire state in multi agent setups.
@@ -125,7 +133,7 @@ class PID_AgentTrainer(AgentTrainer):
         self.type = 'PID'
         self.pid_params = pid_params
         # signs are in line with the formerly used PID.py module. Therefore the minus-signs
-        self.pid_tensor = T.tensor([-self.pid_params.Kp, -self.pid_params.Ki, +self.pid_params.Kd], dtype=T.float, requires_grad=False).to('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.pid_tensor_t = T.tensor([-self.pid_params.Kp, -self.pid_params.Ki, +self.pid_params.Kd], dtype=T.float, requires_grad=False).to('cuda:0' if T.cuda.is_available() else 'cpu')
 
 
         if act_space.shape[-1] != 1:
@@ -139,7 +147,7 @@ class PID_AgentTrainer(AgentTrainer):
         })
         self.inverted = True if pid_params.Kp <0 else False
 
-    def action(self, observation: np.ndarray, add_exploration_noise=False) -> np.ndarray:
+    def get_action(self, observation: np.ndarray, add_exploration_noise=False) -> np.ndarray:
         
         # name the values
         error = observation[0]  #for the PID controller, the order of the obs is relevant!
@@ -169,7 +177,7 @@ class PID_AgentTrainer(AgentTrainer):
         in the PID controller, it just calculates the output like always, but as a tensor
         """
 
-        mu_t = obs_t * self.pid_tensor
+        mu_t = obs_t * self.pid_tensor_t
         mu_t = T.sum(mu_t, dim=1)
         T.clamp_(mu_t, -1, 1) #to have PID-output in the range of [-1,1]
         mu_t = mu_t * self.act_scale_t +  self.act_shift_t  #to have PID-output in the range of the action_space
@@ -179,7 +187,7 @@ class PID_AgentTrainer(AgentTrainer):
     def _to_eval_mode(self):
         pass    #nothing to do for PID agent
 
-    def update(self, agents: List['AgentTrainer'], own_idx: int):
+    def train(self, agents_m: List['AgentTrainer'], own_idx: int):
         """ The training step of the agent.
 
         The other agents can be queried for their experience to reconstruct the entire state in multi agent setups.
@@ -270,7 +278,7 @@ class MADDPG_AgentTrainer(AgentTrainer):
         print(f'self.actor: \n{self.actor}')
         print(f'self.critic: \n{self.critic}')
 
-    def action(self, observation, add_exploration_noise = False):
+    def get_action(self, observation, add_exploration_noise = False):
         self.actor.eval()   #don't calc statistics for layer normalization in action selection
         observation_t = T.tensor(observation, dtype=T.float).to(self.actor.device)    #convert to Tensor, move to GPU if available
         mu = self.actor.forward(observation_t)
@@ -291,7 +299,7 @@ class MADDPG_AgentTrainer(AgentTrainer):
 
         return mu_t
 
-    def update(self, agents: List['AgentTrainer'], own_idx: int):
+    def train(self, agents_m: List['AgentTrainer'], own_idx: int):
         if self.replay_buffer.mem_cntr < self.batch_size:
             return
         
@@ -301,7 +309,7 @@ class MADDPG_AgentTrainer(AgentTrainer):
         batch_idxs = self.replay_buffer.get_batch_idxs(self.batch_size)
         # retrieve minibatch from all agents including own
         obs_m, actual_action_m, reward_m, new_obs_m, terminal_m = \
-                zip(*[ag.replay_buffer.get_samples_from_buffer(batch_idxs) for ag in agents])
+                zip(*[ag.replay_buffer.get_samples_from_buffer(batch_idxs) for ag in agents_m])
         
         #convert to pytorch tensors
         rwd_m_t = [T.tensor(rwd, dtype=T.float).to(self.critic.device) for rwd in reward_m]
@@ -313,10 +321,10 @@ class MADDPG_AgentTrainer(AgentTrainer):
         state_t = T.cat(obs_m_t, dim=1).to(self.critic.device)
         new_state_t = T.cat(new_obs_m_t, dim=1).to(self.critic.device)
 
-        [ag._to_eval_mode() for ag in agents] #switch networks to eval mode
+        [ag._to_eval_mode() for ag in agents_m] #switch networks to eval mode
         
         #calculate the target action of the new state for Bellmann equation for all agents
-        target_next_action_t_m = [ag.get_target_action_t(new_obs_t) for ag, new_obs_t in zip(agents, new_obs_m_t)]
+        target_next_action_t_m = [ag.get_target_action_t(new_obs_t) for ag, new_obs_t in zip(agents_m, new_obs_m_t)]
         #create the input to the target value function (cat([new_state_m, other_next_actions), own_action)
         own_next_action_t = target_next_action_t_m.pop(own_idx)
         target_critic_next_state_t = T.cat([new_state_t, T.cat(target_next_action_t_m, dim=1)], dim=1)
@@ -429,8 +437,8 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
 
         self.type = 'DDPG'
 
-    def update(self, agents: List['AgentTrainer'], own_idx: int):
-        #agents and own_idx are ignored, as this is only the DDPG algo, not the MADDPG
+    def train(self, agents_m: List['AgentTrainer'], own_idx: int):
+        #agents_m and own_idx are ignored, as this is only the DDPG algo, not the MADDPG
         if self.replay_buffer.mem_cntr < self.batch_size:
             return
         
@@ -438,7 +446,7 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
 
         #determine the samples for minibatch
         batch_idxs = self.replay_buffer.get_batch_idxs(self.batch_size)
-        # retrieve minibatch from all agents including own
+        # retrieve minibatch from own replay buffer
         obs, actual_action, rwd, new_obs, terminal = self.replay_buffer.get_samples_from_buffer(batch_idxs)
         
         #convert to pytorch tensors
@@ -572,7 +580,7 @@ if __name__ == '__main__':
         [ag.store_experience(exp) for ag, exp in zip(trainers, experience__m)]
 
         time += timeit(lambda: 
-            [ag.update(trainers, i) for i, ag in enumerate(trainers)]
+            [ag.train(trainers, i) for i, ag in enumerate(trainers)]
             , number=1)
     print(f'{i+1} iterations with {len(trainers)} in {time} seconds')
         

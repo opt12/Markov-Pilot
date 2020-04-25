@@ -12,7 +12,7 @@ from typing import Type, Tuple, Dict, List, Sequence, NamedTuple, Optional, Unio
 from collections import namedtuple
 
 from gym_jsbsim.utils import aggregate_gym_boxes
-from gym_jsbsim.agents.AgentTrainer import Experience, AgentTrainer, PID_Agent, DDPG_Agent, MADDPG_Agent
+from gym_jsbsim.agents.AgentTrainer import Experience, AgentTrainer, PID_AgentTrainer, DDPG_AgentTrainer, MADDPG_AgentTrainer
 
 AgentSpec = namedtuple('AgentSpec', ['name', 'agent_type', 'task_names', 'parameters'])
 
@@ -70,10 +70,10 @@ class AgentContainer():
             # we have the task specific action spaces in ag_act_space_n now
             self.agent_action_space_n.append(aggregate_gym_boxes(ag_act_space_n)) 
             
-    def get_actions(self, obs_n, add_exploration_noise = False):
+    def get_action(self, obs_n, add_exploration_noise = False):
         agent_obs_m = self._get_per_agent_data(obs_n)
-        agent_actions_m = [ag.get_actions(obs, add_exploration_noise) for ag, obs in zip(self.agents_m, agent_obs_m)]
-        task_actions_n = self._get_per_task_actions(agent_actions_m)
+        agent_actions_m = [ag.get_action(obs, add_exploration_noise) for ag, obs in zip(self.agents_m, agent_obs_m)]
+        task_actions_n = self._get_per_task_action(agent_actions_m)
         return task_actions_n
     
     def remember(self, obs_n, actions_n, rewards_n, next_obs_n, dones_n):
@@ -82,14 +82,15 @@ class AgentContainer():
 
         TODO: A centralized replay buffer comes into mind. Check implications
         """
-        exper_trans_n = list(map(self._get_per_agent_data, (obs_n, actions_n, rewards_n, next_obs_n, dones_n))) #returns an 5*m object
+        exper_trans_m = list(map(self._get_per_agent_data, (obs_n, actions_n, rewards_n, next_obs_n, dones_n))) #returns an 5*m object
         # aggregate the rewards
-        exper_trans_n[2] = [self.agents_m[i].rwd_aggregator(rwd_list) for i, rwd_list in enumerate(exper_trans_n[2])]
+        exper_trans_m[2] = [self.agents_m[i].rwd_aggregator(rwd_list) for i, rwd_list in enumerate(exper_trans_m[2])]
         #aggregate the dones
-        exper_trans_n[4] = [any(done_list) for done_list in exper_trans_n[4]]
-        experience_m = list(zip(*exper_trans_n))    #transpose to m*5 object
+        exper_trans_m[4] = [any(done_list) for done_list in exper_trans_m[4]]
+        experience_m = [Experience(*e) for e in list(zip(*exper_trans_m))]    # first transpose to m*5 object and then put in Experience
 
-        [ag.remember(experience) for ag, experience in zip(self.agents_m, experience_m)]
+        [ag.store_experience(experience) for ag, experience in zip(self.agents_m, experience_m)]
+        return experience_m
 
     def train_agents(self):
         """
@@ -116,7 +117,7 @@ class AgentContainer():
         agent_inputs = [np.hstack(np_inp[self.task_idxs_per_agent[ag_idx]]) for ag_idx in range(len(self.task_idxs_per_agent))]
         return agent_inputs
         
-    def _get_per_task_actions(self, agent_action_n: List[np.ndarray]) -> List[np.ndarray]:
+    def _get_per_task_action(self, agent_action_n: List[np.ndarray]) -> List[np.ndarray]:
         """
         Decomposes the actions from 1..m agents into the action-arrays for n tasks
 
@@ -129,7 +130,8 @@ class AgentContainer():
         return task_actions
 
     @classmethod
-    def init_from_env(cls, env: 'JsbSimEnv_multi_agent', agent_spec: List[AgentSpec], agent_classes_dict: Dict['str', 'Class']) -> 'AgentContainer':
+    def init_from_env(cls, env: 'JsbSimEnv_multi_agent', agent_spec: List[AgentSpec], 
+                      agent_classes_dict: Dict['str', 'Class'], arglist) -> 'AgentContainer':
         """
         Instantiate the specified agents. Then instantiate an AgentContainer holding those agents
 
@@ -193,9 +195,10 @@ class AgentContainer():
         for i, aspec in enumerate(agent_spec):
             agent_init_dict = {
                 'name': aspec.name,
-                'obs_space': ag_actor_act_spaces_m[i],
+                'obs_space': ag_actor_obs_spaces_m[i],
                 'act_space': ag_actor_act_spaces_m[i],
-                'critic_state_space': ag_critic_state_space_m[i]
+                'critic_state_space': ag_critic_state_space_m[i],
+                'agent_interaction_frequency': arglist.interaction_frequency
             }
             agent_init_dict.update(aspec.parameters)
             agent_init_dict_m.append(agent_init_dict)
@@ -229,9 +232,9 @@ if __name__ == '__main__':
         def __init__(self, name, action_width):
             self.name = name
             self.action_width = action_width
-        def get_actions(self, obs, add_exploration_noise = False):
+        def get_action(self, obs, add_exploration_noise = False):
             return np.full( shape=self.action_width, fill_value=self.action_width, dtype=np.float32)
-        def remember(self, experience):
+        def store_experience(self, experience):
             print(f'{self.name} stored {experience}')
         def rwd_aggregator(self, rwd_list):
             return rwd_list.sum()
