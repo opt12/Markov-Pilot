@@ -330,8 +330,8 @@ class Agent_Multi(object):
             grad_means = np.mean(grad_means_n)
             self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
+        
         self.critic.optimizer.step()
-
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
         self.actor.optimizer.zero_grad()
         mu = self.actor.forward(obs_n_t[own_idx])
@@ -460,18 +460,18 @@ class Agent_Single(Agent_Multi):
                                   layer2_size, n_actions=own_actions,
                                   name='Actor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
         self.critic = CriticNetwork(lr_critic, 
-                                    ((own_input_dims[0]), ), #TODO: get this correct with the tuples and ints!!!
+                                    own_input_dims, #TODO: get this correct with the tuples and ints!!!
                                     layer1_size,
-                                    layer2_size, n_actions=(own_actions),
+                                    layer2_size, n_actions=own_actions,
                                     name='Critic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
 
         self.target_actor = ActorNetwork(lr_actor, own_input_dims, layer1_size,
                                          layer2_size, n_actions=own_actions,
                                          name='TargetActor'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
         self.target_critic = CriticNetwork(lr_critic, 
-                                           ((own_input_dims[0]), ), #TODO: get this correct with the tuples and ints!!!
+                                           own_input_dims, #TODO: get this correct with the tuples and ints!!!
                                            layer1_size,  
-                                           layer2_size, n_actions=(own_actions),
+                                           layer2_size, n_actions=own_actions,
                                            name='TargetCritic'+self.chkpt_postfix, chkpt_dir= self.chkpt_dir)
 
         # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)
@@ -532,7 +532,6 @@ class Agent_Single(Agent_Multi):
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
 
         self.critic.optimizer.step()
-        self.critic.optimizer.step()
 
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
         self.actor.optimizer.zero_grad()
@@ -546,3 +545,4 @@ class Agent_Single(Agent_Multi):
         self.actor.optimizer.step()
 
         self._update_network_parameters()    #update target to base networks with standard tau
+
