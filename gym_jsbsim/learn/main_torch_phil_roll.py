@@ -83,9 +83,16 @@ if __name__ == "__main__":
 
     #TODO: open summary writer here
 
-    train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, own_input_dims = [env.observation_space.shape[0]], tau=0.001, #env=env,
+    # new style agent
+    from gym_jsbsim.learn.ddpg_torch_eee import Agent_Single
+    train_agent = Agent_Single(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, own_input_dims = [env.observation_space.shape[0]], tau=0.001, #env=env,
               batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, own_actions = env.action_space.shape[0],
               chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
+
+    # old style agent
+    # train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, own_input_dims = [env.observation_space.shape[0]], tau=0.001, #env=env,
+    #           batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, own_actions = env.action_space.shape[0],
+    #           chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
 
     env.set_meta_information(env_info = 'roll Training')
     env.set_meta_information(model_base_name = SAVED_MODEL_BASE_NAME)
@@ -110,7 +117,12 @@ if __name__ == "__main__":
             act = train_agent.choose_action(obs, add_exploration_noise = exploration_noise_flag)
             new_state, reward, done, info = env.step(act)
             train_agent.remember(obs, act, reward, new_state, int(done))
-            train_agent.learn()
+            try:
+                #new style agent
+                train_agent.learn([], -1)
+            except TypeError:
+                #old style agent
+                train_agent.learn()
             score += reward     # the action includes noise!!!
             obs = new_state
             #env.render()
