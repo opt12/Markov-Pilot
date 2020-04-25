@@ -33,9 +33,12 @@ def test_net(agent, env, add_exploration_noise=False):
     score = 0
     steps = 0
     while not done:
-        act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
-        new_state, reward, done, info = env.step(act)
-        agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
+        if agent:
+            act = agent.choose_action(obs, add_exploration_noise=exploration_noise)
+            new_state, reward, done, info = env.step(act)
+            agent.remember(obs, act, reward, new_state, int(done))  #TODO: is it a good idea to remeber the test episodes? Why not?
+        else:   #we have a fully wrapped env
+            new_state, reward, done, info = env.step([])
         score += reward     # the action includes noise!!!
         obs = new_state
         steps += 1

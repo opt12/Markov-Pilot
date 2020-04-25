@@ -54,7 +54,7 @@ if __name__ == "__main__":
     env = gym.make(ENV_ID, agent_interaction_freq = INTERACTION_FREQ)
     env = VarySetpointsWrapper(env, modulation_amplitude = None, modulation_period = 150, modulation_decay=0.99)     #to vary the setpoints during training
     env = EpisodePlotterWrapper(env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    env = PidWrapper(env, [elevator_wrap])  #to apply PID control to the pitch axis
+    env = PidWrapper(env, [elevator_wrap, aileron_wrap])  #to apply PID control to the pitch axis
     env = StateSelectWrapper(env, PRESENTED_STATE )
     print("env.observation_space: {}".format(env.observation_space))
 
@@ -77,19 +77,12 @@ if __name__ == "__main__":
     test_env = gym.make(ENV_ID,  agent_interaction_freq = INTERACTION_FREQ)
     # test_env = VarySetpointsWrapper(test_env, modulation_amplitude = None, modulation_period = 150)     #to vary the setpoints during training
     test_env = EpisodePlotterWrapper(test_env, presented_state=PRESENTED_STATE)    #to show a summary of the next epsode, set env.showNextPlot(True)
-    test_env = PidWrapper(test_env, [elevator_wrap]) #to apply PID control to the pitch axis
+    test_env = PidWrapper(test_env, [elevator_wrap, aileron_wrap]) #to apply PID control to the pitch axis
     test_env = StateSelectWrapper(test_env, PRESENTED_STATE)
     # test_env = StateSelectWrapper(test_env, ['error_glideAngle_error_deg', 'velocities_r_rad_sec'])#, 'attitude_roll_rad', 'velocities_p_rad_sec'])
 
     #TODO: open summary writer here
 
-    # new style agent
-    from gym_jsbsim.learn.ddpg_torch_eee import Agent_Single
-    train_agent = Agent_Single(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, own_input_dims = [env.observation_space.shape[0]], tau=0.001, #env=env,
-              batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, own_actions = env.action_space.shape[0],
-              chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
-
-    # old style agent
     # train_agent = Agent(lr_actor=LEARNING_RATE_ACTOR, lr_critic=LEARNING_RATE_CRITIC, own_input_dims = [env.observation_space.shape[0]], tau=0.001, #env=env,
     #           batch_size=BATCH_SIZE,  layer1_size=400, layer2_size=300, own_actions = env.action_space.shape[0],
     #           chkpt_dir=CHKPT_DIR, chkpt_postfix=CHKPT_POSTFIX)  #TODO: pass summary writer to Agent
@@ -114,15 +107,10 @@ if __name__ == "__main__":
         steps = 0
         ts = time.time()
         while not done:
-            act = train_agent.choose_action(obs, add_exploration_noise = exploration_noise_flag)
-            new_state, reward, done, info = env.step(act)
-            train_agent.remember(obs, act, reward, new_state, int(done))
-            try:
-                #new style agent
-                train_agent.learn([], -1)
-            except TypeError:
-                #old style agent
-                train_agent.learn()
+            # act = train_agent.choose_action(obs, add_exploration_noise = exploration_noise_flag)
+            new_state, reward, done, info = env.step([])
+            # train_agent.remember(obs, act, reward, new_state, int(done))
+            # train_agent.learn()
             score += reward     # the action includes noise!!!
             obs = new_state
             #env.render()
@@ -140,7 +128,8 @@ if __name__ == "__main__":
 
         if episode% 5 == 0:
             test_env.set_meta_information(episode_number = episode) #in fact, this is another episode, but with no training, so I don't increment it
-            test_net(train_agent, test_env, add_exploration_noise=False)
+            # test_net(train_agent, test_env, add_exploration_noise=False)
+            test_net(None, test_env, add_exploration_noise=False)
         
         # if episode == 40:   #switch to sine wave exploration after 30 "normal" episodes
         #     exploration_noise_flag = False

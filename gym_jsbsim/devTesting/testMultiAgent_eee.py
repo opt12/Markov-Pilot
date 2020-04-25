@@ -48,7 +48,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Core training parameters
     parser.add_argument("--lr_actor", type=float, default=1e-4, help="learning rate for the actor training Adam optimizer")
     parser.add_argument("--lr_critic", type=float, default=1e-3, help="learning rate for the critic training Adam optimizer")
-    parser.add_argument("--tau", type=float, default=0.0001, help="target network adaptation factor")
+    parser.add_argument("--tau", type=float, default=0.001, help="target network adaptation factor")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=64, help="number of episodes to optimize at the same time")
     parser.add_argument("--replay-size", type=int, default=1000000, help="size of the replay buffer")
@@ -74,14 +74,15 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
     elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
+                                max_allowed_error= 30, 
                                 make_base_reward_components= make_glide_angle_reward_components,
-                                integral_limit = 0.5)
+                                integral_limit = 1)
 
     aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
                                 max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components,
-                                integral_limit = 0.25)
+                                integral_limit = 0.1)
 
     agent_task_list = [elevator_AT, aileron_AT]
     agent_task_types = ['PID', 'PID']
@@ -271,6 +272,8 @@ def train(arglist):
     final_ep_ag_rewards = []  # agent rewards for training curve
     # saver = tf.train.Saver()  #TODO: need to add some save/restore code compatible to pytorch
     obs_n = training_env.reset()
+    [ag.reset_notifier() for ag in trainers]
+
     episode_step = 0
     episode_counter = 0
     train_step = 0
@@ -296,6 +299,8 @@ def train(arglist):
         if done or terminal:        #episode is over
             episode_counter += 1
             obs_n = training_env.reset()    #start new episode
+            [ag.reset_notifier() for ag in trainers]
+
             
             showPlot = False    #this is here for debugging purposes
             training_env.showNextPlot(show = showPlot)

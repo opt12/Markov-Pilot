@@ -9,8 +9,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from tensorboardX import SummaryWriter
-from statistics import mean
-from typing import List, Tuple
 
 class OUActionNoise(object):
     def __init__(self, mu, sigma=0.15, theta=.2, dt=1e-2, x0=None):
@@ -312,11 +310,11 @@ class Agent_Multi(object):
         if self.calculate_grad_norms:   #TODO: 
             grad_max_n, grad_means_n = zip(*[(p.grad.abs().max().item(), (p.grad ** 2).mean().sqrt().item())  for p in list(self.critic.parameters())])
             grad_max = max(grad_max_n)
-            grad_means = mean(grad_means_n)
+            grad_means = np.mean(grad_means_n)
             self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
+        
         self.critic.optimizer.step()
-
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
         self.actor.optimizer.zero_grad()
         mu = self.actor.forward(obs_n_t[own_idx])
@@ -408,7 +406,7 @@ class Agent_Multi(object):
         self.noise_sigma *= sigma_factor
         self.noise_theta *= theta_factor
         print('Noise set to sigma=%f, theta=%f' % (self.noise_sigma, self.noise_theta))
-        self.noise = OUActionNoise(mu=np.zeros(self.n_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
+        self.noise = OUActionNoise(mu=np.zeros(self.own_actions),sigma=self.noise_sigma, theta=self.noise_theta, dt=1/5.)
         self.noise.reset()
 
     # def check_actor_params(self):
@@ -539,11 +537,15 @@ class Agent_Single(Agent_Multi):    #TODO: unify this with Multi-Agent this is j
         if self.calculate_grad_norms:   #TODO: 
             grad_max_n, grad_means_n = zip(*[(p.grad.abs().max().item(), (p.grad ** 2).mean().sqrt().item())  for p in list(self.critic.parameters())])
             grad_max = max(grad_max_n)
-            grad_means = mean(grad_means_n)
+            grad_means = np.mean(grad_means_n)
             self.writer.add_scalar("critic grad_l2",  grad_means, global_step=self.global_step)
             self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
-        
         self.critic.optimizer.step()
+
+        self.writer.add_scalar("critic grad_l2",  grad_means / grad_count, global_step=self.global_step)
+        self.writer.add_scalar("critic grad_max", grad_max, global_step=self.global_step)
+        self.critic.optimizer.step()
+
         self.critic.eval()          #switch critic back to eval mode for the "loss" calculation of the actor network
         self.actor.optimizer.zero_grad()
         mu = self.actor.forward(state)
@@ -556,3 +558,4 @@ class Agent_Single(Agent_Multi):    #TODO: unify this with Multi-Agent this is j
         self.actor.optimizer.step()
 
         self._update_network_parameters()    #update target to base networks with standard tau
+

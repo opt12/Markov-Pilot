@@ -34,6 +34,8 @@ def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=Fal
 
     exploration_noise = add_exploration_noise   #to have a handle on that in the debugger
     obs_n = env.reset()
+    [ag.reset_notifier() for ag in agents]
+
     env.showNextPlot(True, True)
     terminal = False
     score_n = np.zeros(env.n)
