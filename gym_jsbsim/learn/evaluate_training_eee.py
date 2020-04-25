@@ -84,7 +84,7 @@ def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=Fal
             }
 
             #save the agents' state
-            if ag.agent_save_path:
+            if ag.agent_save_path and hasattr(ag, 'agent'):
                 filename = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_rwd-{score_n[i]:06.2f}_steps-{ag.train_steps}')
                 ag.agent.save_models(filename)
                 eval_dict.update({'path': 'file://'+filename})

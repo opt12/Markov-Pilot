@@ -10,6 +10,8 @@ import torch.optim as optim
 import numpy as np
 from tensorboardX import SummaryWriter
 
+from typing import List, Tuple
+
 class OUActionNoise(object):
     def __init__(self, mu, sigma=0.15, theta=.2, dt=1e-2, x0=None):
         self.theta = theta
@@ -380,7 +382,7 @@ class Agent_Multi(object):
             'critic_optimizer': self.critic.optimizer.state_dict()
         }
         
-        T.save(agent_networks_state_dict)
+        T.save(agent_networks_state_dict, filename)
 
     @classmethod
     def init_from_save(cls, filename):

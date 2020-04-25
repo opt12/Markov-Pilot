@@ -240,8 +240,7 @@ class SingleDDPG_Agent(AgentTrainer):
         self.agent = Agent_Single(lr_actor, lr_critic, own_input_shape, action_space, tau, gamma=gamma,
                  max_size=max_size, layer1_size=layer1_size,
                  layer2_size=layer2_size, batch_size=batch_size, 
-                 noise_sigma = noise_sigma, noise_theta = noise_theta,
-                 initialize_new_networks = initialize_new_networks)
+                 noise_sigma = noise_sigma, noise_theta = noise_theta)
                  
     def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
         """ determines the action to take from the observation.

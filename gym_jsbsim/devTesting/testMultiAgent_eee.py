@@ -15,7 +15,7 @@ from typing import Union, List
 
 from gym_jsbsim.agent_task_eee import SingleChannel_FlightAgentTask
 TASK_AGENT_MODULE = 'gym_jsbsim.agent_task_eee' #TODO: make this smarter
-from gym_jsbsim.agents.pidAgent_eee import PID_Agent, PidParameters, SingleDDPG_Agent, MultiDDPG_Agent
+from gym_jsbsim.agents.pidAgent_eee import PID_Agent_no_State, PidParameters, SingleDDPG_Agent, MultiDDPG_Agent
 from gym_jsbsim.environment_eee import NoFGJsbSimEnv_multi_agent
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
 import gym_jsbsim.properties as prp
@@ -72,6 +72,16 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     agent_interaction_freq = arglist.interaction_frequency
     episode_time_s=arglist.max_episode_len_sec
 
+    elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
+
+    aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_reward_components,
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
+
     elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
                                 max_allowed_error= 30, 
@@ -84,11 +94,11 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_roll_angle_reward_components,
                                 integral_limit = 0.1)
 
-    agent_task_list = [elevator_AT, aileron_AT]
+    agent_task_list = [elevator_AT_for_PID, aileron_AT]
     agent_task_types = ['PID', 'PID']
     agent_task_types = ['PID', 'DDPG']
     # agent_task_types = ['DDPG', 'MADDPG']
-    agent_task_types = ['MADDPG', 'MADDPG']
+    # agent_task_types = ['MADDPG', 'MADDPG']
     
     env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
@@ -169,46 +179,12 @@ def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimE
     
     return env
 
-# def restore_agents_from_journal(line_numbers: Union[int, List[int]]):
-#     AG_JSON    = 'agents_data.json'
-#     AG_PICKLE  = 'agents_data.pickle'
-
-#     ln = line_numbers if isinstance(line_numbers, int) else line_numbers[0]
-
-#     #get run protocol
-#     try:
-#         model_file = lab_journal.get_model_filename(ln)
-#         run_protocol_path = lab_journal.find_associated_run_path(model_file)
-#     except TypeError:
-#         print(f"there was no run protocol found that is associated with line_number {ln}")
-#         exit()
-
-#     #restore the agents from saved pickle
-
-#     # the agents are restored with either
-#     # - data specified by a line number
-#     # - pristine networks
-#     # - _best networks
-#     # - _latest networks
-#     # if not all agents are specified by line numbers, the missing ones are restored with either 
-#     # - pristine
-#     # - _best 
-#     # - _latest
-#     # networks from the environment_description
-
-#     #first restore the agent objects without the networks
-    # #load the AG_PICKLE and restore the task_list
-    # with open(os.path.join(run_protocol_path, AG_PICKLE), 'rb') as infile:
-    #     agent_data = pickle.load(infile)
-    
-    # trainers_n = []
-
 def get_trainers(env, arglist):
 
     pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
                   'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
     
-    agent_spec = {'PID':    PID_Agent,
+    agent_spec = {'PID':    PID_Agent_no_State,
                   'DDPG':   SingleDDPG_Agent,
                   'MADDPG': MultiDDPG_Agent}
 
@@ -221,7 +197,7 @@ def get_trainers(env, arglist):
     for i in range(len(name_n)):
         if task_type_n[i] == 'PID':
             trainers_n.append(
-                PID_Agent(name_n[i], pid_params[name_n[i]], action_space_n[i], agent_interaction_freq = arglist.interaction_frequency)
+                PID_Agent_no_State(name_n[i], pid_params[name_n[i]], action_space_n[i], agent_interaction_freq = arglist.interaction_frequency)
             )
             continue
         if task_type_n[i] == 'DDPG':
