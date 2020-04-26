@@ -11,7 +11,7 @@ from typing import Type, Tuple, Dict, List, Sequence, NamedTuple, Optional, Unio
 
 from collections import namedtuple
 
-from gym_jsbsim.utils import aggregate_gym_boxes
+from gym_jsbsim.helper.utils import aggregate_gym_boxes
 from gym_jsbsim.agents.AgentTrainer import Experience, AgentTrainer, PID_AgentTrainer, DDPG_AgentTrainer, MADDPG_AgentTrainer
 
 AgentSpec = namedtuple('AgentSpec', ['name', 'agent_type', 'task_names', 'parameters'])

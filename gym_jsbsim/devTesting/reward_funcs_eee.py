@@ -1,4 +1,5 @@
-from gym_jsbsim import rewards, properties as prp
+import gym_jsbsim.environment.rewards as rewards
+import gym_jsbsim.environment.properties as prp
 
 from typing import Tuple
 

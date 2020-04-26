@@ -5,7 +5,7 @@ sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? 
 import gym
 import numpy as np
 import random
-import gym_jsbsim.properties as prp
+import gym_jsbsim.environment.properties as prp
 
 
 class VarySetpointsWrapper(gym.Wrapper):

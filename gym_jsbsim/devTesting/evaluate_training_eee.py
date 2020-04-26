@@ -6,7 +6,7 @@ import csv
 import os
 from shutil import copyfile
 import numpy as np
-import gym_jsbsim.properties as prp
+import gym_jsbsim.environment.properties as prp
 
 best_score_n = []  #we don't like globals, but it really helps here
 eval_number = 0

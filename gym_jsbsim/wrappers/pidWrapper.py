@@ -2,7 +2,7 @@ import gym
 import numpy as np
 from collections import namedtuple
 
-from gym_jsbsim.agents import PIDAgentSingleChannel, PidParameters
+from gym_jsbsim.agents.pidAgent_eee import Do_not_use_PID_Agent, PidParameters
 
 # a parameter set for a PID controller
 PidWrapperParams = namedtuple('PidWrapperParams', ['action_name', 'error_state_name', 'pid_params'])

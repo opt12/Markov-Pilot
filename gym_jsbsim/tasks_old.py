@@ -6,12 +6,13 @@ import math
 import enum
 import warnings
 from collections import namedtuple
-import gym_jsbsim.properties as prp
-from gym_jsbsim import assessors, rewards, utils
-from gym_jsbsim.simulation import Simulation
-from gym_jsbsim.properties import BoundedProperty, Property
-from gym_jsbsim.aircraft import Aircraft
-from gym_jsbsim.rewards import RewardStub
+import gym_jsbsim.environment.properties as prp
+from gym_jsbsim.environment import assessors, rewards
+from gym_jsbsim.helper import utils
+from gym_jsbsim.environment.simulation import Simulation
+from gym_jsbsim.environment.properties import BoundedProperty, Property
+from gym_jsbsim.environment.aircraft import Aircraft
+from gym_jsbsim.environment.rewards import RewardStub
 from abc import ABC, abstractmethod
 from typing import Optional, Sequence, Dict, Tuple, NamedTuple, Type
 

@@ -1,6 +1,6 @@
 import gym
 import gym.spaces
-import gym_jsbsim.properties as prp
+import gym_jsbsim.environment.properties as prp
 import numpy as np
 import pandas as pd
 import datetime

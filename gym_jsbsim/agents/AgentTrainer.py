@@ -12,9 +12,10 @@ from gym.spaces import Box
 from collections import namedtuple
 from typing import List, Tuple, Dict
 
-from gym_jsbsim.helper import ReplayBuffer, OUNoise
+from gym_jsbsim.helper.ReplayBuffer import ReplayBuffer
+from gym_jsbsim.helper.OUNoise import OUNoise
 from .networks import ActorNetwork, CriticNetwork
-from gym_jsbsim.utils import soft_update
+from gym_jsbsim.helper.utils import soft_update
 
 Experience = namedtuple('Experience', ['obs', 'act', 'rew', 'next_obs', 'done'])
 # a parameter set for a PID controller

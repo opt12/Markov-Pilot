@@ -3,9 +3,10 @@ import operator
 import numpy as np
 
 from typing import Tuple, List
-from gym_jsbsim.aircraft import cessna172P, a320, f15
 from typing import Dict, Iterable
 from gym.spaces import Box
+
+from gym_jsbsim.environment.aircraft import cessna172P, a320, f15
 
 
 def aggregate_gym_boxes(ac_spcs_n: List[Box]) -> Box:
@@ -75,7 +76,7 @@ def get_env_id(task_type, aircraft, shaping, enable_flightgear) -> str:
 def get_env_id_kwargs_map() -> Dict[str, Tuple]:
     """ Returns all environment IDs mapped to tuple of (task, aircraft, shaping, flightgear) """
     # lazy import to avoid circular dependencies
-    from gym_jsbsim.tasks import Shaping, HeadingControlTask, TurnHeadingControlTask
+    from gym_jsbsim.tasks_old import Shaping, HeadingControlTask, TurnHeadingControlTask
     from gym_jsbsim.task_steadyGlide import SteadyRollGlideTask, SteadyRollAngleTask, SteadyGlideAngleTask
 
     map = {}

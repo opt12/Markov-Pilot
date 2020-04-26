@@ -3,8 +3,10 @@ import os
 import time
 from mpl_toolkits.mplot3d import Axes3D  # req'd for 3d plotting
 from typing import Dict, Union
-import gym_jsbsim.properties as prp
-from gym_jsbsim.aircraft import Aircraft, cessna172P
+
+from . import properties as prp #TODO: is it really necessary to import with fully qualified path?
+
+from gym_jsbsim.environment.aircraft import Aircraft, cessna172P
 
 
 class Simulation(object):
@@ -20,7 +22,7 @@ class Simulation(object):
     def __init__(self,
                  sim_frequency_hz: float = 60.0,
                  aircraft: Aircraft = cessna172P,
-                 init_conditions: Dict[prp.Property, float] = None,
+                 init_conditions: Dict['prp.Property', float] = None,
                  allow_flightgear_output: bool = True):
         """
         Constructor. Creates an instance of JSBSim and sets initial conditions.
@@ -47,7 +49,7 @@ class Simulation(object):
         self.jsbsim.disable_output()
         self.wall_clock_dt = None
     
-    def __getitem__(self, prop: Union[prp.BoundedProperty, prp.Property]) -> float:
+    def __getitem__(self, prop: Union['prp.BoundedProperty', 'prp.Property']) -> float:
         """
         Retrieves specified simulation property.
 
@@ -63,7 +65,7 @@ class Simulation(object):
         else:
             return self.jsbsim[prop.name]
 
-    def __setitem__(self, prop: Union[prp.BoundedProperty, prp.Property, str], value) -> None:
+    def __setitem__(self, prop: Union['prp.BoundedProperty', 'prp.Property', str], value) -> None:
         """
         Sets simulation property to specified value.
 

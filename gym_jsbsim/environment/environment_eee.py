@@ -1,3 +1,6 @@
+# import sys            
+# sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
+
 import gym
 import numpy as np
 import math
@@ -10,11 +13,11 @@ from collections import namedtuple
 import types
 from typing import Type, Tuple, Dict, List, Sequence, NamedTuple, Optional
 
-from gym_jsbsim.simulation import Simulation
-from gym_jsbsim.visualiser import FigureVisualiser, FlightGearVisualiser, TimeLineVisualiser
-from gym_jsbsim.aircraft import Aircraft, cessna172P
-import gym_jsbsim.properties as prp
-from gym_jsbsim.properties import BoundedProperty, Property
+from gym_jsbsim.environment.simulation import Simulation
+# from gym_jsbsim.helper.visualiser import FlightGearVisualiser, TimeLineVisualiser
+from .aircraft import Aircraft, cessna172P
+from gym_jsbsim.environment import properties as prp
+from gym_jsbsim.environment.properties import BoundedProperty, Property
 
 
 class JsbSimEnv_multi_agent(gym.Env):
@@ -367,12 +370,8 @@ class JsbSimEnv_multi_agent(gym.Env):
         :param flightgear_blocking: waits for FlightGear to load before
             returning if True, else returns immediately
         """
-        if mode == 'human':
-            if not self.figure_visualiser:
-                self.figure_visualiser = FigureVisualiser(self.sim,
-                                                          self.get_props_to_output())
-            self.figure_visualiser.plot(self.sim)
-        elif mode == 'timeline':
+        #TODO: get this right with the properties to plot to the timeline
+        if mode == 'human' or mode == 'timeline':
             if not self.timeline_visualiser:
                 self.timeline_visualiser = TimeLineVisualiser(self.sim,
                                                           self.get_timeline_props_to_output())
@@ -393,8 +392,6 @@ class JsbSimEnv_multi_agent(gym.Env):
         """
         if self.sim:
             self.sim.close()
-        if self.figure_visualiser:
-            self.figure_visualiser.close()
         if self.timeline_visualiser:
             self.timeline_visualiser.close()
         if self.flightgear_visualiser:
@@ -435,13 +432,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         if initial_conditions is not None:
             for prop, value in initial_conditions.items():
                 self.inital_attitude[prop] = value  #update the initial conditions
-
-    def get_state_property_names(self):
-        """
-        returns the list of names of the named tuple representing the state of the specific task
-        """
-        return self.task.State._fields
-    
+   
     def set_meta_information(self, **kwargs):
         self.meta_dict = {**self.meta_dict, **kwargs}
 
@@ -507,7 +498,7 @@ class JsbSimEnv_multi_agent(gym.Env):
 
     @property
     def get_save_dict(self):
-        return self.init_dict
+        return self.env_init_dicts
 class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.

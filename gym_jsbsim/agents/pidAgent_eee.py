@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import namedtuple
 from typing import List, Tuple
 
-from gym_jsbsim.utils import box2dict
+from gym_jsbsim.helper.utils import box2dict
 
 class AgentTrainer(ABC):
     """ 

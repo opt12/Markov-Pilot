@@ -13,19 +13,19 @@ import importlib
 
 from typing import Union, List
 
-from gym_jsbsim.agent_task_eee import SingleChannel_FlightAgentTask
-TASK_AGENT_MODULE = 'gym_jsbsim.agent_task_eee' #TODO: make this smarter
+from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent
+from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask
+TASK_AGENT_MODULE = 'gym_jsbsim.tasks' #TODO: make this smarter
 # from gym_jsbsim.agents.pidAgent_eee import PidParameters, SingleDDPG_Agent, MultiDDPG_Agent, PID_Agent_no_State
 from gym_jsbsim.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
-from gym_jsbsim.agent_container_eee import AgentContainer, AgentSpec
-from gym_jsbsim.environment_eee import NoFGJsbSimEnv_multi_agent
+from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
-import gym_jsbsim.properties as prp
+import gym_jsbsim.environment.properties as prp
 
-from gym_jsbsim.learn.evaluate_training_eee import evaluate_training_with_agent_container
-from gym_jsbsim.devTesting.lab_journal import LabJournal
+from evaluate_training_eee import evaluate_training_with_agent_container
+from lab_journal import LabJournal
 
-from gym_jsbsim.reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
+from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5
@@ -181,6 +181,7 @@ def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimE
     
     return env
 
+''' not needed for the new style
 def get_trainers(env, arglist):
 
     pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
@@ -231,7 +232,8 @@ def get_trainers(env, arglist):
         raise LookupError('there must be an agent for each and every Agent_Task in the environment')
 
     return trainers_n
-    
+'''
+
 def train(arglist):
 
     max_episode_steps = arglist.max_episode_len_sec * arglist.interaction_frequency
