@@ -72,12 +72,12 @@ class ReplayBuffer(object):
         return obs, actions, rewards, obs_next, terminal
 
 class CriticNetwork(nn.Module):
-    def __init__(self, beta, n_inputs, fc1_dims, fc2_dims, action_shape):
+    def __init__(self, beta, n_inputs, fc1_dims, fc2_dims, n_actions, **kwargs):
         super(CriticNetwork, self).__init__()
         self.n_inputs = n_inputs
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.action_shape = action_shape
+        self.n_actions = n_actions
         self.fc1 = nn.Linear(self.n_inputs, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])     #weight initialization according to DDPD-paper
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
@@ -95,7 +95,7 @@ class CriticNetwork(nn.Module):
         #self.fc2.bias.data.uniform_(-f2, f2)
         self.bn2 = nn.LayerNorm(self.fc2_dims)
 
-        self.action_value = nn.Linear(*self.action_shape, self.fc2_dims)
+        self.action_value = nn.Linear(self.n_actions, self.fc2_dims)
         f3 = 3e-3
         self.q = nn.Linear(self.fc2_dims, 1)        #the Critic output is just a single scalar Q-value;
         T.nn.init.uniform_(self.q.weight.data, -f3, f3)
@@ -123,12 +123,12 @@ class CriticNetwork(nn.Module):
         return state_action_value   #scalar value
 
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, n_inputs: int, fc1_dims, fc2_dims, n_actions:int):
+    def __init__(self, alpha, n_inputs: int, fc1_dims, fc2_dims, act_space: Box, **kwargs):
         super(ActorNetwork, self).__init__()
         self.n_inputs = n_inputs
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
-        self.n_actions = n_actions
+        self.n_actions = act_space.shape[-1]
         self.fc1 = nn.Linear(self.n_inputs, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
@@ -474,18 +474,20 @@ class Agent_Single(Agent_Multi):    #TODO: unify this with Multi-Agent this is j
         print(f"set checkpoint directory to: {self.chkpt_dir}")
 
         self.actor = ActorNetwork(lr_actor, own_input_shape[-1], layer1_size,
-                                  layer2_size, n_actions=action_space.shape[-1])
+                                  layer2_size, act_space=action_space)
         self.critic = CriticNetwork(lr_critic, 
                         own_input_shape[-1],
                         layer1_size, layer2_size, 
-                        action_shape=action_space.shape)
+                        n_actions=action_space.shape[-1])
 
         self.target_actor = ActorNetwork(lr_actor, own_input_shape[-1], layer1_size,
-                                  layer2_size, n_actions=action_space.shape[-1])
+                                  layer2_size, act_space=action_space, 
+                                  is_target_network=True)
         self.target_critic = CriticNetwork(lr_critic, 
                                 own_input_shape[-1],
                                 layer1_size, layer2_size, 
-                                action_shape=action_space.shape)
+                                n_actions=action_space.shape[-1], 
+                                is_target_network=True)
 
 
         # self.noise = OUActionNoise(mu=np.zeros(n_actions),sigma=0.15, theta=.2, dt=1/5.)

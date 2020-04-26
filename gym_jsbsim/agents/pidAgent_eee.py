@@ -205,7 +205,9 @@ class PID_Agent_no_State(AgentTrainer):
     #TODO:
     def save_agent_state_to_file(self, filename):
         raise NotImplementedError()
-    
+
+Experience = namedtuple('Experience', ['obs', 'act', 'rew', 'next_obs', 'done'])
+
 from gym_jsbsim.learn.ddpg_torch_eee import Agent_Single
 class SingleDDPG_Agent(AgentTrainer):
     """ 
@@ -216,7 +218,7 @@ class SingleDDPG_Agent(AgentTrainer):
     def __init__(self, name, lr_actor, lr_critic, own_input_shape, action_space, tau, gamma=0.99,
                  max_size=1000000, layer1_size=400,
                  layer2_size=300, batch_size=64, chkpt_dir='tmp/ddpg', chkpt_postfix='', noise_sigma = 0.15, noise_theta = 0.2,
-                 initialize_new_networks = True):
+                 initialize_new_networks = True, **kwargs):
         
         self.agent_dict = {
             'name': name, 
@@ -241,7 +243,18 @@ class SingleDDPG_Agent(AgentTrainer):
                  max_size=max_size, layer1_size=layer1_size,
                  layer2_size=layer2_size, batch_size=batch_size, 
                  noise_sigma = noise_sigma, noise_theta = noise_theta)
-                 
+
+    def get_action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
+        return self.action(obs, add_exploration_noise)
+
+    def rwd_aggregator(self, rwd_list):
+        """
+        If more than one task is associated to an agent, the rewards must be aggregated somehow.
+
+        Overwrite at your convenience for special agents
+        """
+        return rwd_list.sum()
+
     def action(self, obs: np.ndarray, add_exploration_noise=False) -> np.ndarray:
         """ determines the action to take from the observation.
 
@@ -249,6 +262,9 @@ class SingleDDPG_Agent(AgentTrainer):
         :param add_exploration_noise = False: flag to determine whether exploration noise shall be added to the calculated action
         """
         return self.agent.choose_action(obs, add_exploration_noise=add_exploration_noise)
+
+    def store_experience(self, experience: Experience):
+        return self.process_experience(experience.obs, experience.act, experience.rew, experience.next_obs, experience.done, experience.done)
 
     def process_experience(self, obs, act, rew, new_obs, done, terminal):
         """ Stores the transition tupel (s,a,r,s',done) to the agent's private replay buffer.
@@ -263,6 +279,9 @@ class SingleDDPG_Agent(AgentTrainer):
         """ Any (clean-up) actions to be performed before the training step.
         """
         pass
+
+    def train(self, agents_m: List['AgentTrainer'], own_idx: int):
+        return self.update(agents_m, 1, own_idx)
 
     def update(self, agents: List['AgentTrainer'], t: int, own_idx):
         """ The training step of the agent.

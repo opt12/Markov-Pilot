@@ -95,7 +95,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 integral_limit = 0.1)
 
     agent_task_list = [elevator_AT_for_PID, aileron_AT]
-    agent_task_types = ['PID', 'PID']
+    # agent_task_types = ['PID', 'PID']
     agent_task_types = ['PID', 'DDPG']
     # agent_task_types = ['DDPG', 'MADDPG']
     # agent_task_types = ['MADDPG', 'MADDPG']
