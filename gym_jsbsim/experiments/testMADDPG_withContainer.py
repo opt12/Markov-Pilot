@@ -22,8 +22,8 @@ from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
 import gym_jsbsim.environment.properties as prp
 
-from evaluate_training_eee import evaluate_training_with_agent_container
-from lab_journal import LabJournal
+from gym_jsbsim.environment.evaluate_training_eee import evaluate_training_with_agent_container
+from gym_jsbsim.helper.lab_journal import LabJournal
 
 from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
 
@@ -97,6 +97,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_roll_angle_reward_components,
                                 integral_limit = 0.25)
 
+    agent_task_list = [elevator_AT, aileron_AT]
     agent_task_list = [elevator_AT, aileron_AT]
     # agent_task_types = ['PID', 'PID']
     # agent_task_types = ['PID', 'DDPG']  #TODO: This is irrelevant for the env!!! REMOVE
@@ -408,6 +409,7 @@ def setup_container_from_env(env, arglist):
 
     #Here we specify which agents shall be initiated; chose form the above defined single-specs
     agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
+    agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_DDPG]
 
     agent_container = AgentContainer.init_from_env(env, agent_spec, agent_classes_dict, arglist)
 
