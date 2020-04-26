@@ -373,8 +373,10 @@ class MADDPG_AgentTrainer(AgentTrainer):
             self.critic.eval()          #switch critic to eval mode
                 
     def _update_target_network_parameters(self, tau):
-        soft_update(self.critic, self.target_critic, tau)
-        soft_update(self.critic, self.target_critic, tau)
+        #The call semantics is:
+        # soft_update(target, source, tau)
+        soft_update(self.target_actor, self.actor, tau)
+        soft_update(self.target_critic, self.critic, tau)
     
     def get_agent_state_params(self) -> Dict:
         """
@@ -423,7 +425,7 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
                 layer1_size=400, layer2_size=300, batch_size=64, 
                 noise_sigma = 0.15, noise_theta = 0.2,
                 **kwargs):
-        critic_state_space = kwargs.pop('critic_state_space', obs_space)    #if it was contained in the params, we take it otherwise, we know ist
+        critic_state_space = kwargs.pop('critic_state_space', obs_space)    #if it was contained in the params, we take it otherwise, we know it must equal the obs_space
         if critic_state_space != obs_space:
             raise ValueError('In DDPG_AgentTrainer, (critic_state_space == obs_space) must hold, or the parameter must not be given')
         
@@ -500,7 +502,7 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
         self.actor.optimizer.step()
 
         self._update_target_network_parameters(self.tau)    #update target to base networks with standard tau
-        
+
 
 if __name__ == '__main__':
 

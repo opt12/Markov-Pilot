@@ -198,7 +198,7 @@ class AgentContainer():
                 'obs_space': ag_actor_obs_spaces_m[i],
                 'act_space': ag_actor_act_spaces_m[i],
                 'critic_state_space': ag_critic_state_space_m[i],
-                'agent_interaction_frequency': arglist.interaction_frequency
+                'agent_interaction_frequency': arglist.interaction_frequency,
             }
             agent_init_dict.update(aspec.parameters)
             agent_init_dict_m.append(agent_init_dict)

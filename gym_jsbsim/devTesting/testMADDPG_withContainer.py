@@ -50,8 +50,8 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Core training parameters
     parser.add_argument("--lr_actor", type=float, default=1e-4, help="learning rate for the actor training Adam optimizer")
     parser.add_argument("--lr_critic", type=float, default=1e-3, help="learning rate for the critic training Adam optimizer")
-    parser.add_argument("--tau", type=float, default=0.001, help="target network adaptation factor")
-    parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
+    parser.add_argument("--tau", type=float, default=1e-3, help="target network adaptation factor")
+    parser.add_argument("--gamma", type=float, default=0.99, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=64, help="number of episodes to optimize at the same time")
     parser.add_argument("--replay-size", type=int, default=1000000, help="size of the replay buffer")
     # parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
@@ -86,8 +86,10 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
     elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
+                                max_allowed_error= 30, 
                                 make_base_reward_components= make_glide_angle_reward_components,
                                 integral_limit = 0.5)
+
 
     aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
@@ -95,13 +97,13 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_roll_angle_reward_components,
                                 integral_limit = 0.25)
 
-    agent_task_list = [elevator_AT_for_PID, aileron_AT]
+    agent_task_list = [elevator_AT, aileron_AT]
     # agent_task_types = ['PID', 'PID']
-    agent_task_types = ['PID', 'DDPG']  #TODO: This is irrelevant for the env!!! REMOVE
+    # agent_task_types = ['PID', 'DDPG']  #TODO: This is irrelevant for the env!!! REMOVE
     # agent_task_types = ['DDPG', 'MADDPG']
     # agent_task_types = ['MADDPG', 'MADDPG']
     
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
+    env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)  #TODO: task_list is irrelevant for the env!!! REMOVE
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
     env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
@@ -367,8 +369,10 @@ def setup_container_from_env(env, arglist):
         'PID': PID_AgentTrainer,
         'MADDPG': MADDPG_AgentTrainer,
         'DDPG': DDPG_AgentTrainer,
+        # 'DDPG': SingleDDPG_Agent,
     }
 
+    #for PID controllers we need an alaborated parameter set for each type
     pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
                   'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
 
@@ -377,22 +381,31 @@ def setup_container_from_env(env, arglist):
         'writer': None,
     }
 
-    params_aileron_DDPG_agent = {
+    params_elevator_pid_agent = {
+        'pid_params': pid_params['elevator'], 
+        'writer': None,
+    }
+
+    #for the learning agents, a standard parameter set will do; the details will be learned
+    params_DDPG_MADDPG_agent = {
         **vars(arglist),
         'writer': None,
     }
 
     agent_spec_aileron_Pid = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
 
-    agent_spec_aileron_DDPG = AgentSpec('aileron', 'MADDPG', ['aileron'], params_aileron_DDPG_agent)
+    agent_spec_aileron_DDPG = AgentSpec('aileron', 'DDPG', ['aileron'], params_DDPG_MADDPG_agent)
 
-    params_elevator_pid_agent = {
-        'pid_params': pid_params['elevator'], 
-        'writer': None,
-    }
+    agent_spec_aileron_MADDPG = AgentSpec('aileron', 'MADDPG', ['aileron'], params_DDPG_MADDPG_agent)
+
     agent_spec_elevator_Pid = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_pid_agent)
 
-    agent_spec = [agent_spec_elevator_Pid, agent_spec_aileron_DDPG]
+    agent_spec_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['elevator'], params_DDPG_MADDPG_agent)
+
+    agent_spec_elevator_MADDPG = AgentSpec('elevator', 'MADDPG', ['elevator'], params_DDPG_MADDPG_agent)
+
+    #Here we specify which agents shall be initiated; chose form the above defined single-specs
+    agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
 
     agent_container = AgentContainer.init_from_env(env, agent_spec, agent_classes_dict, arglist)
 
