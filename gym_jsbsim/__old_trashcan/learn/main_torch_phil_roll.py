@@ -43,7 +43,7 @@ if __name__ == "__main__":
                        'info_delta_cmd_elevator', 'fcs_elevator_cmd_norm']
 
 
-    # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
+    # save_path = os.path.join("saves", "{}_ddpg-gamma0_95-two-state_5Hz_alpha_5e-5_beta_5e-4_100x100_size".format(datetime.datetime.now().strftime("%Y_%m_%d-%H-%M")) + args.name)
     # os.makedirs(save_path, exist_ok=True)
 
     # elevator params: 'Kp':  -5e-2, 'Ki': -6.5e-2, 'Kd': -1e-3

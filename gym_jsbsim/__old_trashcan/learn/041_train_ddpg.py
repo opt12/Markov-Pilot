@@ -67,7 +67,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    save_path = os.path.join("saves", "{}_ddpg-".format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M")) + args.name)
+    save_path = os.path.join("saves", "{}_ddpg-".format(datetime.datetime.now().strftime("%Y_%m_%d-%H-%M")) + args.name)
     os.makedirs(save_path, exist_ok=True)
 
     # elevator params: 'Kp':  -5e-2, 'Ki': -6.5e-2, 'Kd': -1e-3
