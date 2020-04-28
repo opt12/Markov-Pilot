@@ -183,7 +183,7 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
     print("].")
 
     if lab_journal:
-        save_dir = lab_journal.jornal_save_dir
+        save_dir = lab_journal.journal_save_dir
         for i, ag in enumerate(agent_container.agents_m):
             eval_dict = {
                 'entry_type': ag.name,

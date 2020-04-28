@@ -17,6 +17,17 @@ class VarySetpointsWrapper(gym.Wrapper):
     
     def __init__(self, env, modulation_amplitude = None, modulation_period = 120, modulation_decay = 1):
         super(VarySetpointsWrapper, self).__init__(env)
+
+        # to automatically apply the wrapper after restoring the env from pickle file, 
+        # append to the self.env_init_dicts and to self.env_classes
+        # 
+        # We don't want this for the VarySetpointswrapper, as this may cause problems when using in a pure player
+        # #append the restore data
+        # self.env_init_dicts.append({
+        #     'output_props': output_props
+        # })
+        # self.env_classes.append(self.__class__.__name__)
+
         self.env = env
         self.step_width = 2 * np.pi / modulation_period
         self.modulation_amplitude = modulation_amplitude / modulation_decay if modulation_amplitude else None

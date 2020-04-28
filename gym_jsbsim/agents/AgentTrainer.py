@@ -354,11 +354,11 @@ class MADDPG_AgentTrainer(AgentTrainer):
         return mu_t
 
     def train(self, agents_m: List['AgentTrainer'], own_idx: int):
+        self.train_steps += 1   #we count it up, even when there are not enough samples yet. It was a step anyhow...
+
         if self.replay_buffer.mem_cntr < self.batch_size:
             return
         
-        self.train_steps += 1
-
         #determine the samples for minibatch
         batch_idxs = self.replay_buffer.get_batch_idxs(self.batch_size)
         # retrieve minibatch from all agents including own
@@ -499,10 +499,11 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
 
     def train(self, agents_m: List['AgentTrainer'], own_idx: int):
         #agents_m and own_idx are ignored, as this is only the DDPG algo, not the MADDPG
+
+        self.train_steps += 1   #we count it up, even when there are not enough samples yet. It was a step anyhow...
+
         if self.replay_buffer.mem_cntr < self.batch_size:
             return
-        
-        self.train_steps += 1
 
         #determine the samples for minibatch
         batch_idxs = self.replay_buffer.get_batch_idxs(self.batch_size)

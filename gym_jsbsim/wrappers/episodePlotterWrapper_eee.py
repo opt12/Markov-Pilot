@@ -136,7 +136,6 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
             self.showGraph(dataRecorder)
 
-
     def reset(self):
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
         self.obs_n = self.env.reset()
@@ -258,7 +257,6 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         
         return panels
 
-
     def showGraph(self,data_frame):
 
         #create the plot panels for the Agent_Tasks
@@ -335,13 +333,17 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         panel_grid_plot = gridplot(panel_grid, toolbar_location='right', sizing_mode='stretch_width')
 
         #for string formatting look here: https://pyformat.info/
-
-        titleString = "Run Date: {}; ".format(datetime.datetime.now().strftime("%c"))
+        titleString = ''
+        if 'experiment_name' in self.env.meta_dict:
+            titleString += "{}: ".format(self.env.meta_dict['experiment_name'])
+        titleString += "Run Date: {}; ".format(datetime.datetime.now().strftime("%c"))
         
         if 'train_step' in self.env.meta_dict:
             titleString += "Training Step: {}; ".format(self.env.meta_dict['train_step'])
         if 'episode_number' in self.env.meta_dict:
             titleString += "Episode: {}; ".format(self.env.meta_dict['episode_number'])
+        if 'csv_line_nr' in self.env.meta_dict:
+            titleString += "Env in CSV line: {}; ".format(self.env.meta_dict['csv_line_nr'])
         # titleString += "Total Reward: {:.2f}; ".format(data_frame['reward'].sum())
         # titleString += "Model Discriminator: {};".format(self.env.meta_dict['model_discriminator'])
         header_col = column(

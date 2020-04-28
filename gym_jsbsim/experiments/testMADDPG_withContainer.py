@@ -13,10 +13,8 @@ import importlib
 
 from typing import Union, List
 
-from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent
+from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
 from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask
-TASK_AGENT_MODULE = 'gym_jsbsim.tasks' #TODO: make this smarter
-# from gym_jsbsim.agents.pidAgent_eee import PidParameters, SingleDDPG_Agent, MultiDDPG_Agent, PID_Agent_no_State
 from gym_jsbsim.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
 from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
@@ -32,18 +30,12 @@ target_path_angle_gamma_deg = -6.5
 target_kias = 92
 target_roll_angle_phi_deg   = -15
 
-## define the initial conditions TODO: should go into arglist
-initial_path_angle_gamma_deg = target_path_angle_gamma_deg + 3
-initial_roll_angle_phi_deg   = target_roll_angle_phi_deg + 10
-initial_fwd_speed_KAS        = 95
-initial_aoa_deg              = 1.0
-
 def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/maddpg/
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     # parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
     parser.add_argument("--max-episode-len-sec", type=int, default=120, help="maximum episode length in seconds (steps = seconds*interaction frequ.)")
-    parser.add_argument("--num-episodes", type=int, default=10000, help="number of episodes to train on")
+    parser.add_argument("--num-steps", type=int, default=30000, help="number of training steps to perfoem")
     # parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     # parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     # parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
@@ -55,18 +47,20 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     parser.add_argument("--gamma", type=float, default=0.99, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=64, help="number of episodes to optimize at the same time")
     parser.add_argument("--replay-size", type=int, default=1000000, help="size of the replay buffer")
-    # parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default='Default_Experiment', help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="./tmp/policy/", help="directory in which training state and model should be saved")
     parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="", help="directory in which training state and model are loaded")
     # Evaluation
-    # parser.add_argument("--restore", action="store_true", default=False)
+    parser.add_argument("--restore", nargs='+', type=int, default=False)    #to restore agents and env from lab-journal lines given as list and continue training
+    parser.add_argument("--play", nargs='+', type=int, default=False)    #to play with agents and env restored from lab-journal lines
+    parser.add_argument("--best", type=bool, default=False)    #when given, the first line form restore or play will be used to restore the environment and the best agents for that run will be loaded
+    # TODO: --flightgear
+    parser.add_argument("--flightgear", type=bool, default=False)    #when given, together with --play [lines] the environment will be replaced with the flight-gear enabled and the player will render to FlightGear
     # parser.add_argument("--display", action="store_true", default=False)
-    # parser.add_argument("--benchmark", action="store_true", default=False)
     parser.add_argument("--testing-iters", type=int, default=2000, help="number of steps before running a performance test")
-    parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
+    #parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--base-dir", type=str, default="./", help="directory the test_run date is saved")
     return parser.parse_args()
@@ -74,6 +68,13 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
 def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     agent_interaction_freq = arglist.interaction_frequency
     episode_time_s=arglist.max_episode_len_sec
+
+    ## define the initial conditions
+    initial_path_angle_gamma_deg = target_path_angle_gamma_deg + 3
+    initial_roll_angle_phi_deg   = target_roll_angle_phi_deg + 10
+    initial_fwd_speed_KAS        = 80
+    initial_aoa_deg              = 1.0
+    # initial_altitude_ft          = 6000
 
     elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 integral_limit = 100)
@@ -91,13 +92,13 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_glide_angle_reward_components,
                                 integral_limit = 0.5)
 
-    elevator_Speet_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
+    elevator_Speed_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
                                 presented_state=[prp.elevator_cmd, prp.q_radps],
                                 max_allowed_error= 50, 
                                 make_base_reward_components= make_speed_reward_components,
                                 integral_limit = 2)
 
-    elevator_Speet_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
+    elevator_Speed_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
                                 presented_state=[prp.elevator_cmd, prp.q_radps],
                                 max_allowed_error= 50, 
                                 make_base_reward_components= make_speed_reward_components,
@@ -124,12 +125,103 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                     , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
                                     , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                     , prp.initial_aoa_deg: initial_aoa_deg
+                                    # , prp.initial_altitude_ft: initial_altitude_ft
                                     }) #just an example, sane defaults are already set in env.__init()__ constructor
+
+    env.set_meta_information(experiment_name = arglist.exp_name)
     return env
 
-def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
-    ENV_PICKLE = 'environment_init.pickle'
-    TASKS_PICKLE ='task_agent.pickle'
+def setup_container_from_env(env, arglist):
+    
+    agent_classes_dict = {
+        'PID': PID_AgentTrainer,
+        'MADDPG': MADDPG_AgentTrainer,
+        'DDPG': DDPG_AgentTrainer,
+    }
+
+    #for PID controllers we need an elaborated parameter set for each type
+    pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
+                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3),
+                  'elevator_speed': PidParameters( 2e-3, 6.5e-3, 1e-4), #TODO: This parameter set does'nt work at all for speed control
+                  }    
+
+    params_aileron_pid_agent = {
+        'pid_params': pid_params['aileron'], 
+        'writer': None,
+    }
+
+    params_elevator_pid_agent = {
+        'pid_params': pid_params['elevator'], 
+        'writer': None,
+    }
+    params_elevator_speed_pid_agent = {
+        'pid_params': pid_params['elevator_speed'], 
+        'writer': None,
+    }
+
+    #for the learning agents, a standard parameter set will do; the details will be learned
+    params_DDPG_MADDPG_agent = {
+        **vars(arglist),
+        'writer': None,
+    }
+
+    agent_spec_aileron_PID = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
+
+    agent_spec_aileron_DDPG = AgentSpec('aileron', 'DDPG', ['aileron'], params_DDPG_MADDPG_agent)
+
+    agent_spec_aileron_MADDPG = AgentSpec('aileron', 'MADDPG', ['aileron'], params_DDPG_MADDPG_agent)
+
+    agent_spec_elevator_PID = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_pid_agent)
+    agent_spec_elevator_speed_PID = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_speed_pid_agent)
+
+    agent_spec_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['elevator'], params_DDPG_MADDPG_agent)
+
+    agent_spec_elevator_MADDPG = AgentSpec('elevator', 'MADDPG', ['elevator'], params_DDPG_MADDPG_agent)
+
+    #Here we specify which agents shall be initiated; chose form the above defined single-specs
+    agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
+    # agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_DDPG]
+    # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
+
+    task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
+    agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
+
+    return agent_container
+
+def save_test_run(env: JsbSimEnv_multi_agent, agent_container: AgentContainer, lab_journal: LabJournal, arglist):
+    """
+    - creates a suitable directory for the test run
+    - adds a sidecar file containing the meta information on the run (dict saved as pickle)
+    - adds a text file containing the meta information on the run
+    - add a line to the global csv-file for the test run
+    """
+    # IMPORTANT to do this first,  to make the lab_journal aware of the start time of the run
+    lab_journal.set_run_start()
+
+    task_names = '_'.join([t.name for t in env.task_list])
+    date = lab_journal.run_start.strftime("%Y_%m_%d")
+    time = lab_journal.run_start.strftime("%H-%M")
+
+    #build the path name for the run protocol
+    save_path = os.path.join(lab_journal.journal_save_dir, env.aircraft.name, arglist.exp_name, task_names, date+'-'+time)
+
+    #create the base directory for this test_run
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    #create the directories for each agent_task
+    for a in agent_container.agents_m:
+        agent_path = os.path.join(save_path, a.name)
+        os.makedirs(os.path.join(save_path, a.name), exist_ok=True)
+        a.set_save_path(agent_path)
+
+    env.save_env_data(arglist, save_path)
+    agent_container.save_agent_container_data(save_path)
+    #eventually append the run data to the csv-file. 
+    csv_line_nr = lab_journal.append_run_data(env, agent_container.agents_m, save_path)
+    env.set_meta_information(csv_line_nr = csv_line_nr)
+
+def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
+    ENV_PICKLE = 'environment_init.pickle'  #these are hard default names for the files
+    TASKS_PICKLE ='task_agent.pickle'       #these are hard default names for the files
 
     ln = line_numbers if isinstance(line_numbers, int) else line_numbers[0]
 
@@ -152,7 +244,7 @@ def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimE
         make_base_reward_components_file = task_agent_data['make_base_reward_components_file'][idx]
         make_base_reward_components_fn = task_agent_data['make_base_reward_components_fn'][idx]
 
-        #load the make_base_reward_components function
+        #load the make_base_reward_components function from a python-file
         #load function from given filepath  https://stackoverflow.com/a/67692/2682209
         spec = importlib.util.spec_from_file_location("make_base_rwd", os.path.join(run_protocol_path, make_base_reward_components_file))
         func_module = importlib.util.module_from_spec(spec)
@@ -187,15 +279,17 @@ def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimE
     env = env_class_(**env_init)
     
     #apply wrappers if available
+    #TODO: what about other wrappers than EpisodePlotterWrapper? We don't save the VarySetpointWrapper to the wrappers list.
     for idx in range(1, len(env_init_dicts)):
         wrapper_class_ = getattr(sys.modules[__name__], env_classes[idx])
         wrap_init = env_init_dicts[idx]
         wrap_init.update({'env': env})
         env = wrapper_class_(**wrap_init)
     
+    env.set_meta_information(csv_line_nr = ln)  #set the line number, the environment was loaded from
     return env
 
-def restore_agent_container_from_journal(line_numbers: Union[int, List[int]]) -> 'AgentContainer':
+def restore_agent_container_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -> 'AgentContainer':
     CONTAINER_PICKLE = 'agent_container.pickle'
 
     ln = [line_numbers] if isinstance(line_numbers, int) else line_numbers
@@ -214,10 +308,7 @@ def restore_agent_container_from_journal(line_numbers: Union[int, List[int]]) ->
 
     return agent_container
 
-
-def train(arglist):
-
-    max_episode_steps = arglist.max_episode_len_sec * arglist.interaction_frequency
+def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv_multi_agent, agent_container: AgentContainer, arglist: argparse.Namespace):
 
     episode_rewards = [0.0]  # sum of rewards for all agents
     agent_rewards = [[0.0] for _ in range(len(agent_container.agents_m))]  # individual agent reward
@@ -243,15 +334,23 @@ def train(arglist):
         agent_experience_m = agent_container.remember(obs_n, actions_n, rew_n, new_obs_n, done_n)
         obs_n = new_obs_n
 
+        #track episode and agent rewards
         for i, exp in enumerate(agent_experience_m):         #there should be some np-magic to convert to a one liner
             episode_rewards[-1] += exp.rew      #overall reward as sum of all agent rewards
             agent_rewards[i][-1] += exp.rew
 
+        # perform an actual training step
+        agent_container.train_agents()
+
+        # increment global step counter
+        train_step += 1
+
+        #do some housekeeping when episode is over
         if done or terminal:        #episode is over
             episode_counter += 1
             obs_n = training_env.reset()    #start new episode
             
-            showPlot = False    #this is here for debugging purposes
+            showPlot = False    #this is here for debugging purposes, you can enable plotting for one time
             training_env.showNextPlot(show = showPlot)
 
             episode_step = 0
@@ -259,13 +358,11 @@ def train(arglist):
             for a in agent_rewards:
                 a.append(0)
 
-        # increment global step counter
-        train_step += 1
-
-        # for benchmarking learned policies run the current agents on the testing_env
-        if (train_step-arglist.batch_size) % (arglist.testing_iters/20) == 0:
+        # progress indicator
+        if (train_step) % (arglist.testing_iters/20) == 0:
             print('.', end='', flush=True)
-        if (train_step-arglist.batch_size) % arglist.testing_iters == 0:
+        # every arglist.testing_iters training steps, an evaluation run is started in the testing_env
+        if (train_step) % arglist.testing_iters == 0:
             print('')
             t_end = time.time()
             print(f"train_step {train_step}, Episode {episode_counter}: performed {arglist.testing_iters} steps in {t_end-t_start:.2f} seconds; that's {arglist.testing_iters/(t_end-t_start):.2f} steps/sec")
@@ -277,29 +374,16 @@ def train(arglist):
 
         # env.render(mode='flightgear') #not really useful in training
 
-        # update all trainers
-        agent_container.train_agents()
-
+        #TODO: check the useful outputs for tracking the training progress
         # save model, display training output   
         if terminal and (len(episode_rewards) % arglist.save_rate == 0):    #save every arglist.save_rate completed episodes    
-            # U.save_state(arglist.save_dir, saver=saver)
-            # # print statement depends on whether or not there are adversaries
-            # if num_adversaries == 0:
-            #     print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
-            #         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]), round(time.time()-t_start, 3)))
-            # else:
-            #     print("steps: {}, episodes: {}, mean episode reward: {}, agent episode reward: {}, time: {}".format(
-            #         train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
-            #         [np.mean(rew[-arglist.save_rate:]) for rew in agent_rewards], round(time.time()-t_start, 3)))
-            # t_start = time.time()
-
             # Keep track of final episode reward    TODO: check which outputs are really needed
             final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
             for rew in agent_rewards:
                 final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
 
         # saves final episode reward for plotting training curve later
-        if len(episode_rewards) > arglist.num_episodes:
+        if train_step > arglist.num_steps:
             rew_file_name = arglist.plots_dir + arglist.exp_name + '_rewards.pkl'
             with open(rew_file_name, 'wb') as fp:
                 pickle.dump(final_ep_rewards, fp)
@@ -309,113 +393,17 @@ def train(arglist):
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
             break
 
-def save_test_run(basedir, arglist, env, agent_container):
-    """
-    - creates a suitable directory for the test run
-    - adds a sidecar file containing the meta information on the run (dict saved as pickle)
-    - adds a text file containing the meta information on the run
-    - add a line to the global csv-file for the test run
-    """
-    # def save_agents(agents, arglist, path):
-    #     os.makedirs(os.path.dirname(path), exist_ok=True)
-    #     filename = os.path.join(path, 'agents_data.json')
-
-    #     data_to_save = {'arglist': vars(arglist)}
-    #     for ag in agents:
-    #         ag.set_save_path(path)
-    #         agent_dict = ag.get_agent_dict()
-    #         data_to_save[ag.name] = agent_dict
-    #     with open(filename, 'w') as file:
-    #         file.write(json.dumps(data_to_save, indent=4))
-
-    run_start = datetime.datetime.now()
-    task_names = '_'.join([t.name for t in env.task_list])
-    date = run_start.strftime("%Y_%m_%d")
-    time = run_start.strftime("%H-%M")
-    save_path = os.path.join(arglist.base_dir, 'testruns', env.aircraft.name, task_names, date+'-'+time)
-
-    #create the base directory for this test_run
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    #create the directories for each agent_task
-    agents = agent_container.agents_m
-    for a in agents:
-        agent_path = os.path.join(save_path, a.name)
-        os.makedirs(os.path.join(save_path, a.name), exist_ok=True)
-        a.set_save_path(agent_path)
-
-    lab_journal.append_run_data(env, agents, run_start, save_path)
-
-    env.save_env_data(arglist, save_path)
-    agent_container.save_agent_container_data(save_path)
-
-def setup_container_from_env(env, arglist):
-    
-    agent_classes_dict = {
-        'PID': PID_AgentTrainer,
-        'MADDPG': MADDPG_AgentTrainer,
-        'DDPG': DDPG_AgentTrainer,
-    }
-
-    #for PID controllers we need an alaborated parameter set for each type
-    pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
-                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3),
-                  'elevator_speed': PidParameters( 2e-3, 6.5e-3, 1e-4),}
-
-    params_aileron_pid_agent = {
-        'pid_params': pid_params['aileron'], 
-        'writer': None,
-    }
-
-    params_elevator_pid_agent = {
-        'pid_params': pid_params['elevator'], 
-        'writer': None,
-    }
-    params_elevator_speed_pid_agent = {
-        'pid_params': pid_params['elevator_speed'], 
-        'writer': None,
-    }
-
-    #for the learning agents, a standard parameter set will do; the details will be learned
-    params_DDPG_MADDPG_agent = {
-        **vars(arglist),
-        'writer': None,
-    }
-
-    agent_spec_aileron_PID = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
-
-    agent_spec_aileron_DDPG = AgentSpec('aileron', 'DDPG', ['aileron'], params_DDPG_MADDPG_agent)
-
-    agent_spec_aileron_MADDPG = AgentSpec('aileron', 'MADDPG', ['aileron'], params_DDPG_MADDPG_agent)
-
-    agent_spec_elevator_PID = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_pid_agent)
-
-    agent_spec_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['elevator'], params_DDPG_MADDPG_agent)
-
-    agent_spec_elevator_MADDPG = AgentSpec('elevator', 'MADDPG', ['elevator'], params_DDPG_MADDPG_agent)
-
-    #Here we specify which agents shall be initiated; chose form the above defined single-specs
-    agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
-    # agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_PID]
-    # agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_DDPG]
-    # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
-
-    task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
-    agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
-
-    return agent_container
-
 if __name__ == '__main__':
 
     arglist = parse_args()
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # # # training_env = restore_env_from_journal(509)
-    # testing_env = restore_env_from_journal(630)
+    # # # training_env = restore_env_from_journal(lab_journal, 509)
+    # testing_env = restore_env_from_journal(lab_journal, 630)
 
     # # THIS IS OFF BY ONE SAVE!!!
-    # agent_container = restore_agent_container_from_journal([630,631])
+    # agent_container = restore_agent_container_from_journal(lab_journal, [630,631])
     # evaluate_training_with_agent_container(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
     # exit(0)
 
@@ -427,9 +415,9 @@ if __name__ == '__main__':
 
     agent_container = setup_container_from_env(training_env, arglist)
 
-    save_test_run(arglist.base_dir, arglist, testing_env, agent_container)  #use the testing_env here to have the save_path available in the evaluation
+    save_test_run(testing_env, agent_container, lab_journal, arglist)  #use the testing_env here to have the save_path available in the evaluation
 
-    train(arglist)
+    perform_training(training_env, testing_env, agent_container, arglist)
     
     training_env.close()
     testing_env.close()

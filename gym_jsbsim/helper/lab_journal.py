@@ -7,15 +7,14 @@ import datetime
 class LabJournal():
     def __init__(self, base_dir, arglist):
         #check if lab journal file already exists
-        
-        self.jornal_save_dir = os.path.join(base_dir, 'testruns') 
-        try:
+        self._jornal_save_dir = os.path.join(base_dir, 'testruns') 
+        try:    #arglist is either given as arglist namespace or as dictionary
             self.arglist_dict = vars(arglist)
         except TypeError:
             self.arglist_dict = arglist if isinstance(arglist, dict) else {}   #if nor proper arglist was given
 
-        os.makedirs(self.jornal_save_dir, exist_ok=True)
-        self.journal_file_name = os.path.join(self.jornal_save_dir, 'lab_journal.csv')
+        os.makedirs(self._jornal_save_dir, exist_ok=True)
+        self.journal_file_name = os.path.join(self._jornal_save_dir, 'lab_journal.csv')
         self.column_names = ['line_number', 'entry_type', 'reward', 'steps', 'date', 'time', 'path', 'agent_task_classes', 'trainer_classes'] + list(self.arglist_dict.keys())
         self.journal_entries = []
         
@@ -35,6 +34,17 @@ class LabJournal():
                 outfile.writeheader()
             self.next_line_number = 0
     
+    @property
+    def run_start(self):
+        return self._run_start
+    def set_run_start(self):
+        self._run_start = datetime.datetime.now()   #update the time the saved run was started to get the directories right
+        return self._run_start
+
+    @property
+    def journal_save_dir(self):
+        return self._jornal_save_dir
+
     def _write_data(self, data_dict):
         data_dict.update({'line_number': self.next_line_number})
         with open(self.journal_file_name, 'a') as outfile:   # TODO: add some sensible information there
@@ -43,8 +53,13 @@ class LabJournal():
 
         self.journal_entries.append(data_dict)
         self.next_line_number += 1
+        return self.next_line_number-1  #the line number we've just written to
 
-    def append_run_data(self, env, agents, run_start, save_path):
+    def append_run_data(self, env, agents, save_path) -> int:
+        """
+        :return: the line number in the CSV file that was just written
+        """
+
         self.save_path = save_path
 
         #create a sidecar file containing the meta information of the test_run
@@ -52,8 +67,8 @@ class LabJournal():
         agent_task_classes_dict = {at.name: at.__class__.__name__ for at in env.task_list}
         run_dict = {
             'entry_type': 'env_description',         #one of 'env_description' or agent_name
-            'date': run_start.strftime("%d.%m.%Y"),
-            'time': run_start.strftime("%H:%M:%S"),
+            'date': self._run_start.strftime("%d.%m.%Y"),
+            'time': self._run_start.strftime("%H:%M:%S"),
             'path': 'file://'+os.path.abspath(self.save_path), 
             'reward': '',
             'steps': '',
@@ -62,7 +77,7 @@ class LabJournal():
         }
         run_dict.update(self.arglist_dict)
 
-        self._write_data(run_dict)
+        return self._write_data(run_dict)
     
     def append_evaluation_data(self, eval_dict):
         now = datetime.datetime.now()

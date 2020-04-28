@@ -262,6 +262,7 @@ class AgentTask(ABC):
         :param basedir: the directory to save the source code file to
         """
         filename = os.path.join(basedir, f'{self.name}_make_base_reward_components.py')
+        os.makedirs(basedir, exist_ok=True)
         with open(filename, 'w') as file:  
             file.write('import gym_jsbsim.environment.rewards as rewards\n')
             file.write('import gym_jsbsim.environment.properties as prp\n')
