@@ -113,6 +113,7 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
 
     tgt_flight_path_deg = -6.5
     tgt_roll_angle_deg  = 10
+    target_kias = 92
     initial_path_angle_gamma_deg = 0
     initial_roll_angle_phi_deg   = 0
     initial_fwd_speed_KAS        = 75
@@ -120,6 +121,7 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
 
     env.change_setpoints({ prp.flight_path_deg: tgt_flight_path_deg
                          , prp.roll_deg:  tgt_roll_angle_deg
+                         , prp.indicated_airspeed: target_kias
                         })
     env.set_initial_conditions( { prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
                                 , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
@@ -145,6 +147,8 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
             # also store the evaluation experience into the replay buffer. this is valid experience, so use it
             # collect experience, store to per-agent-replay buffers
             agent_experience_m = agent_container.remember(obs_n, actions_n, rew_n, new_obs_n, done_n)
+        else:
+            agent_experience_m = agent_container.get_per_agent_experience(obs_n, actions_n, rew_n, new_obs_n, done_n)
 
         obs_n = new_obs_n
 
@@ -153,15 +157,24 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
         if steps == int(0.5 *60 / env.dt):
             tgt_flight_path_deg = -6.5
             tgt_roll_angle_deg  = -10
-            env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg })
+            target_kias = 72
+
+            env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg 
+                                , prp.indicated_airspeed: target_kias})
         if steps == int(1 *60 / env.dt):
             tgt_flight_path_deg = -7.5
             tgt_roll_angle_deg  = -10
-            env.change_setpoints({ prp.flight_path_deg: tgt_flight_path_deg })
+            target_kias = 100
+
+            env.change_setpoints({ prp.flight_path_deg: tgt_flight_path_deg  
+                                , prp.indicated_airspeed: target_kias})
         if steps == int(1.5 *60 / env.dt):
             tgt_flight_path_deg = -7.5
             tgt_roll_angle_deg  = 10
-            env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg })
+            target_kias = 80
+
+            env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg  
+                                , prp.indicated_airspeed: target_kias})
 
         terminal = any(done_n) or terminal
         #env.render()
@@ -169,26 +182,27 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
     print(*["%.2f"%sc for sc in score_m], sep = ", ", end="")
     print("].")
 
-    # if lab_journal:
-    #     for i, ag in enumerate(agents):
-    #         eval_dict = {
-    #             'entry_type': ag.name,
-    #             'reward': '{:.2f}'.format(score_n[i]),
-    #             'steps': ag.train_steps,
-    #         }
+    if lab_journal:
+        save_dir = lab_journal.jornal_save_dir
+        for i, ag in enumerate(agent_container.agents_m):
+            eval_dict = {
+                'entry_type': ag.name,
+                'reward': '{:.2f}'.format(score_m[i]),
+                'steps': ag.train_steps,
+            }
+            save_path = ag.agent_save_path
 
-    #         #save the agents' state
-    #         if ag.agent_save_path:
-    #             filename = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_rwd-{score_n[i]:06.2f}_steps-{ag.train_steps}')
-    #             ag.agent.save_models(filename)
-    #             eval_dict.update({'path': 'file://'+filename})
-    #             if best_score_n[i] < score_n[i]:
-    #                 print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_n[i]))
-    #                 bestname = os.path.join(ag.agent_save_path, ag.name, f'{ag.name}_best')
-    #                 copyfile(filename, bestname)
-    #                 best_score_n[i] = score_n[i]
+            #save the agents' state
+            filename = f'{ag.name}_rwd-{score_m[i]:06.2f}_steps-{ag.train_steps}.pickle'
+            ag.save_agent_state(filename)
+            eval_dict.update({'path': os.path.join(save_path, filename)})
+            if best_score_n[i] < score_m[i]:
+                print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_m[i]))
+                bestname = f'{ag.name}_best.pickle'
+                copyfile(os.path.join(save_path, filename), os.path.join(save_path, bestname))
+                best_score_n[i] = score_m[i]
 
-    #         lab_journal.append_evaluation_data(eval_dict)
+            lab_journal.append_evaluation_data(eval_dict)
 
     # name = env.meta_dict['model_base_name']
     # discriminator = env.meta_dict['model_discriminator']
@@ -204,43 +218,60 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
 
 if __name__ == '__main__':
 
-    from gym_jsbsim.agent_task_eee import SingleChannel_FlightAgentTask
-    from gym_jsbsim.agents.pidAgent_eee import PID_Agent, PidParameters
-    from gym_jsbsim.environment_eee import JsbSimEnv_multi_agent
+    from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent
     from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
-    import gym_jsbsim.properties as prp
-    from gym_jsbsim.reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
+    from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask
+    from gym_jsbsim.agents.AgentTrainer import PID_AgentTrainer, PidParameters
+    from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
+    from gym_jsbsim.helper.lab_journal import LabJournal
 
-
+    #setup an environment
     agent_interaction_freq = 5
 
-    pid_elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5},
-                                make_base_reward_components= make_glide_angle_reward_components)
-    elevator_pid_params = PidParameters( -5e-2, -6.5e-2, -1e-3)
-    pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, pid_elevator_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
+    elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 0},
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
 
-    pid_aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, max_allowed_error= 60, 
-                                make_base_reward_components= make_roll_angle_reward_components)
-    aileron_pid_params = PidParameters(3.5e-2,    1e-2,   0.0)
-    pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
+    aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: 0}, 
+                                max_allowed_error= 60, 
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
 
-    agent_task_list = [pid_elevator_AT, pid_aileron_AT]
-    agent_task_types = ['PID', 'PID']
-    trainers = [pid_elevator_agent, pid_aileron_agent]
+    agent_task_list = [elevator_AT_for_PID, aileron_AT_for_PID]
 
-    env = JsbSimEnv_multi_agent(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s=120)
+    env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = 120)  #TODO: task_list is irrelevant for the env!!! REMOVE
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
-    
-    env.set_initial_conditions({prp.initial_flight_path_deg: -1.5}) #just an example, sane defaults are already set in env.__init()__ constructor
-    
-    obs_n = env.reset()
-    pid_elevator_agent.reset_notifier() #only needed for the PID_Agent as it maintains internal state
-    pid_aileron_agent.reset_notifier()  #only needed for the PID_Agent as it maintains internal state
+    #now setup an agent container with simple PID agents
+    agent_classes_dict = {
+        'PID': PID_AgentTrainer,
+    }
 
-    episode_step = 0
+    pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
+                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
+
+    params_aileron_pid_agent = {
+        'pid_params': pid_params['aileron'], 
+        'writer': None,
+    }
+
+    params_elevator_pid_agent = {
+        'pid_params': pid_params['elevator'], 
+        'writer': None,
+    }
+
+    agent_spec_aileron_PID = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
+    agent_spec_elevator_PID = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_pid_agent)
+    agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
+
+    task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
+    agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, agent_interaction_freq=agent_interaction_freq)
 
     env.showNextPlot(show = True)
 
-    evaluate_training(trainers, env, add_exploration_noise=False)
+    #now try it with lab journal
+    lab_journal = LabJournal('./test_save', {})
 
+    evaluate_training_with_agent_container(agent_container, env, lab_journal = lab_journal, add_exploration_noise=False, store_evaluation_experience = False)
+
+    exit(0)

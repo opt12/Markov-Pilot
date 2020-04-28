@@ -1,6 +1,3 @@
-import sys            
-sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
-
 import datetime
 import os
 import csv
@@ -11,11 +8,15 @@ class LabJournal():
     def __init__(self, base_dir, arglist):
         #check if lab journal file already exists
         
-        self.base_dir = base_dir
+        self.jornal_save_dir = os.path.join(base_dir, 'testruns') 
+        try:
+            self.arglist_dict = vars(arglist)
+        except TypeError:
+            self.arglist_dict = arglist if isinstance(arglist, dict) else {}   #if nor proper arglist was given
 
-        self.journal_file_name = os.path.join(base_dir, 'testruns', 'lab_journal.csv')
-        self.column_names = ['line_number', 'entry_type', 'reward', 'steps', 'date', 'time', 'path', 'agent_task_classes', 'trainer_classes'] + list(vars(arglist).keys())
-        self.arglist = vars(arglist)
+        os.makedirs(self.jornal_save_dir, exist_ok=True)
+        self.journal_file_name = os.path.join(self.jornal_save_dir, 'lab_journal.csv')
+        self.column_names = ['line_number', 'entry_type', 'reward', 'steps', 'date', 'time', 'path', 'agent_task_classes', 'trainer_classes'] + list(self.arglist_dict.keys())
         self.journal_entries = []
         
         csv_exists = os.path.isfile(self.journal_file_name)
@@ -42,7 +43,6 @@ class LabJournal():
 
         self.journal_entries.append(data_dict)
         self.next_line_number += 1
-        
 
     def append_run_data(self, env, agents, run_start, save_path):
         self.save_path = save_path
@@ -60,7 +60,7 @@ class LabJournal():
             'trainer_classes': agents_classes_dict,
             'agent_task_classes': agent_task_classes_dict
         }
-        run_dict.update(self.arglist)
+        run_dict.update(self.arglist_dict)
 
         self._write_data(run_dict)
     
@@ -102,7 +102,7 @@ class LabJournal():
         :return: The path containing the associated environment_data.json and agents_data.json
         """
         ENV_FILE = 'environment_data.json'
-        AG_FILE  = 'agents_data.json'
+        AG_FILE  = 'agent_container.json'
 
         #get folder name
         if (os.path.isdir(start_path)):

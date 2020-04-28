@@ -40,6 +40,43 @@ def make_glide_angle_reward_components(self):
     )
     return base_components
 
+def make_speed_reward_components(self):
+    KIAS_ERROR_SCALING = 1
+    KIAS_ERR_INT_DEG_MAX = self.integral_limit
+    ELEVATOR_CMD_TRAVEL_MAX = 2/4 # a quarter of the max. absolute value of the delta-cmd; leverage the non-linearities
+    GLIDE_ANGULAR_VELOCITY_SCALING = 0.25
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_kias_error',
+                    prop=self.prop_error,
+                    state_variables=self.obs_props,
+                    target=0.0,
+                    potential_difference_based=False,
+                    scaling_factor=KIAS_ERROR_SCALING,
+                    weight=4),
+        rewards.LinearErrorComponent(name='rwd_kias_error_Integral',
+                    prop=self.prop_error_integral,
+                    state_variables=self.obs_props,
+                    target=0.0,
+                    potential_difference_based=False,
+                    scaling_factor=KIAS_ERR_INT_DEG_MAX,
+                    weight=9),
+        rewards.LinearErrorComponent(name='rwd_elevator_cmd_travel_error',
+                    prop=self.prop_delta_cmd,
+                    state_variables=self.obs_props,
+                    target=0.0,
+                    potential_difference_based=False,
+                    scaling_factor=ELEVATOR_CMD_TRAVEL_MAX,
+                    weight=2),
+        rewards.LinearErrorComponent(name='rwd_angular_velocity_q_rad',
+                    prop=prp.q_radps,
+                    state_variables=self.obs_props,
+                    target=0.0,
+                    potential_difference_based=False,
+                    scaling_factor=GLIDE_ANGULAR_VELOCITY_SCALING,
+                    weight=1),
+    )
+    return base_components
+
 def make_roll_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
     ROLL_ANGLE_DEG_ERROR_SCALING = 0.5
     ROLL_ANGLE_INT_DEG_MAX = self.integral_limit

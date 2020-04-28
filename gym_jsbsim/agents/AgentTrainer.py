@@ -6,6 +6,10 @@ import numpy as np
 import torch as T
 import torch.nn.functional as F
 
+import os
+import pickle
+import datetime
+
 from abc import ABC, abstractmethod
 
 from gym.spaces import Box
@@ -14,7 +18,7 @@ from typing import List, Tuple, Dict
 
 from gym_jsbsim.helper.ReplayBuffer import ReplayBuffer
 from gym_jsbsim.helper.OUNoise import OUNoise
-from .networks import ActorNetwork, CriticNetwork
+from gym_jsbsim.agents.networks import ActorNetwork, CriticNetwork
 from gym_jsbsim.helper.utils import soft_update
 
 Experience = namedtuple('Experience', ['obs', 'act', 'rew', 'next_obs', 'done'])
@@ -45,13 +49,17 @@ class AgentTrainer(ABC):
             'buf_len': buf_len,
             'obs_space': obs_space,
             'act_space': act_space,
-            'type': self.type,
             'train_steps': self.train_steps,
             'agent_interaction_freq': agent_interaction_freq
         }
         self.dt = 1.0/agent_interaction_freq    #the step time between two agent interactions in [sec] (for the PID controller)
 
         self.replay_buffer = ReplayBuffer(buf_len, obs_space.shape, act_space.shape)
+
+        try:
+            self.agent_save_path = kwargs['base_dir']
+        except KeyError:
+            self.agent_save_path = './testruns/generic/'+self.name
 
         #default values for noise
         self.scaled_noise_sigma = kwargs.get('noise_sigma', 0.15)
@@ -93,6 +101,9 @@ class AgentTrainer(ABC):
         """
         pass
 
+    def set_save_path(self, path):
+        self.agent_save_path = path
+
     @abstractmethod
     def _to_eval_mode(self):
         """ switch agents networks to eval() mode
@@ -119,14 +130,54 @@ class AgentTrainer(ABC):
             'train_steps': self.train_steps,
         })
 
+    def save_agent_state(self, pickle_file = '', agent_save_path = '') ->str:
+        """
+        Saves a JSON file with agent data. Also saves a pickle file
+        from which the agent including its state can be restored.
+
+        :param pickle_file: the name of the pickle fil eto be saved. If left out, a generic name is generated
+        :param agent_save_path: The directory to store the JSON and the pickle file to. If left out, the formelry set self.agent_save_path is used.
+        """
+
+        if agent_save_path != '':
+            self.agent_save_path = agent_save_path
+        
+        if pickle_file != '':
+            filename = pickle_file
+        else:
+            filename = self.name+'_state_{}.pickle'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H-%M"))
+
+        pickle_filename = os.path.join(self.agent_save_path, filename)
+        os.makedirs(self.agent_save_path, exist_ok=True)
+
+        agent_state_params = self.get_agent_state_params()
+        agent_state_params.update({
+            'class': self.__class__
+        })
+        with open(pickle_filename, 'wb') as file:
+            pickle.dump(self.get_agent_state_params(), file)
+
+        return pickle_filename
+
+    @classmethod
+    def load_from_file(cls, filename: str, writer: 'SummaryWriter' = None, pristine_networks: bool = False) -> 'AgentTrainer':
+        #load the agent pickle
+        with open(filename, 'rb') as infile:
+            agent_pickle_data = pickle.load(infile)
+        
+        #which class was it?
+        AgentTrainer_class = agent_pickle_data.pop('class')
+        
+        return AgentTrainer_class.restore_saved_agent(agent_params = agent_pickle_data, writer=writer, pristine_networks= pristine_networks)
+
     @classmethod
     @abstractmethod
-    def restore_saved_agent(self, agent_params: Dict) -> 'AgentTrainer':
+    def restore_saved_agent(cls, agent_params: Dict, writer: 'SummaryWriter' = None, pristine_networks: bool = False) -> 'AgentTrainer':
         """
         :param agent_params: the dictionary of parameters to restore an agent
         :return: an AgentTrainer instance with restored state
         """
-
+        raise NotImplementedError
 
 class PID_AgentTrainer(AgentTrainer):
     def __init__(self, name:str, obs_space: Box, act_space: Box, pid_params: PidParameters, agent_interaction_freq:float = 5, buf_len:int = 1000000, writer:'SummaryWriter' = None, **kwargs):
@@ -144,6 +195,7 @@ class PID_AgentTrainer(AgentTrainer):
             raise ValueError('Incorrect obs_space: observation space for PID_AgentTrainer must be at least Box(3,). (more values are allowed, but will be ignored)')
 
         self.agent_dict.update({
+            'type': self.type,
             'pid_params': pid_params, 
         })
         self.inverted = True if pid_params.Kp <0 else False
@@ -205,7 +257,7 @@ class PID_AgentTrainer(AgentTrainer):
         return self.agent_dict  #for the stateless PID trainer this is pleasingly effortless
 
     @classmethod
-    def restore_saved_agent(cls, agent_params: Dict) -> AgentTrainer:
+    def restore_saved_agent(cls, agent_params: Dict, writer: 'SummaryWriter' = None, pristine_networks: bool = False) -> AgentTrainer:
         """
         :param agent_params: the dictionary of parameters to restore an agent
         :return: an AgentTrainer instance with restored state
@@ -236,6 +288,7 @@ class MADDPG_AgentTrainer(AgentTrainer):
         self.tau = tau
 
         self.agent_dict.update({
+            'type': self.type,
             'critic_state_space': critic_state_space, 
             'lr_actor': lr_actor,
             'lr_critic': lr_critic, 
@@ -439,6 +492,10 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
                 **kwargs)
 
         self.type = 'DDPG'
+        self.agent_dict.update({
+            'type': self.type
+        })
+
 
     def train(self, agents_m: List['AgentTrainer'], own_idx: int):
         #agents_m and own_idx are ignored, as this is only the DDPG algo, not the MADDPG
@@ -507,7 +564,7 @@ class DDPG_AgentTrainer(MADDPG_AgentTrainer):
 
 if __name__ == '__main__':
 
-    from gym_jsbsim.utils import aggregate_gym_boxes
+    from gym_jsbsim.helper.utils import aggregate_gym_boxes
 
     box_1 = Box(np.array([-1]), np.array([1]))
     box_2 = Box(np.array([-2]*2), np.array([2]*2))
@@ -524,7 +581,7 @@ if __name__ == '__main__':
 
     pid = PID_AgentTrainer('pid_test', box_3, box_1, pid_params['elevator'], hello='hello', world= 'world')
 
-    act = pid.action(np.array([2]*3), True)
+    act = pid.get_action(np.array([2]*3), True)
 
     obs_100 = np.array([np.array([2]*3)]*100)
     obs_100_t = T.tensor(obs_100, dtype=T.float).to('cuda:0' if T.cuda.is_available() else 'cpu')
@@ -556,6 +613,10 @@ if __name__ == '__main__':
 
     ddpg_restore = DDPG_AgentTrainer.restore_saved_agent(params)
 
+    save_name = ddpg_restore.save_agent_state()
+    new_restore = DDPG_AgentTrainer.load_from_file(save_name)
+
+
     obs_pid = np.array([2]*3)
     obs_maddpg = np.array([3]*3)
     obs_ddpg = np.array([4]*4)
@@ -574,9 +635,9 @@ if __name__ == '__main__':
     from timeit import timeit    #TODO: remove again after testing
 
     time = 0 
-    for i in range(1000):
+    for i in range(100):
 
-        act_m = [ag.action(obs, True) for ag, obs in zip(trainers, obs_m)]
+        act_m = [ag.get_action(obs, True) for ag, obs in zip(trainers, obs_m)]
 
         experience__m = [Experience(obs, act, 1, obs, False) for obs, act in zip(obs_m, act_m)]
 

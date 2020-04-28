@@ -45,7 +45,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # |state | reward | done | action| per each step with property names as data
         self.action_variables = self.env.action_props
         state_variables = self.env.state_props
-        reward_variables = [prp.Property('rwd_'+t.name, 'the reward obtained in this step by TaskAgent '+t.name) for t in self.env.task_list]
+        self.reward_variables = [prp.Property('rwd_'+t.name, 'the reward obtained in this step by TaskAgent '+t.name) for t in self.env.task_list]
         done_variables = [prp.Property('done_'+t.name, 'the done flag for TaskAgent '+t.name) for t in self.env.task_list]
         task_agent_output_props = []
         [ task_agent_output_props.extend(t.get_props_to_output()) for t in self.env.task_list ]
@@ -61,14 +61,14 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             self.panel_contents[t.name] = {'panel1': {'setpoint_value_prop': t.setpoint_value_props[0],
                                                 'action_prop': t.action_props[0],
                                                 'current_value_prop': t.setpoint_props[0]},
-                                           'panel2': {'reward_prop': reward_variables[i],
+                                           'panel2': {'reward_prop': self.reward_variables[i],
                                                 'reward_component_names': reward_component_names},
                                            'panel3': {'obs_props': t.obs_props}
                                         }
 
         # add the output props coming as step() params in a given order to the recorder dataset 
         step_param_props = state_variables \
-                         + reward_variables \
+                         + self.reward_variables \
                          + done_variables \
                          + self.action_variables
 
@@ -86,10 +86,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
 
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
 
-        self.dirname = os.path.dirname(__file__) + '/../plots/{}'.format(datetime.datetime.now().strftime("%Y_%m_%d-%H:%M"))
-        if not os.path.exists(self.dirname):
-            os.mkdir(self.dirname)
-        
+       
     def _collect_data(self):
         collected_data = [self.env.sim[prop] for prop in self.self_collected_output_props]
         return collected_data
@@ -113,12 +110,12 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         if any(done_n) or self.env.is_terminal():
             if (self.showNextPlotFlag or self.exportNextPlotFlag or self.save_to_csv):
                 dataRecorder = pd.DataFrame(self.recorderDictList)    
-                if (self.save_to_csv):
+                if self.save_to_csv and self.save_path:
                     #save the entire pandas frame to CSV file
-                    csv_dir_name = os.path.join(self.dirname, '../csv')
-                    if not os.path.exists(csv_dir_name):
-                        os.mkdir(csv_dir_name)
-                    filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H:%M:%S")))
+                    csv_dir_name = os.path.join(self.save_path, '/csv')
+                    #create the directory for this csv
+                    os.makedirs(csv_dir_name, exist_ok=True)
+                    filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
                     dataRecorder.to_csv(filename)
                 # print(f"available properties for plotting:\n{dataRecorder.keys()}")   #this is handy if you want to change the plot to get the available data headings
                 self.showGraph(dataRecorder)
@@ -129,12 +126,12 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         #if env is closed before itself gets a done, show the graph is needed
         if (self.showNextPlotFlag or self.exportNextPlotFlag or self.save_to_csv):
             dataRecorder = pd.DataFrame(self.recorderDictList)    
-            if (self.save_to_csv):
+            if self.save_to_csv and self.save_path:
                 #save the entire pandas frame to CSV file
-                csv_dir_name = os.path.join(self.dirname, '../csv')
-                if not os.path.exists(csv_dir_name):
-                    os.mkdir(csv_dir_name)
-                filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H:%M:%S")))
+                csv_dir_name = os.path.join(self.save_path, 'csv')
+                #create the directory for this csv
+                os.makedirs(csv_dir_name, exist_ok=True)
+                filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
                 dataRecorder.to_csv(filename)
             # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
             self.showGraph(dataRecorder)
@@ -353,28 +350,34 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             "</h1>"), 
             Div(text="<h2>"+titleString+"</h2>")) 
 
-        grid = gridplot([[header_col],[panel_grid_plot]], toolbar_location=None, sizing_mode='stretch_width')
+        webpage = gridplot([[header_col],[panel_grid_plot]], toolbar_location=None, sizing_mode='stretch_width')
 
-        html_output_name = os.path.join(self.dirname, 'glideAngle_Elevator_latest.html')
+        base_filename = 'Run_'+ '_'.join([tsk.name for tsk in self.task_list])
+        html_output_name = os.path.join(self.save_path,'plots', base_filename+'_latest.html')
+        os.makedirs(os.path.dirname(html_output_name), exist_ok=True)
+
         if self.showNextPlotFlag:
             output_file(html_output_name, mode='absolute') #use mode='absolute' to make it work offline with the js and css installed in the bokeh package locally
             if self.firstRun:
-                show(grid)  #opens up a new browser window
+                show(webpage)  #opens up a new browser window
                 self.firstRun = False
             else:
-                save(grid)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
+                save(webpage)  #just updates the HTML; Manual F5 in browser required :-(, (There must be a way to push...)
 
         
-        # if self.exportNextPlotFlag:
-        #     base_filename = os.path.join(self.dirname, 'glideAngle_Elevator_Reward_{:.2f}_time_{}'.format(data_frame['reward'].sum(), datetime.datetime.now().strftime("%H:%M:%S")))
-        #     # @timeit   TODO: die sourcen werden nicht gefunden
-        #     if self.showNextPlotFlag:
-        #         #we keep the html as well for easy exploration
-        #         shutil.copyfile(html_output_name, base_filename+'.html')
-        #     def export(webpage):
-        #         filename = base_filename + '.png'
-        #         export_png(webpage, filename= filename)
-        #     export(webpage)
+        if self.exportNextPlotFlag and self.save_path:
+            #build the filename including the individual rewards
+            task_rewards = [self.reward_variables[i].get_legal_name() for i in range(len(self.task_list))]
+            task_names_with_rewards = [t.name+'_'+f'{data_frame[task_rewards[i]].sum():.2f}' for i, t in enumerate(self.task_list)]
+            name_with_rewards = 'Run_' + '_'.join(task_names_with_rewards)+'time_{}'.format(datetime.datetime.now().strftime("%H-%M:%S"))
+            base_filename = os.path.join(self.save_path, 'plots', name_with_rewards) # 'glideAngle_Elevator_Reward_{:.2f}_time_{}'.format(data_frame['reward'].sum(), datetime.datetime.now().strftime("%H-%M:%S")))
+            if self.showNextPlotFlag:
+                #we keep the html as well for easy exploration
+                shutil.copyfile(html_output_name, base_filename+'.html')
+            def export(webpage):
+                png_filename = base_filename + '.png'
+                export_png(webpage, filename= png_filename, width=1800) #TODO: the width parameter is ignored in bokeh/io/export.py get_layout_html() as webpage isn't a Plot
+            export(gridplot([[header_col],[panel_grid_plot]], toolbar_location=None))
 
         self.showNextPlotFlag = False   #only show the plot once and then reset
         self.exportNextPlotFlag = False

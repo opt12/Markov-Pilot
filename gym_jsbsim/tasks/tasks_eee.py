@@ -131,7 +131,8 @@ class AgentTask(ABC):
 
         return (rwd, done, {'reward_components': rwd_components})
     
-    def get_state_space(self) -> gym.Space:
+    @property   #read only, so no setter is specified
+    def state_space(self) -> gym.Space:
         """ Get the task's state/observation space object. 
         
         Returns the observation space, the AgentTask operates on.
@@ -142,7 +143,8 @@ class AgentTask(ABC):
         state_highs = np.array([state_var.max for state_var in self.obs_props])
         return gym.spaces.Box(low=state_lows, high=state_highs, dtype='float')
 
-    def get_action_space(self) -> gym.Space:
+    @property   #read only, so no setter is specified
+    def action_space(self) -> gym.Space:
         """ Get the task's action Space object """
         action_lows = np.array([act_prop.min for act_prop in self.action_props])
         action_highs = np.array([act_prop.max for act_prop in self.action_props])
@@ -174,7 +176,7 @@ class AgentTask(ABC):
         obs_props_list = [prop.name for prop in self.obs_props]
         print(f"obs_props[{len(self.obs_props)}]:", end="")
         print(*obs_props_list, sep = ", ")
-        print(f"Observation Space:\n", self.get_state_space(), "\nlow:  ", self.get_state_space().low, "\nhigh: ", self.get_state_space().high, sep="")
+        print(f"Observation Space:\n", self.state_space, "\nlow:  ", self.state_space.low, "\nhigh: ", self.state_space.high, sep="")
 
         custom_props_list = [prop.name for prop in self.custom_props]
         print(f"custom_props[{len(self.custom_props)}]:", end="")
@@ -183,7 +185,7 @@ class AgentTask(ABC):
         action_props_list = [prop.name for prop in self.action_props]
         print(f"action_props[{len(self.action_props)}]:", end="")
         print(*action_props_list, sep = ", ")
-        print(f"Action Space: ", self.get_action_space(), "\nlow:  ", self.get_action_space().low, "\nhigh: ", self.get_action_space().high, sep="")
+        print(f"Action Space: ", self.action_space, "\nlow:  ", self.action_space.low, "\nhigh: ", self.action_space.high, sep="")
 
         print("********************************************")
 
@@ -261,8 +263,8 @@ class AgentTask(ABC):
         """
         filename = os.path.join(basedir, f'{self.name}_make_base_reward_components.py')
         with open(filename, 'w') as file:  
-            file.write('from gym_jsbsim import rewards\n')
-            file.write('import gym_jsbsim.properties as prp\n')
+            file.write('import gym_jsbsim.environment.rewards as rewards\n')
+            file.write('import gym_jsbsim.environment.properties as prp\n')
             file.write('from typing import List, Dict, Tuple, Callable, Optional\n')
             file.write('\n')
             file.write(inspect.getsource(self._make_base_reward_components))

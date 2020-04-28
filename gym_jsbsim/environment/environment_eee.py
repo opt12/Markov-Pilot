@@ -59,7 +59,7 @@ class JsbSimEnv_multi_agent(gym.Env):
     Actions: Type[namedtuple]
 
     def __init__(self, task_list: List['Agent_Task'], task_types: List['str'], aircraft: Aircraft = cessna172P,
-                 agent_interaction_freq: int = 5, episode_time_s: float = DEFAULT_EPISODE_TIME_S):
+                 agent_interaction_freq: int = 5, episode_time_s: float = DEFAULT_EPISODE_TIME_S, base_dir: str = './'):
         """
         Constructor. Inits some internal state, and calls JsbSimEnv_multi_agent.reset()
         for a first time to prepare the internal simulation sim object.
@@ -83,9 +83,11 @@ class JsbSimEnv_multi_agent(gym.Env):
             'aircraft': aircraft,
             'agent_interaction_freq': agent_interaction_freq, 
             'episode_time_s': episode_time_s,
+            'base_dir': base_dir
         }]
         self.env_classes = [self.__class__.__name__]
 
+        self.save_path = os.path.join(base_dir, 'testruns/generic/')
 
         if agent_interaction_freq > self.JSBSIM_DT_HZ:
             raise ValueError('agent interaction frequency must be less than '
@@ -195,7 +197,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         """
         :return: a list of Tuples (name, obs_space, action_space, task_type) which can be used to initilize the agents
         """
-        return [(at.name, at.get_state_space(), at.get_action_space(), tt) for at, tt in zip(self.task_list, self.task_types)]
+        return [(at.name, at.state_space, at.action_space, tt) for at, tt in zip(self.task_list, self.task_types)]
 
     def reset(self) -> List[np.ndarray]:
         """
@@ -447,15 +449,18 @@ class JsbSimEnv_multi_agent(gym.Env):
     def get_task_list(self) ->List['Agent_Task']:
         return self.task_list
 
-    def save_env_data(self, arglist, base_dir):
+    def save_env_data(self, arglist, path):
         """
         Saves a JSON file with environment data. Also saves pickle files from 
         env.init_dict and the agent_tasks in task_list
 
         :param base_dir: The directory to store the JSON file to
         """
-        os.makedirs(os.path.dirname(base_dir), exist_ok=True)
-        json_filename = os.path.join(base_dir, 'environment_data.json')
+
+        self.save_path = path   #the save_path is updated so that anything saved form now on will go to the new directory
+
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        json_filename = os.path.join(self.save_path, 'environment_data.json')
         
         data_to_save = {
             'arglist': vars(arglist),
@@ -464,13 +469,13 @@ class JsbSimEnv_multi_agent(gym.Env):
         }
 
         #save the source files for make_base_reward_components
-        ld = [at.save_make_base_reward_components(base_dir) for at in self.task_list]
+        ld = [at.save_make_base_reward_components(self.save_path) for at in self.task_list]
         #convert list of dictionaries to dictionary of lists https://stackoverflow.com/a/33046935/2682209
         reward_components_info_dict = {k: [dic[k] for dic in ld] for k in ld[0]}
         data_to_save.update(reward_components_info_dict)
 
         #save the init_dict and the arglist without the task_list and task_types to a pickle file
-        with open(os.path.join(base_dir, 'environment_init.pickle'), 'wb') as file:
+        with open(os.path.join(self.save_path, 'environment_init.pickle'), 'wb') as file:
             pickle.dump(data_to_save, file)
 
         #add additional data for JSON
@@ -492,13 +497,9 @@ class JsbSimEnv_multi_agent(gym.Env):
         }
         task_agent_dict.update(reward_components_info_dict)
 
-        with open(os.path.join(base_dir, 'task_agent.pickle'), 'wb') as file:
+        with open(os.path.join(self.save_path, 'task_agent.pickle'), 'wb') as file:
             pickle.dump(task_agent_dict, file)
-
-
-    @property
-    def get_save_dict(self):
-        return self.env_init_dicts
+        
 class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.

@@ -25,10 +25,11 @@ import gym_jsbsim.environment.properties as prp
 from gym_jsbsim.environment.evaluate_training_eee import evaluate_training_with_agent_container
 from gym_jsbsim.helper.lab_journal import LabJournal
 
-from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
+from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5
+target_kias = 92
 target_roll_angle_phi_deg   = -15
 
 ## define the initial conditions TODO: should go into arglist
@@ -90,6 +91,18 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_glide_angle_reward_components,
                                 integral_limit = 0.5)
 
+    elevator_Speet_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
+                                presented_state=[prp.elevator_cmd, prp.q_radps],
+                                max_allowed_error= 50, 
+                                make_base_reward_components= make_speed_reward_components,
+                                integral_limit = 2)
+
+    elevator_Speet_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
+                                presented_state=[prp.elevator_cmd, prp.q_radps],
+                                max_allowed_error= 50, 
+                                make_base_reward_components= make_speed_reward_components,
+                                integral_limit = 200)
+
 
     aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
@@ -103,7 +116,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     # agent_task_types = ['PID', 'DDPG']  #TODO: This is irrelevant for the env!!! REMOVE
     # agent_task_types = ['DDPG', 'MADDPG']
     # agent_task_types = ['MADDPG', 'MADDPG']
-    
+
     env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)  #TODO: task_list is irrelevant for the env!!! REMOVE
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
@@ -116,7 +129,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
 def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
     ENV_PICKLE = 'environment_init.pickle'
-    TAG_PICKLE ='task_agent.pickle'
+    TASKS_PICKLE ='task_agent.pickle'
 
     ln = line_numbers if isinstance(line_numbers, int) else line_numbers[0]
 
@@ -128,8 +141,8 @@ def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimE
         print(f"there was no run protocol found that is associated with line_number {ln}")
         exit()
 
-    #load the TAG_PICKLE and restore the task_list
-    with open(os.path.join(run_protocol_path, TAG_PICKLE), 'rb') as infile:
+    #load the TASKS_PICKLE and restore the task_list
+    with open(os.path.join(run_protocol_path, TASKS_PICKLE), 'rb') as infile:
         task_agent_data = pickle.load(infile)
     
     task_agents = []
@@ -182,58 +195,25 @@ def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimE
     
     return env
 
-''' not needed for the new style
-def get_trainers(env, arglist):
+def restore_agent_container_from_journal(line_numbers: Union[int, List[int]]) -> 'AgentContainer':
+    CONTAINER_PICKLE = 'agent_container.pickle'
 
-    pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
-                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
-    
-    agent_spec = {'PID':    PID_Agent_no_State,
-                  'DDPG':   SingleDDPG_Agent,
-                  'MADDPG': MultiDDPG_Agent}
+    ln = [line_numbers] if isinstance(line_numbers, int) else line_numbers
 
-    agent_tasks = env.get_task_list()
-    agent_task_info = env.get_agent_task_info()
-    name_n, obs_space_n, action_space_n, task_type_n = zip(*agent_task_info)
+    #get run protocol
 
-    trainers_n = []
+    agent_pickle_files_m = [lab_journal.get_model_filename(line) for line in ln]
+    try:
+        model_file = lab_journal.get_model_filename(ln[0])
+        run_protocol_path = lab_journal.find_associated_run_path(model_file)
+    except TypeError:
+        print(f"there was no run protocol found that is associated with line_number {ln}")
+        exit()
 
-    for i in range(len(name_n)):
-        if task_type_n[i] == 'PID':
-            trainers_n.append(
-                PID_Agent_no_State(name_n[i], pid_params[name_n[i]], action_space_n[i], agent_interaction_freq = arglist.interaction_frequency)
-            )
-            continue
-        if task_type_n[i] == 'DDPG':
-            trainers_n.append(
-                SingleDDPG_Agent(name_n[i], lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, own_input_shape=obs_space_n[i].shape, 
-                                action_space= action_space_n[i], tau=arglist.tau, gamma=arglist.gamma,
-                                max_size=arglist.replay_size, 
-                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                noise_sigma = 0.15, noise_theta = 0.2)
-            )
-            continue
-        if task_type_n[i] == 'MADDPG':
-            own_input_shape = obs_space_n[i].shape
-            other_idxs = list(range(len(obs_space_n)))
-            other_idxs.remove(i)
-            other_input_shapes = [obs_space_n[idx].shape for idx in other_idxs]
-            other_actions_shapes = [action_space_n[idx].shape for idx in other_idxs]
-            trainers_n.append(
-                MultiDDPG_Agent(name_n[i], lr_actor = arglist.lr_actor, lr_critic=arglist.lr_critic, 
-                                own_input_shape = own_input_shape, action_space= action_space_n[i], 
-                                other_input_shapes = other_input_shapes, other_actions_shapes = other_actions_shapes,
-                                tau=arglist.tau, gamma=arglist.gamma, max_size=arglist.replay_size, 
-                                layer1_size=400, layer2_size=300, batch_size=arglist.batch_size, 
-                                noise_sigma = 0.15, noise_theta = 0.2)
-            )
-            continue
+    agent_container = AgentContainer.init_from_save(os.path.join(run_protocol_path, CONTAINER_PICKLE), agent_pickle_files_m)
 
-    if len(trainers_n) != len(agent_tasks) :
-        raise LookupError('there must be an agent for each and every Agent_Task in the environment')
+    return agent_container
 
-    return trainers_n
-'''
 
 def train(arglist):
 
@@ -283,16 +263,16 @@ def train(arglist):
         train_step += 1
 
         # for benchmarking learned policies run the current agents on the testing_env
-        if train_step % (arglist.testing_iters/20) == 0:
+        if (train_step-arglist.batch_size) % (arglist.testing_iters/20) == 0:
             print('.', end='', flush=True)
-        if train_step % arglist.testing_iters == 0:
+        if (train_step-arglist.batch_size) % arglist.testing_iters == 0:
             print('')
             t_end = time.time()
             print(f"train_step {train_step}, Episode {episode_counter}: performed {arglist.testing_iters} steps in {t_end-t_start:.2f} seconds; that's {arglist.testing_iters/(t_end-t_start):.2f} steps/sec")
             testing_env.set_meta_information(episode_number = episode_counter)
             testing_env.set_meta_information(train_step = train_step)
             testing_env.showNextPlot(True)
-            evaluate_training_with_agent_container(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env TODO: add lab_journal again
+            evaluate_training_with_agent_container(agent_container, testing_env, lab_journal=lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env TODO: add lab_journal again
             t_start = time.time()
 
         # env.render(mode='flightgear') #not really useful in training
@@ -329,33 +309,36 @@ def train(arglist):
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
             break
 
-def save_test_run(basedir, arglist, env, agents):
+def save_test_run(basedir, arglist, env, agent_container):
     """
     - creates a suitable directory for the test run
     - adds a sidecar file containing the meta information on the run (dict saved as pickle)
     - adds a text file containing the meta information on the run
     - add a line to the global csv-file for the test run
     """
-    def save_agents(agents, arglist, path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        filename = os.path.join(path, 'agents_data.json')
+    # def save_agents(agents, arglist, path):
+    #     os.makedirs(os.path.dirname(path), exist_ok=True)
+    #     filename = os.path.join(path, 'agents_data.json')
 
-        data_to_save = {'arglist': vars(arglist)}
-        for ag in agents:
-            ag.set_save_path(path)
-            agent_dict = ag.get_agent_dict()
-            data_to_save[ag.name] = agent_dict
-        with open(filename, 'w') as file:
-            file.write(json.dumps(data_to_save, indent=4))
+    #     data_to_save = {'arglist': vars(arglist)}
+    #     for ag in agents:
+    #         ag.set_save_path(path)
+    #         agent_dict = ag.get_agent_dict()
+    #         data_to_save[ag.name] = agent_dict
+    #     with open(filename, 'w') as file:
+    #         file.write(json.dumps(data_to_save, indent=4))
 
-    agent_task_names = '_'.join([t.name for t in env.task_list])
     run_start = datetime.datetime.now()
+    task_names = '_'.join([t.name for t in env.task_list])
     date = run_start.strftime("%Y_%m_%d")
-    time = run_start.strftime("%H_%M")
-    save_path = os.path.join(basedir, 'testruns', env.aircraft.name, agent_task_names, date+'-'+time)
+    time = run_start.strftime("%H-%M")
+    save_path = os.path.join(arglist.base_dir, 'testruns', env.aircraft.name, task_names, date+'-'+time)
+
     #create the base directory for this test_run
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
     #create the directories for each agent_task
+    agents = agent_container.agents_m
     for a in agents:
         agent_path = os.path.join(save_path, a.name)
         os.makedirs(os.path.join(save_path, a.name), exist_ok=True)
@@ -363,8 +346,8 @@ def save_test_run(basedir, arglist, env, agents):
 
     lab_journal.append_run_data(env, agents, run_start, save_path)
 
-    training_env.save_env_data(arglist, save_path)
-    save_agents(agents, arglist, save_path)
+    env.save_env_data(arglist, save_path)
+    agent_container.save_agent_container_data(save_path)
 
 def setup_container_from_env(env, arglist):
     
@@ -372,12 +355,12 @@ def setup_container_from_env(env, arglist):
         'PID': PID_AgentTrainer,
         'MADDPG': MADDPG_AgentTrainer,
         'DDPG': DDPG_AgentTrainer,
-        # 'DDPG': SingleDDPG_Agent,
     }
 
     #for PID controllers we need an alaborated parameter set for each type
     pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
-                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
+                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3),
+                  'elevator_speed': PidParameters( 2e-3, 6.5e-3, 1e-4),}
 
     params_aileron_pid_agent = {
         'pid_params': pid_params['aileron'], 
@@ -388,6 +371,10 @@ def setup_container_from_env(env, arglist):
         'pid_params': pid_params['elevator'], 
         'writer': None,
     }
+    params_elevator_speed_pid_agent = {
+        'pid_params': pid_params['elevator_speed'], 
+        'writer': None,
+    }
 
     #for the learning agents, a standard parameter set will do; the details will be learned
     params_DDPG_MADDPG_agent = {
@@ -395,13 +382,13 @@ def setup_container_from_env(env, arglist):
         'writer': None,
     }
 
-    agent_spec_aileron_Pid = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
+    agent_spec_aileron_PID = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
 
     agent_spec_aileron_DDPG = AgentSpec('aileron', 'DDPG', ['aileron'], params_DDPG_MADDPG_agent)
 
     agent_spec_aileron_MADDPG = AgentSpec('aileron', 'MADDPG', ['aileron'], params_DDPG_MADDPG_agent)
 
-    agent_spec_elevator_Pid = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_pid_agent)
+    agent_spec_elevator_PID = AgentSpec('elevator', 'PID', ['elevator'], params_elevator_pid_agent)
 
     agent_spec_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['elevator'], params_DDPG_MADDPG_agent)
 
@@ -409,28 +396,29 @@ def setup_container_from_env(env, arglist):
 
     #Here we specify which agents shall be initiated; chose form the above defined single-specs
     agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
-    agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_DDPG]
+    # agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_PID]
+    # agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_DDPG]
+    # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
 
-    agent_container = AgentContainer.init_from_env(env, agent_spec, agent_classes_dict, arglist)
+    task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
+    agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
 
     return agent_container
-
-
-
-
-
-
 
 if __name__ == '__main__':
 
     arglist = parse_args()
 
-    # lab_journal = LabJournal(arglist.base_dir, arglist)
+    lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # training_env = restore_env_from_journal(221)
-    # testing_env = restore_env_from_journal(221)
+    # # # training_env = restore_env_from_journal(509)
+    # testing_env = restore_env_from_journal(630)
 
-    # trainers = restore_agents_from_journal(221)
+    # # THIS IS OFF BY ONE SAVE!!!
+    # agent_container = restore_agent_container_from_journal([630,631])
+    # evaluate_training_with_agent_container(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
+    # exit(0)
+
 
     # exit(0)
 
@@ -439,11 +427,8 @@ if __name__ == '__main__':
 
     agent_container = setup_container_from_env(training_env, arglist)
 
+    save_test_run(arglist.base_dir, arglist, testing_env, agent_container)  #use the testing_env here to have the save_path available in the evaluation
 
-    # save_test_run(arglist.base_dir, arglist, training_env, trainers)
-
-    # evaluate_training(trainers, testing_env, lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env
-    # exit(0)
     train(arglist)
     
     training_env.close()

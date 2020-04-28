@@ -16,12 +16,12 @@ if __name__ == '__main__':
     pid_elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5},
                                 make_base_reward_components= make_glide_angle_reward_components)
     elevator_pid_params = PidParameters( -5e-2, -6.5e-2, -1e-3)
-    pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, pid_elevator_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
+    pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, pid_elevator_AT.action_space, agent_interaction_freq = agent_interaction_freq)
 
     pid_aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components)
     aileron_pid_params = PidParameters(3.5e-2,    1e-2,   0.0)
-    pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.get_action_space(), agent_interaction_freq = agent_interaction_freq)
+    pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.action_space, agent_interaction_freq = agent_interaction_freq)
 
     agent_task_list = [pid_elevator_AT, pid_aileron_AT]
     trainers = [pid_elevator_agent, pid_aileron_agent]

@@ -3,6 +3,9 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
 import gym
+import os
+import pickle
+import json
 from gym.spaces import Box
 import numpy as np
 
@@ -12,6 +15,7 @@ from typing import Type, Tuple, Dict, List, Sequence, NamedTuple, Optional, Unio
 from collections import namedtuple
 
 from gym_jsbsim.helper.utils import aggregate_gym_boxes
+from gym_jsbsim.helper.bunch import Bunch
 from gym_jsbsim.agents.AgentTrainer import Experience, AgentTrainer, PID_AgentTrainer, DDPG_AgentTrainer, MADDPG_AgentTrainer
 
 AgentSpec = namedtuple('AgentSpec', ['name', 'agent_type', 'task_names', 'parameters'])
@@ -27,18 +31,24 @@ class AgentContainer():
         :param agents_m: the list of agents; to be maintained by AgentContainer;
         :param mapping_dict: A dictionary mapping one agent.name to  1..n [task.name]; used to distribute inputs and actions
         """
+        #extract the needed information form the parameters
+        reduced_task_list_n = [Bunch(name= t.name, action_space = t.action_space, state_space = t.state_space) \
+                    for t in task_list_n]    #we need to strip off unnecessary information to serialize the container properly later on
 
+        self.task_list_n = reduced_task_list_n
+        self.agents_m = agents_m
+        self.mapping_dict = mapping_dict
+        
         self.init_dict = {
-            'task_list_n': task_list_n,
-            'agents_m': agents_m,
+            'task_list_n': reduced_task_list_n,
+            'agents_m': self.agents_m,
             'mapping_dict': mapping_dict,
         }
         
-        self.task_list_n = task_list_n
-        self.agents_m = agents_m
-        self.mapping_dict = mapping_dict
+        #to restore the agents, we need their classes
+        self.agent_classes_dict = {ag.type: ag.__class__ for ag in self.agents_m}
+        self.agent_init_dict_m = [ag.agent_dict for ag in self.agents_m]
 
-        
         self.task_names = list(map(lambda t: t.name, self.task_list_n))
         #build a list containing the list of associated task idxs for each agent idx
         self.task_idxs_per_agent: List[List[int]] = []
@@ -53,7 +63,7 @@ class AgentContainer():
 
 
         # build the action space for each agent
-        self.task_action_space_n = list(map(lambda t: t.get_action_space(), self.task_list_n))
+        self.task_action_space_n = list(map(lambda t: t.action_space, self.task_list_n))
         self.agent_action_space_n = []
         self.task_to_agent_action_idxs = [None] * len(self.task_list_n)
         #for each agent
@@ -76,12 +86,7 @@ class AgentContainer():
         task_actions_n = self._get_per_task_action(agent_actions_m)
         return task_actions_n
     
-    def remember(self, obs_n, actions_n, rewards_n, next_obs_n, dones_n):
-        """
-        Forwards the experience to the agents for pushing it into their replay buffers.
-
-        TODO: A centralized replay buffer comes into mind. Check implications
-        """
+    def get_per_agent_experience(self, obs_n, actions_n, rewards_n, next_obs_n, dones_n):
         exper_trans_m = list(map(self._get_per_agent_data, (obs_n, actions_n, rewards_n, next_obs_n, dones_n))) #returns an 5*m object
         # aggregate the rewards
         exper_trans_m[2] = [self.agents_m[i].rwd_aggregator(rwd_list) for i, rwd_list in enumerate(exper_trans_m[2])]
@@ -89,6 +94,15 @@ class AgentContainer():
         exper_trans_m[4] = [any(done_list) for done_list in exper_trans_m[4]]
         experience_m = [Experience(*e) for e in list(zip(*exper_trans_m))]    # first transpose to m*5 object and then put in Experience
 
+        return experience_m
+    
+    def remember(self, obs_n, actions_n, rewards_n, next_obs_n, dones_n):
+        """
+        Forwards the experience to the agents for pushing it into their replay buffers.
+
+        TODO: A centralized replay buffer comes into mind. Check implications
+        """
+        experience_m = self.get_per_agent_experience(obs_n, actions_n, rewards_n, next_obs_n, dones_n)
         [ag.store_experience(experience) for ag, experience in zip(self.agents_m, experience_m)]
         return experience_m
 
@@ -101,7 +115,6 @@ class AgentContainer():
         DDPG agents ignore these parmeters and do pure local training while MADDPG agents can query the replay buffer of the other agents.
         """
         [ag.train(agents_m = self.agents_m, own_idx = own_idx) for own_idx, ag in enumerate(self.agents_m)]
-
 
     def _get_per_agent_data(self, task_input_n: List[Union[float, np.ndarray]]) -> List[np.ndarray]:
         """
@@ -129,9 +142,85 @@ class AgentContainer():
         task_actions = [np_inp[self.task_to_agent_action_idxs[t_idx]] for t_idx in range(len(self.task_list_n))]
         return task_actions
 
+    def save_agent_container_data(self, save_path):
+        """
+        Saves a JSON file with agent container data. Also saves a pickle file
+        from which the container can be restored.
+
+        :param save_path: The directory to store the JSON and the pcikle file to
+        """
+
+        #the agents themselves are not (JSON-)serializable
+        #we only save names and types of agents and load the agents separately when restoring
+        data_to_save = {
+            'task_list_n_names': [t.name for t in self.task_list_n],
+            'agents_m_names': [ag.name for ag in self.agents_m],
+            'agents_m_types': [ag.type for ag in self.agents_m],
+            'mapping_dict': self.init_dict['mapping_dict'],
+        }
+
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+        #save as JSON as it's readable
+        json_filename = os.path.join(save_path, 'agent_container.json')
+        with open(json_filename, 'w') as file:
+            file.write(json.dumps(data_to_save, indent=4))
+
+        # we need more data to restore the tasks and agents
+        data_to_save.update({
+            'task_list_n': self.task_list_n,  #task_list_n is reduced in __init__ to be serializable
+            'agent_classes_dict': self.agent_classes_dict,
+            'agent_init_dict_m': self.agent_init_dict_m
+        })
+
+        #this data is also the one to save to the agent_container.pickle
+        pickle_filename = os.path.join(save_path, 'agent_container.pickle')
+        with open(pickle_filename, 'wb') as file:
+            pickle.dump(data_to_save, file)
+
     @classmethod
-    def init_from_env(cls, env: 'JsbSimEnv_multi_agent', agent_spec: List[AgentSpec], 
-                      agent_classes_dict: Dict['str', 'Class'], arglist) -> 'AgentContainer':
+    def init_from_save(cls, container_pickle_file: str, agent_pickle_files_m: List[str] = []) ->'AgentContainer':
+        """
+        restores an agent container from the files on disk. If no agents ar given, new ones are created.
+        
+        :param container_pickle_file: The file containing the pickle fl efor the container itself
+        :param agent_pickle_files_m: A list of agents to be used to inject into the container. Must fit the data in container_pickle_file.
+            If left out, new agents are created.
+        """
+        #load the container pickle
+        with open(container_pickle_file, 'rb') as infile:
+            container_pickle_data = pickle.load(infile)
+        
+        #load the agents if given
+        if len(agent_pickle_files_m) > 0:
+            agent_init_dict_m = []
+            for agent_pickle in agent_pickle_files_m:
+                with open(agent_pickle, 'rb') as infile:
+                    agent_init_dict = pickle.load(infile)
+                agent_init_dict_m.append(agent_init_dict)
+        else:
+            agent_init_dict_m = container_pickle_data['agent_init_dict_m']
+
+        agent_classes_dict = container_pickle_data['agent_classes_dict']
+
+        #instantiate the agents
+        agents_m = []
+        for agent_init_dict in agent_init_dict_m:
+            agents_m.append(agent_classes_dict[agent_init_dict['type']](**agent_init_dict))
+
+        container_dict = {
+            'task_list_n': container_pickle_data['task_list_n'], 
+            'agents_m': agents_m, 
+            'mapping_dict': container_pickle_data['mapping_dict'],
+        }
+
+        instance = cls(**container_dict)     #call to the own constructor to initialize the agents
+        instance.init_dict = container_dict  #stash away the parameters used for agent instantiation
+        return instance
+
+    @classmethod
+    def init_from_env(cls, task_list_n: List['Agent_Task'], agent_spec: List[AgentSpec], 
+                      agent_classes_dict: Dict['str', 'Class'], **kwargs) -> 'AgentContainer':
         """
         Instantiate the specified agents. Then instantiate an AgentContainer holding those agents
 
@@ -146,10 +235,18 @@ class AgentContainer():
             Classes shall be subclass of AgentTrainer
         """
 
-        task_list_n = env.task_list
-        task_names_n = [t.name for t in task_list_n]
-        action_spaces_n = [t.get_action_space() for t in task_list_n]
-        obs_spaces_n = [t.get_state_space() for t in task_list_n]
+        reduced_task_list_n = [Bunch(name= t.name, action_space = t.action_space, state_space = t.state_space) \
+                    for t in task_list_n]    #we need to strip off unnecessary information to serialize the container properly later on
+
+        task_names_n = [t.name for t in reduced_task_list_n]
+        action_spaces_n = [t.action_space for t in reduced_task_list_n]
+        obs_spaces_n = [t.state_space for t in reduced_task_list_n]
+
+        try:
+            interaction_frequency = kwargs['interaction_frequency']
+        except KeyError:
+            print(f'*** INFO: no interaction frequency given for AgentContainer.init_from_env(); Using 5Hz as default.')
+            interaction_frequency = 5
         
         # figure out the input and output widths for the agents
         # - actor_obs_space is the concatenation of the associated elements from obs_spaces_n
@@ -163,7 +260,7 @@ class AgentContainer():
         ag_actor_obs_spaces_m = []
         ag_actor_act_spaces_m = []
         mapping_dict = {}
-        agent_idx_per_task = np.full( shape=len(task_list_n), fill_value=-1, dtype=np.int32) 
+        agent_idx_per_task = np.full( shape=len(reduced_task_list_n), fill_value=-1, dtype=np.int32) 
         for i, aspec in enumerate(agent_spec):
             t_idxs = [task_names_n.index(n) for n in aspec.task_names]
             task_idxs_per_agent.append(t_idxs)
@@ -198,7 +295,7 @@ class AgentContainer():
                 'obs_space': ag_actor_obs_spaces_m[i],
                 'act_space': ag_actor_act_spaces_m[i],
                 'critic_state_space': ag_critic_state_space_m[i],
-                'agent_interaction_frequency': arglist.interaction_frequency,
+                'agent_interaction_frequency': interaction_frequency,
             }
             agent_init_dict.update(aspec.parameters)
             agent_init_dict_m.append(agent_init_dict)
@@ -207,7 +304,7 @@ class AgentContainer():
             agents_m.append(new_agent)
 
         container_dict = {
-            'task_list_n': task_list_n, 
+            'task_list_n': reduced_task_list_n, 
             'agents_m': agents_m, 
             'mapping_dict': mapping_dict
         }
@@ -222,18 +319,36 @@ if __name__ == '__main__':
     class MiniTask():
         def __init__(self, name, action_space, state_space):
             self.name = name
-            self.action_space = action_space
-            self.state_space = state_space
-        def get_action_space(self):
-            return self.action_space
-        def get_state_space(self):
-            return self.state_space
+            self._action_space = action_space
+            self._state_space = state_space
+        @property
+        def action_space(self):
+            return self._action_space
+        @property
+        def state_space(self):
+            return self._state_space
     class MiniAgent():
-        def __init__(self, name, action_width):
+        def __init__(self, name, act_space, **kwargs):
             self.name = name
-            self.action_width = action_width
+            self.act_space = act_space
+            self.type = self.__class__.__name__
+            self.agent_dict = {
+                'name': self.name,
+                'buf_len': 123,
+                'obs_space': Box(np.array([-1, -2]), np.array([1, 2])),
+                'act_space': act_space,
+                'type': self.type,
+                'train_steps': 666,
+                'agent_interaction_freq': 5
+            }
+
+            print(f'{self.__class__.__name__} instantiated with:')
+            for key, value in kwargs.items(): 
+                print ("%s = %s" %(key, value)) 
+
+
         def get_action(self, obs, add_exploration_noise = False):
-            return np.full( shape=self.action_width, fill_value=self.action_width, dtype=np.float32)
+            return np.full( shape=self.act_space.shape, fill_value=self.act_space.shape[-1], dtype=np.float32)
         def store_experience(self, experience):
             print(f'{self.name} stored {experience}')
         def rwd_aggregator(self, rwd_list):
@@ -241,20 +356,13 @@ if __name__ == '__main__':
     class MiniEnv():
         def __init__(self, task_list):
             self.task_list = task_list
-    class AG():
-        def __init__(self, **kwargs):
-            self.name = kwargs['name']
-            print(f'{self.__class__.__name__} instantiated with:')
-            for key, value in kwargs.items(): 
-                print ("%s = %s" %(key, value)) 
-    class PID_Agent(AG):
-        ...
-    class DDPG_Agent(AG):
-        ...
-    class MADDPG_Agent(AG):
-        ...
 
-    pid = PID_Agent(hallo='hallo', test='test', welt='welt', name='testname')
+    class PID_Agent(MiniAgent):
+        ...
+    class DDPG_Agent(MiniAgent):
+        ...
+    class MADDPG_Agent(MiniAgent):
+        ...
 
     task_list = [
         MiniTask('t1', Box(low=np.array([-1,-2,-3]), high=np.array([1,1,1])), Box(low=np.array([-1]), high=np.array([1]))),
@@ -265,9 +373,9 @@ if __name__ == '__main__':
     ]
 
     agent_spec = [
-        AgentSpec('ag1','DDPG', ['t1', 't3'], {'hallo':'hallo', 'DDPG':'DDPG', 'ag_nr':1}),
-        AgentSpec('ag3','MADDPG', ['t2', 't4'], {'hallo':'hallo', 'MADDPG':'MADDPG', 'ag_nr':3}),
-        AgentSpec('ag2','PID', ['t5'], {'hallo':'hallo', 'PID':'PID', 'ag_nr':2}),
+        AgentSpec('ag1','DDPG', ['t1', 't3'], {'action_width': 4, 'hallo':'hallo', 'DDPG':'DDPG', 'ag_nr':1}),
+        AgentSpec('ag3','MADDPG', ['t2', 't4'], {'action_width': 4, 'hallo':'hallo', 'MADDPG':'MADDPG', 'ag_nr':3}),
+        AgentSpec('ag2','PID', ['t5'], {'hallo':'hallo', 'PID':'PID', 'ag_nr':2, 'action_width': 4, }),
     ]
 
     agent_classes_dict = {
@@ -276,15 +384,15 @@ if __name__ == '__main__':
         'DDPG': DDPG_Agent
     }
 
-    agent_classes_dict['MADDPG'](hello='world', name='hello')
+    agent_classes_dict['MADDPG']('hello', Box(np.array([-1,-2,-3]), np.array([1,2,3])), hello='world')
 
     env = MiniEnv(task_list)
-    ag_container = AgentContainer.init_from_env(env, agent_spec, agent_classes_dict)
+    ag_container = AgentContainer.init_from_env(task_list, agent_spec, agent_classes_dict)
 
     agents_m = [
-        MiniAgent('ag1', 3),
-        MiniAgent('ag2', 6),
-        MiniAgent('ag3', 1)
+        MiniAgent('ag1', act_space= Box(np.array([-1,-2,-3]), np.array([1,2,3]))),
+        MiniAgent('ag2', act_space= Box(np.array([-1,-2,-3]), np.array([1,2,3]))),
+        MiniAgent('ag3', act_space= Box(np.array([-1,-2,-3]), np.array([1,2,3])))
     ] 
 
     mapping_dict = {
@@ -294,6 +402,11 @@ if __name__ == '__main__':
     }
 
     a_cont = AgentContainer(task_list, agents_m, mapping_dict)
+
+    a_cont.save_agent_container_data('./test_save/')
+
+    restored_cont = AgentContainer.init_from_save('./test_save/agent_container.pickle')
+    restored_cont.save_agent_container_data('./test_save/')
 
     obs_n = [
         [1],
@@ -309,9 +422,63 @@ if __name__ == '__main__':
     done_n = [[True], [False], [True], [False], [True]]
     done_n = [True, False, True, False, True]
 
-    task_actions_n = a_cont.get_actions(obs_n)
+    task_actions_n = a_cont.get_action(obs_n)
 
     a_cont.remember(obs_n, task_actions_n, rwd_n, obs_n, done_n)
+
+    #now try out with real agents from AgentTrainer class
+
+    from gym_jsbsim.agents.AgentTrainer import PID_AgentTrainer, DDPG_AgentTrainer, MADDPG_AgentTrainer, PidParameters
+    import gym_jsbsim.environment.properties as prp
+    from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask
+
+    elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 66},
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
+
+    aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: 99}, 
+                                max_allowed_error= 60, 
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
+
+    task_list = [
+        elevator_AT_for_PID,
+        aileron_AT_for_PID
+    ]
+
+
+    #for PID controllers we need an alaborated parameter set for each type
+    pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
+                  'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3)}
+
+    params_aileron_pid_agent = {
+        'pid_params': pid_params['aileron'], 
+        'writer': None,
+    }
+
+    agent_spec_aileron_PID = AgentSpec('aileron', 'PID', ['aileron'], params_aileron_pid_agent)
+
+    #for the learning agents, a standard parameter set will do; the details will be learned
+    params_DDPG_MADDPG_agent = {
+        'writer': None,
+    }
+
+    agent_spec_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['elevator'], params_DDPG_MADDPG_agent)
+
+    agent_spec = [agent_spec_aileron_PID, agent_spec_elevator_DDPG]
+
+    agent_classes_dict = {
+        'PID': PID_AgentTrainer,
+        'MADDPG': DDPG_AgentTrainer,
+        'DDPG': MADDPG_AgentTrainer
+    }
+
+    env = MiniEnv(task_list)
+    ag_container = AgentContainer.init_from_env(task_list, agent_spec, agent_classes_dict)
+    ag_container.save_agent_container_data('./test_save/')
+
+    restored_cont = AgentContainer.init_from_save('./test_save/agent_container.pickle')
+    restored_cont.save_agent_container_data('./test_save/')
 
 
     print('ferti')

@@ -7,7 +7,7 @@ runs/
 checkpoints/
 learning_curves/
 testruns/
-
+test_save/
 
 gym_jsbsim/__pycache__/
 
