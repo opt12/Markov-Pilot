@@ -1,3 +1,17 @@
+# WORK IN PROGRES
+
+The entire repo is still under heavy development.
+
+It will contain an implementation of a Multi-Agent Reinforcement learning environment together with appropriate DDPG and MADDPG agents.
+
+It is based on the [groundwork of Gor-Ren](https://github.com/Gor-Ren/gym-jsbsim), but has evolved a lot since forking his repo.
+
+More documentation is about to come.
+
+The followin text is the original [readme by Gor-Ren](https://github.com/Gor-Ren/gym-jsbsim/blob/master/README.md), but is not entirely valid anymore.
+
+Stay tuned!
+
 # Gym-Jsbsim
 
 Gym-JSBSim provides reinforcement learning environments for the control of fixed-wing aircraft using the JSBSim flight dynamics model. Gym-JSBSim requires a Unix-like OS and Python 3.6.
