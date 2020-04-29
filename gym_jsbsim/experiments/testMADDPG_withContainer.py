@@ -18,9 +18,10 @@ from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask
 from gym_jsbsim.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
 from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
 from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
+from gym_jsbsim.wrappers.varySetpointsWrapper import VarySetpointsWrapper
 import gym_jsbsim.environment.properties as prp
 
-from gym_jsbsim.environment.evaluate_training_eee import evaluate_training_with_agent_container
+from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
 from gym_jsbsim.helper.lab_journal import LabJournal
 
 from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components
@@ -369,7 +370,7 @@ def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv
             testing_env.set_meta_information(episode_number = episode_counter)
             testing_env.set_meta_information(train_step = train_step)
             testing_env.showNextPlot(True)
-            evaluate_training_with_agent_container(agent_container, testing_env, lab_journal=lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env TODO: add lab_journal again
+            evaluate_training(agent_container, testing_env, lab_journal=lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env TODO: add lab_journal again
             t_start = time.time()
 
         # env.render(mode='flightgear') #not really useful in training
@@ -399,19 +400,26 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # # # training_env = restore_env_from_journal(lab_journal, 509)
-    # testing_env = restore_env_from_journal(lab_journal, 630)
+    # # training_env = restore_env_from_journal(lab_journal, 509)
+    testing_env = restore_env_from_journal(lab_journal, 827)
 
-    # # THIS IS OFF BY ONE SAVE!!!
-    # agent_container = restore_agent_container_from_journal(lab_journal, [630,631])
-    # evaluate_training_with_agent_container(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
-    # exit(0)
+    testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30))#, (0.05, 0.5))
+    testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-5.5, -10), (10, 120), (5, 30))#, (0.05, 0.5))
+
+    agent_container = restore_agent_container_from_journal(lab_journal, [832,827])
+    evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
+    exit(0)
 
 
     # exit(0)
 
     training_env = setup_env(arglist)
     testing_env = setup_env(arglist)
+
+    #apply Varyetpoints to the training to increase the variance of training data
+    training_env = VarySetpointsWrapper(training_env, prp.roll_deg, (-30, 30), (10, 30), (5, 30), (0.05, 0.5))
+    training_env = VarySetpointsWrapper(training_env, prp.flight_path_deg, (-5.5, -10), (10, 45), (5, 30), (0.05, 0.5))
+
 
     agent_container = setup_container_from_env(training_env, arglist)
 

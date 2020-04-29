@@ -11,6 +11,8 @@ import gym_jsbsim.environment.properties as prp
 best_score_n = []  #we don't like globals, but it really helps here
 eval_number = 0
 
+'''
+The old style before the invention of the agent container
 def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
     global best_score_n 
     if len(best_score_n) != env.n:
@@ -105,8 +107,9 @@ def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=Fal
     #         print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
     #     agent.save_models(name_discriminator= name + '_best')
     #     best_reward = score
+'''
 
-def evaluate_training_with_agent_container(agent_container, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
+def evaluate_training(agent_container, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
     global best_score_n 
     if len(best_score_n) != env.n:
         best_score_n = np.zeros(env.n)
@@ -183,39 +186,32 @@ def evaluate_training_with_agent_container(agent_container, env, lab_journal = N
     print("].")
 
     if lab_journal:
-        save_dir = lab_journal.journal_save_dir
-        for i, ag in enumerate(agent_container.agents_m):
-            eval_dict = {
-                'entry_type': ag.name,
-                'reward': '{:.2f}'.format(score_m[i]),
-                'steps': ag.train_steps,
-            }
-            save_path = ag.agent_save_path
+        save_last_run(lab_journal, agent_container, score_m)
 
-            #save the agents' state
-            filename = f'{ag.name}_rwd-{score_m[i]:06.2f}_steps-{ag.train_steps}.pickle'
-            ag.save_agent_state(filename)
-            eval_dict.update({'path': os.path.join(save_path, filename)})
-            if best_score_n[i] < score_m[i]:
-                print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_m[i]))
-                bestname = f'{ag.name}_best.pickle'
-                copyfile(os.path.join(save_path, filename), os.path.join(save_path, bestname))
-                best_score_n[i] = score_m[i]
+def save_last_run(lab_journal, agent_container, score_m):
+    save_dir = lab_journal.journal_save_dir
+    for i, ag in enumerate(agent_container.agents_m):
+        eval_dict = {
+            'entry_type': ag.name,
+            'reward': '{:.2f}'.format(score_m[i]),
+            'steps': ag.train_steps,
+        }
+        save_path = ag.agent_save_path
 
-            lab_journal.append_evaluation_data(eval_dict)
+        #save the agents' state
+        filename = f'{ag.name}_rwd-{score_m[i]:06.2f}_steps-{ag.train_steps}.pickle'
+        ag.save_agent_state(filename)
+        eval_dict.update({'path': os.path.join(save_path, filename)})
+        if best_score_n[i] < score_m[i]:
+            print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_m[i]))
+            bestname = f'{ag.name}_best.pickle'
+            copyfile(os.path.join(save_path, filename), os.path.join(save_path, bestname))
+            best_score_n[i] = score_m[i]
 
-    # name = env.meta_dict['model_base_name']
-    # discriminator = env.meta_dict['model_discriminator']
-    # env.set_meta_information(model_discriminator = discriminator)
-    # agent.save_models(name_discriminator=discriminator)    
-    # if best_reward is None or best_reward < score:
-    #     if best_reward is not None:
-    #         print("Best reward updated: %.3f -> %.3f" % (best_reward, score))
-    #     agent.save_models(name_discriminator= name + '_best')
-    #     best_reward = score
+        lab_journal.append_evaluation_data(eval_dict)
 
 
-
+#local test code
 if __name__ == '__main__':
 
     from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent
@@ -272,6 +268,6 @@ if __name__ == '__main__':
     #now try it with lab journal
     lab_journal = LabJournal('./test_save', {})
 
-    evaluate_training_with_agent_container(agent_container, env, lab_journal = lab_journal, add_exploration_noise=False, store_evaluation_experience = False)
+    evaluate_training(agent_container, env, lab_journal = lab_journal, add_exploration_noise=False, store_evaluation_experience = False)
 
     exit(0)
