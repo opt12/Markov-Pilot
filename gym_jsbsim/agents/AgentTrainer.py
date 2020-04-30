@@ -229,8 +229,8 @@ class PID_AgentTrainer(AgentTrainer):
         """
         in the PID controller, it just calculates the output like always, but as a tensor
         """
-
-        mu_t = obs_t * self.pid_tensor_t
+        err_der_int_t = T.split(obs_t, 3, dim=1)[0] #we only need the first three columns of the obs_t tensor
+        mu_t = err_der_int_t * self.pid_tensor_t
         mu_t = T.sum(mu_t, dim=1)
         T.clamp_(mu_t, -1, 1) #to have PID-output in the range of [-1,1]
         mu_t = mu_t * self.act_scale_t +  self.act_shift_t  #to have PID-output in the range of the action_space
