@@ -24,12 +24,13 @@ import gym_jsbsim.environment.properties as prp
 from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
 from gym_jsbsim.helper.lab_journal import LabJournal
 
-from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components
+from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5
 target_kias = 92
 target_roll_angle_phi_deg   = -15
+target_sideslip_angle_beta_deg = 0
 
 def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/maddpg/
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
@@ -73,6 +74,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     ## define the initial conditions
     initial_path_angle_gamma_deg = target_path_angle_gamma_deg + 3
     initial_roll_angle_phi_deg   = target_roll_angle_phi_deg + 10
+    initial_sideslip_angle_beta_deg   = 0
     initial_fwd_speed_KAS        = 80
     initial_aoa_deg              = 1.0
     # initial_altitude_ft          = 6000
@@ -84,6 +86,12 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components,
+                                integral_limit = 100)
+                                #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
+
+    rudder_AT_for_PID = SingleChannel_FlightAgentTask('rudder', prp.rudder_cmd, {prp.sideslip_deg: 0},
+                                max_allowed_error= 10, 
+                                make_base_reward_components= make_sideslip_angle_reward_components,
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
 
@@ -112,8 +120,14 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_roll_angle_reward_components,
                                 integral_limit = 0.25)
 
+    rudder_AT = SingleChannel_FlightAgentTask('rudder', prp.rudder_cmd, {prp.sideslip_deg: 0}, 
+                                presented_state=[prp.rudder_cmd, prp.aileron_cmd, prp.r_radps, prp.p_radps, prp.indicated_airspeed],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_sideslip_angle_reward_components,
+                                integral_limit = 0.25)
+
     agent_task_list = [elevator_AT, aileron_AT]
-    agent_task_list = [elevator_AT, aileron_AT]
+    # agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
     # agent_task_types = ['PID', 'PID']
     # agent_task_types = ['PID', 'DDPG']  #TODO: This is irrelevant for the env!!! REMOVE
     # agent_task_types = ['DDPG', 'MADDPG']
@@ -143,6 +157,7 @@ def setup_container_from_env(env, arglist):
     #for PID controllers we need an elaborated parameter set for each type
     pid_params = {'aileron':  PidParameters(3.5e-2,    1e-2,   0.0),
                   'elevator': PidParameters( -5e-2, -6.5e-2, -1e-3),
+                  'rudder':   PidParameters(  0.6e-1, 0, 0),            #TODO: This parameter set does'nt work really good for coordinated turns
                   'elevator_speed': PidParameters( 2e-3, 6.5e-3, 1e-4), #TODO: This parameter set does'nt work at all for speed control
                   }    
 
@@ -155,6 +170,12 @@ def setup_container_from_env(env, arglist):
         'pid_params': pid_params['elevator'], 
         'writer': None,
     }
+
+    params_rudder_pid_agent = {
+        'pid_params': pid_params['rudder'], 
+        'writer': None,
+    }
+    
     params_elevator_speed_pid_agent = {
         'pid_params': pid_params['elevator_speed'], 
         'writer': None,
@@ -163,6 +184,8 @@ def setup_container_from_env(env, arglist):
     #for the learning agents, a standard parameter set will do; the details will be learned
     params_DDPG_MADDPG_agent = {
         **vars(arglist),
+        # 'layer1_size': 800,
+        # 'layer2_size': 600,
         'writer': None,
     }
 
@@ -179,10 +202,17 @@ def setup_container_from_env(env, arglist):
 
     agent_spec_elevator_MADDPG = AgentSpec('elevator', 'MADDPG', ['elevator'], params_DDPG_MADDPG_agent)
 
+    agent_spec_rudder_MADDPG = AgentSpec('rudder', 'MADDPG', ['rudder'], params_DDPG_MADDPG_agent)
+    agent_spec_rudder_DDPG = AgentSpec('rudder', 'DDPG', ['rudder'], params_DDPG_MADDPG_agent)
+    agent_spec_rudder_PID = AgentSpec('rudder', 'PID', ['rudder'], params_rudder_pid_agent)
+
+    agent_spec_elevator_aileron_DDPG = AgentSpec('elevator_aileron', 'DDPG', ['elevator', 'aileron'], params_DDPG_MADDPG_agent)
+
     #Here we specify which agents shall be initiated; chose form the above defined single-specs
+    # agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG, agent_spec_rudder_MADDPG]
+    # agent_spec = [agent_spec_elevator_aileron_DDPG]
     agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
-    # agent_spec = [agent_spec_elevator_DDPG, agent_spec_aileron_DDPG]
-    # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
+    # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID, agent_spec_rudder_DDPG]
 
     task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
     agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
@@ -231,6 +261,10 @@ def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -
         model_file = lab_journal.get_model_filename(ln)
         run_protocol_path = lab_journal.find_associated_run_path(model_file)
     except TypeError:
+        print(f"there was no run protocol found that is associated with line_number {ln}")
+        exit()
+
+    if run_protocol_path == None:
         print(f"there was no run protocol found that is associated with line_number {ln}")
         exit()
 
@@ -400,15 +434,14 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # # training_env = restore_env_from_journal(lab_journal, 509)
-    testing_env = restore_env_from_journal(lab_journal, 827)
+    # testing_env = restore_env_from_journal(lab_journal, 91)
 
-    testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30))#, (0.05, 0.5))
-    testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-5.5, -10), (10, 120), (5, 30))#, (0.05, 0.5))
+    # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30))#, (0.05, 0.5))
+    # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30))#, (0.05, 0.5))
 
-    agent_container = restore_agent_container_from_journal(lab_journal, [832,827])
-    evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
-    exit(0)
+    # agent_container = restore_agent_container_from_journal(lab_journal, [91, 90,101])
+    # evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
+    # exit(0)
 
 
     # exit(0)
@@ -418,7 +451,8 @@ if __name__ == '__main__':
 
     #apply Varyetpoints to the training to increase the variance of training data
     training_env = VarySetpointsWrapper(training_env, prp.roll_deg, (-30, 30), (10, 30), (5, 30), (0.05, 0.5))
-    training_env = VarySetpointsWrapper(training_env, prp.flight_path_deg, (-5.5, -10), (10, 45), (5, 30), (0.05, 0.5))
+    training_env = VarySetpointsWrapper(training_env, prp.flight_path_deg, (-10, -5.5), (10, 45), (5, 30), (0.05, 0.5))
+    # training_env = VarySetpointsWrapper(training_env, prp.sideslip_deg, (-3, 3), (10, 45), (5, 30), (0.05, 0.5))
 
 
     agent_container = setup_container_from_env(training_env, arglist)

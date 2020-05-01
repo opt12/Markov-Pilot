@@ -15,7 +15,7 @@ class LabJournal():
 
         os.makedirs(self._jornal_save_dir, exist_ok=True)
         self.journal_file_name = os.path.join(self._jornal_save_dir, 'lab_journal.csv')
-        self.column_names = ['line_number', 'entry_type', 'reward', 'steps', 'date', 'time', 'path', 'agent_task_classes', 'trainer_classes'] + list(self.arglist_dict.keys())
+        self.column_names = ['line_number', 'entry_type', 'reward', 'steps', 'date', 'time', 'path', 'comment', 'agent_task_classes', 'trainer_classes'] + list(self.arglist_dict.keys())
         self.journal_entries = []
         
         csv_exists = os.path.isfile(self.journal_file_name)

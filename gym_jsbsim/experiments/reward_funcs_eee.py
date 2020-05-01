@@ -16,6 +16,13 @@ def make_glide_angle_reward_components(self):
                     potential_difference_based=False,
                     scaling_factor=GLIDE_ANGLE_DEG_ERROR_SCALING,
                     weight=4),
+        rewards.LinearErrorComponent(name='rwd_glideAngle_error_derivative',
+            prop=self.prop_error_derivative,
+            state_variables=self.obs_props,
+            target=0.0,
+            potential_difference_based=False,
+            scaling_factor=2,
+            weight=1),
         rewards.LinearErrorComponent(name='rwd_glideAngle_error_Integral',
                     prop=self.prop_error_integral,
                     state_variables=self.obs_props,
@@ -117,4 +124,51 @@ def make_roll_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ..
     )
     return base_components
 
+
+def make_sideslip_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    SIDESLIP_ANGLE_DEG_ERROR_SCALING = 0.5
+    SIDESLIP_ANGLE_INT_DEG_MAX = self.integral_limit
+    RUDDER_CMD_TRAVEL_MAX = 2/4  # a quarter of the max. absolute value of the delta-cmd; leverage the non-linearities
+    SIDESLIP_ANGULAR_VELOCITY_SCALING = 0.25
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_sideslipAngle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=SIDESLIP_ANGLE_DEG_ERROR_SCALING,
+                                weight=4),
+        rewards.LinearErrorComponent(name='rwd_sideslipAngle_error_derivative',
+                                prop=self.prop_error_derivative,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=2,
+                                weight=1),
+        rewards.LinearErrorComponent(name='rwd_sideslipAngle_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=SIDESLIP_ANGLE_INT_DEG_MAX,
+                                weight=1),
+        rewards.LinearErrorComponent(name='rwd_rudder_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=RUDDER_CMD_TRAVEL_MAX,
+                                weight=1),      #for the rudder, we increase this priority
+        #check if the angular-velocity criterion is more helpful to avoid flittering. 
+        #from a causality point of view, the command travel should be the criterion, as we want to avoid excessive movement.
+        #The control surface travel (derivative) must be presented to the ANN anyways.
+        # rewards.LinearErrorComponent(name='rwd_sideslip_angular_velocity',
+        #                         prop=prp.r_radps,
+        #                         state_variables=self.obs_props,
+        #                         target=0.0,
+        #                         potential_difference_based=False,
+        #                         scaling_factor=SIDESLIP_ANGULAR_VELOCITY_SCALING,
+        #                         weight=5),      #for the rudder, we increase this priority
+    )
+    return base_components
 

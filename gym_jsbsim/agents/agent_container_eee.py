@@ -159,6 +159,12 @@ class AgentContainer():
             'mapping_dict': self.init_dict['mapping_dict'],
         }
 
+        #TODO: add the init dict of each agent to see the network topology
+        # this is a bit problematic as Box is not JSON serializable
+        # data_to_save.update = {
+        #     'agents_init_parameters_m' = [ag.init_params for ag in self.agents_m]
+        # }
+
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
         #save as JSON as it's readable
