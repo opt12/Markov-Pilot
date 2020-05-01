@@ -145,7 +145,7 @@ class AgentTask(ABC):
 
     @property   #read only, so no setter is specified
     def action_space(self) -> gym.Space:
-        """ Get the task's action Space object """
+        """ Get the task's action Space object (maybe an 'empty' Box()"""
         action_lows = np.array([act_prop.min for act_prop in self.action_props])
         action_highs = np.array([act_prop.max for act_prop in self.action_props])
         return gym.spaces.Box(low=action_lows, high=action_highs, dtype='float')
@@ -275,11 +275,6 @@ class AgentTask(ABC):
             'make_base_reward_components_fn': self._make_base_reward_components.__name__,
         }
 
-#TODO: get rid of this intermediate superclass. Why do we need it?
-# class FlightAgentTask(AgentTask):   #implements the same interface like Go-Ren's Task, with the needed adapations to multi-agent setting
-#     def __init__(self, name):
-#         super(FlightAgentTask, self).__init__(name)
-#         pass
 
 class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be better to call it SingleAngularChannel_FlightAgentTask(AgentTask)
     """ A class to implement a controller for a single channel actuation with a single error measurement.
@@ -293,7 +288,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
     AgentTask object at instantiation time.
     """
 
-    def __init__(self, name: str, actuating_prop: BoundedProperty,  setpoints: Dict[BoundedProperty, float], 
+    def __init__(self, name: str, actuating_prop: BoundedProperty = None,  
+                setpoints: Dict[BoundedProperty, float] = [], #TODO: either make this a single value or make measurement_in_degrees, integral_limit and max_allowed error lists as well.
                 presented_state: List[BoundedProperty] = [], 
                 make_base_reward_components: Callable[['AgentTask'], Tuple[RewardComponent, ...]] = None,
                 is_done: Callable[['AgentTask'], bool] = None, 
@@ -302,7 +298,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                 integral_limit = float('inf'), integral_decay = 1):
         """
         :param actuating_prop: The actuation variable to be controlled
-        :param setpoints: The setpoint property to be used for deviation calculation
+        :param setpoints: The setpoint property to be used for deviation calculation. On the setpoint properties, the derivative and the integral are calculated and presented in the state.
         :param presented_state: The additional state properties that shall be presented to the Agent besides the props defined within the AgentTask. 
         :param make_base_reward_components = None: Inject a custom function to be bound to instance.
         :param is_done = None: Inject a custom function to be bound to instance.
@@ -334,14 +330,21 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         self.presented_state = presented_state
         self.actuating_prop = actuating_prop
 
-        self.define_custom_properties()
-        self.define_obs_props()
-        self.action_props = [actuating_prop]
+        #TODO: is it really necessary to have self.actuating_prop and self.action_props separated?
+        self.action_props = [actuating_prop] if actuating_prop else []
 
         # the value of the setpoint_prop itself is not really relevant, it must be in the simulator object to be retrieved, 
         # but no need to have it in the obs_props. It's only relevant to be retrieved in the error calculation in update_custom_properties() 
-        self.setpoint_props, self.initial_setpoint_values = zip(*setpoints.items())    #returns immutable tuples
-        self.setpoint_value_props = [sp.prefixed('setpoint') for sp in self.setpoint_props]
+        if setpoints:
+            self.setpoint_props, self.initial_setpoint_values = zip(*setpoints.items())    #returns immutable tuples
+            self.setpoint_value_props = [sp.prefixed('setpoint') for sp in self.setpoint_props]
+        else:
+            self.setpoint_props = []
+            self.initial_setpoint_values = []
+            self.setpoint_value_props = []
+
+        self.define_custom_properties()
+        self.define_obs_props()
 
         self.assessor = self._make_assessor()   #this can only be called after the preparation of all necessary props
         self.print_info()
@@ -351,14 +354,18 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         defines the custom properties that are calculated by the SingleChannel_FlightAgentTask
         """
         #custom properties 
-        self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -float('inf'), float('inf'))
-        self.prop_error_derivative = BoundedProperty('error/'+self.name+'_deriv', 'derivative of the error divided by timestep', -float('inf'), +float('inf'))
-        self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
+        if self.setpoint_props: #there may be tasks without a setpoint
+            self.prop_error = BoundedProperty('error/'+self.name+'_err', 'error to desired setpoint', -float('inf'), float('inf'))
+            self.prop_error_derivative = BoundedProperty('error/'+self.name+'_deriv', 'derivative of the error divided by timestep', -float('inf'), +float('inf'))
+            self.prop_error_integral = BoundedProperty('error/'+self.name+'_int', 'integral of the error multiplied by timestep', -float('inf'), +float('inf'))
         
-        self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
+        if self.actuating_prop: 
+            self.prop_delta_cmd = BoundedProperty('info/'+self.name+'_delta-cmd', 'the actuator travel/movement since the last step', 
                 self.actuating_prop.min - self.actuating_prop.max, self.actuating_prop.max - self.actuating_prop.min)
 
-        self.custom_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral, self.prop_delta_cmd]
+        self.custom_props = []
+        if self.setpoint_props: self.custom_props.extend([self.prop_error, self.prop_error_derivative, self.prop_error_integral])
+        if self.action_props:  self.custom_props.extend([self.prop_delta_cmd])
 
     def define_obs_props(self):
         """
@@ -368,7 +375,10 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         """
         # no need to add the self.prop_delta_cmd to the standard set of obs_props as it will be added if it is evaluated in the reward function
         # self.obs_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral, self.prop_delta_cmd] + self.presented_state
-        self.obs_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral] + self.presented_state
+        self.obs_props = []
+        if self.setpoint_props:
+            self.obs_props +=[self.prop_error, self.prop_error_derivative, self.prop_error_integral]
+        self.obs_props += self.presented_state
 
     def _make_base_reward_components(self):     #may be overwritten by injected custom function
         # pylint: disable=method-hidden
@@ -377,15 +387,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
 
         May be overwritten by injected custom function.
         """
-        ANGULAR_DEVIATION_SCALING = 0.5 #just a default value which neither fits glide nor roll angle really good
-        base_components = (
-            rewards.AngularAsymptoticErrorComponent(name='rwd_'+self.name+'_asymptotic_error',
-                                    prop=self.prop_error,
-                                    state_variables=self.obs_props,
-                                    target=0.0,
-                                    potential_difference_based=False,
-                                    scaling_factor=ANGULAR_DEVIATION_SCALING,
-                                    weight=1),
+        base_components = (     
+            rewards.ConstantDummyRewardComponent(0.0),
             )
         return base_components
     
@@ -401,24 +404,26 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         else:
             return False
     
-    def update_custom_properties(self):
-        cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
-        error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
-        if self.measurement_in_degrees:
-            error = reduce_reflex_angle_deg(error)
-        self.sim[self.prop_error] = error
+    def update_custom_properties(self): #TODO: make all the calculations suitable for lists; it's easy
+        if self.setpoint_props:     #there may be tasks without a setpoint
+            cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
+            error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
+            if self.measurement_in_degrees:
+                error = reduce_reflex_angle_deg(error)
+            self.sim[self.prop_error] = error
 
-        new_derivative = (cur_value - self._last_value) / self.dt
-        self.sim[self.prop_error_derivative] = new_derivative
+            new_derivative = (cur_value - self._last_value) / self.dt
+            self.sim[self.prop_error_derivative] = new_derivative
 
-        self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
-                        self.sim[self.prop_error_integral] * self.integral_decay + error * self.dt,
-                        -self.integral_limit, self.integral_limit
-                    )
-        self._last_value = cur_value
+            self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
+                            self.sim[self.prop_error_integral] * self.integral_decay + error * self.dt,
+                            -self.integral_limit, self.integral_limit
+                        )
+            self._last_value = cur_value
 
-        self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self._last_action
-        self._last_action = self.sim[self.action_props[0]]
+        if self.action_props != []: #there may be tasks without an associated action
+            self.sim[self.prop_delta_cmd] = self.sim[self.action_props[0]] - self._last_action
+            self._last_action = self.sim[self.action_props[0]]
 
     def initialize_custom_properties(self):
         """ Initializes all the custom properties to start values
@@ -426,23 +431,26 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         TODO: check if this can integrated with update_custom_properties
         """
         #now set the custom_props to the start-of-episode values
-        cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
-        error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
-        if self.measurement_in_degrees:
-            error = reduce_reflex_angle_deg(error)
-        self.sim[self.prop_error] = error
+        if self.setpoint_props:     #there may be tasks without a setpoint
+            cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
+            error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
+            if self.measurement_in_degrees:
+                error = reduce_reflex_angle_deg(error)
+            self.sim[self.prop_error] = error
 
-        new_derivative = 0
-        self.sim[self.prop_error_derivative] = new_derivative
+            new_derivative = 0
+            self.sim[self.prop_error_derivative] = new_derivative
 
-        self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
-                        error * self.dt,
-                        -self.integral_limit, self.integral_limit
-                    )
-        self._last_value = cur_value
+            self.sim[self.prop_error_integral] = np.clip(    #clip the maximum amount of the integral
+                            error * self.dt,
+                            -self.integral_limit, self.integral_limit
+                        )
+            self._last_value = cur_value
 
-        self.sim[self.prop_delta_cmd] = 0
-        self._last_action = self.sim[self.actuating_prop]
+        if self.action_props != []: #there may be tasks without an associated action
+            self.sim[self.prop_delta_cmd] = 0
+            if self.actuating_prop:
+                self._last_action = self.sim[self.actuating_prop]
 
     def get_props_to_output(self) -> List[prp.Property]:
         output_props = self.custom_props + [self.setpoint_value_props[0]]

@@ -58,13 +58,16 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         self.panel_contents = {}
         for i, t in enumerate(env.task_list):
             reward_component_names = [cmp.name for cmp in t.assessor.base_components]
-            self.panel_contents[t.name] = {'panel1': {'setpoint_value_prop': t.setpoint_value_props[0],
-                                                'action_prop': t.action_props[0],
-                                                'current_value_prop': t.setpoint_props[0]},
+            self.panel_contents[t.name] = {'panel1': {},
                                            'panel2': {'reward_prop': self.reward_variables[i],
                                                 'reward_component_names': reward_component_names},
                                            'panel3': {'obs_props': t.obs_props}
                                         }
+            if t.action_props:
+                self.panel_contents[t.name]['panel1'].update({'action_prop': t.action_props[0]})
+            if t.setpoint_props:
+                self.panel_contents[t.name]['panel1'].update({'setpoint_value_prop': t.setpoint_value_props[0],
+                                                'current_value_prop': t.setpoint_props[0]})
 
         # add the output props coming as step() params in a given order to the recorder dataset 
         step_param_props = state_variables \
@@ -101,7 +104,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         state = np.array(self.env.state)
         #flatten the actions
         actions = []
-        [actions.extend(act) for act in actions_n]
+        [actions.extend(act) for act in actions_n if act != None]
 
         data = np.concatenate( (state, reward_n, done_n, actions) ).tolist()
         dataDict = dict(zip(self.recorderCols, data + self._collect_data()))
@@ -158,18 +161,26 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             pCtrl.extra_y_ranges = {t.name+'_cmd': Range1d(start=-1, end=1)} # this should query the action space
             # Adding the second axis to the plot.  
             pCtrl.add_layout(LinearAxis(y_range_name=t.name+'_cmd', axis_label=t.name+'_cmd [norm.]'), 'right')
-            name = self.panel_contents[t.name]['panel1']['action_prop'].get_legal_name() #maybe there are more entries in the future
-            action_Line  = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
+            try:
+                name = self.panel_contents[t.name]['panel1']['action_prop'].get_legal_name() #maybe there are more entries in the future
+                action_Line  = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
                                             line_width=1, y_range_name=t.name+'_cmd', color=Viridis4[1])
-            ctrl_legend.append( (t.name+' Cmd.', [action_Line]) )                                            
-            name = self.panel_contents[t.name]['panel1']['current_value_prop'].get_legal_name()
-            current_value_line = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
+                ctrl_legend.append( (t.name+' Cmd.', [action_Line]) )                                            
+            except KeyError:
+                #we have no action prop, only setpoints to be evaluated
+                pass
+            try:
+                name = self.panel_contents[t.name]['panel1']['current_value_prop'].get_legal_name()
+                current_value_line = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
                                             line_width=2, color=Viridis4[0])
-            ctrl_legend.append( (name, [current_value_line]) )                                            
-            name = self.panel_contents[t.name]['panel1']['setpoint_value_prop'].get_legal_name()
-            setpoint_value_line = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
+                ctrl_legend.append( (name, [current_value_line]) )                                            
+                name = self.panel_contents[t.name]['panel1']['setpoint_value_prop'].get_legal_name()
+                setpoint_value_line = pCtrl.line(data_frame.index*self.step_time, data_frame[name], 
                                             line_width=2, color=Viridis4[3])
-            ctrl_legend.append( (name, [setpoint_value_line]) )                                            
+                ctrl_legend.append( (name, [setpoint_value_line]) )
+            except KeyError:
+                #there is no setpoint to be displayed, only actuations
+                pass
             
             ctrl_lg = Legend(items = ctrl_legend, location=(0, 10), glyph_width = 25, label_width = 190)
             ctrl_lg.click_policy="hide"

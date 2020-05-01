@@ -290,8 +290,6 @@ class JsbSimEnv_multi_agent(gym.Env):
             done_n: list whether the episode has ended for a certain task, in which case further step() calls are undefined
             info_n: auxiliary information from each task, e.g. a dictinary of all reward components
         """
-        if len(actions_n) != len(self.task_list):
-            raise ValueError('mismatch between action list and task list length')
 
         self.last_state = self.state                 #stash the last_state
         self.last_obs_n = self.obs_n                 #stash the last observations
@@ -315,7 +313,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         """
         #flatten the actions
         actions = []
-        [actions.extend(act) for act in actions_n]
+        [actions.extend(act) for act in actions_n if act != None]
         if len(actions) != len(self.action_props):
             raise ValueError('mismatch between the total number of actions and actions registered by the individual tasks')
         actions = np.array(actions, dtype=np.float32)   # we need it as a numpy array

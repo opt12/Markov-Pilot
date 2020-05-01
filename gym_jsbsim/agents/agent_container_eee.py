@@ -37,6 +37,7 @@ class AgentContainer():
 
         self.task_list_n = reduced_task_list_n
         self.agents_m = agents_m
+        self.m = len(self.agents_m)    #the number of Agents registered with the agent container
         self.mapping_dict = mapping_dict
         
         self.init_dict = {
@@ -139,7 +140,8 @@ class AgentContainer():
         #concatenate all inputs
         np_inp = np.concatenate(agent_action_n)
         # for each task build the list  of actions
-        task_actions = [np_inp[self.task_to_agent_action_idxs[t_idx]] for t_idx in range(len(self.task_list_n))]
+        task_actions = [np_inp[self.task_to_agent_action_idxs[t_idx]] if self.task_to_agent_action_idxs[t_idx] else None \
+                                        for t_idx in range(len(self.task_list_n)) ]
         return task_actions
 
     def save_agent_container_data(self, save_path):
