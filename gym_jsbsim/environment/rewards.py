@@ -43,11 +43,12 @@ class Reward(object):
         """ Returns scalar reward value by taking weighted mean of all reward elements """
         sum_reward = np.sum(self.base_reward_elements*self.base_weights) + np.sum(self.shaping_reward_elements * self.shaping_weights)
         sum_weights = self.base_weights_sum + self.shaping_weights_sum
-        return sum_reward / sum_weights
+        return sum_reward / sum_weights if sum_weights else 0   #it may happen that there is only one zero weight component
 
     def assessment_reward(self) -> float:
         """ Returns scalar non-shaping reward by taking the weighted mean of base reward elements. """
-        return np.sum(self.base_reward_elements*self.base_weights) / self.base_weights_sum
+        return np.sum(self.base_reward_elements*self.base_weights) / self.base_weights_sum if self.base_weights_sum else 0   #it may happen that there is only one zero weight component
+
 
     def is_shaping(self):
         return bool(self.shaping_reward_elements)
@@ -71,6 +72,28 @@ class RewardComponent(ABC):
     @abstractmethod
     def is_potential_difference_based(self) -> bool:
         ...
+
+class ConstantDummyRewardComponent(RewardComponent):
+    """
+    Used as default reward for tasks which don't need to calculate a real reward. E. g. Pseudo tasks for non learning PID agents.
+    """
+    def __init__(self, name: str, const_output:float = 0, weight: float = 0):
+        self.name = name
+        self.weight = weight
+        self.const_output = const_output
+        self.shaping_reward_elements = []
+
+    def calculate(self, state: State, last_state: State, is_terminal: bool) -> float:
+        return self.const_output
+    
+    def get_name(self) -> str:
+        return self.name
+    
+    def get_potential(self, state: State, is_terminal) -> float:
+        raise NotImplementedError("I thought we don't need this function in ConstantDummyRewardComponent") 
+
+    def is_potential_difference_based(self) -> bool:
+        return False
 
 
 class NormalisedComponent(RewardComponent, ABC):
