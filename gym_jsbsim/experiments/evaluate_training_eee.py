@@ -111,8 +111,8 @@ def evaluate_training(agents, env, lab_journal = None, add_exploration_noise=Fal
 
 def evaluate_training(agent_container, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
     global best_score_n 
-    if len(best_score_n) != env.n:
-        best_score_n = np.zeros(env.n)
+    if len(best_score_n) != agent_container.m:
+        best_score_n = np.zeros(agent_container.m)
 
     tgt_flight_path_deg = -6.5
     tgt_roll_angle_deg  = 10
@@ -136,7 +136,7 @@ def evaluate_training(agent_container, env, lab_journal = None, add_exploration_
     obs_n = env.reset()
     env.showNextPlot(True, True)
     terminal = False
-    score_m = np.zeros(env.n)
+    score_m = np.zeros(agent_container.m)
     steps = 0
     while not terminal:
         # get action
