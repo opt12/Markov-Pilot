@@ -14,7 +14,7 @@ class ReplayBuffer(object):
         index = self.mem_cntr % self.mem_size
         self.obs_memory[index] = obs
         self.obs_next_memory[index] = obs_next
-        self.action_memory[index] = action
+        self.action_memory[index] = [act for act in action if act != None]  #filter out None values in the actions
         self.reward_memory[index] = reward
         self.terminal_memory[index] = 1 - done  #yields 0 in all terminal states, 1 otherwise; to multiply the value by this value; 
         self.mem_cntr += 1
