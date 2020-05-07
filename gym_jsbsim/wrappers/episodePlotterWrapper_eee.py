@@ -389,7 +389,8 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                 shutil.copyfile(html_output_name, base_filename+'.html')
             def export(webpage):
                 png_filename = base_filename + '.png'
-                export_png(webpage, filename= png_filename, width=1800) #TODO: the width parameter is ignored in bokeh/io/export.py get_layout_html() as webpage isn't a Plot
+                webpage.width = 1800    #set the width of the page instead of passing a width parameter to the export; https://stackoverflow.com/a/61563173/2682209
+                export_png(webpage, filename= png_filename) #TODO: the width parameter is ignored in bokeh/io/export.py get_layout_html() as webpage isn't a Plot
             export(gridplot([[header_col],[panel_grid_plot]], toolbar_location=None))
 
         self.showNextPlotFlag = False   #only show the plot once and then reset
