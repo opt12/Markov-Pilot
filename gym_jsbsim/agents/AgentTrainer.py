@@ -31,11 +31,14 @@ class AgentTrainer(ABC):
     Similar to the AgentTrainer interface defined in https://github.com/openai/maddpg/blob/master/maddpg/__init__.py
 
     """
-    def __init__(self, name:str, obs_space: Box, act_space: Box, buf_len:int = 1000000, train_steps= 1, agent_interaction_freq = 5, writer: 'SummaryWriter' = None, **kwargs):
+    def __init__(self, name:str, obs_space: Box, act_space: Box, buf_len:int = 1000000, train_steps= 1, 
+                task_reward_weights = None,
+                agent_interaction_freq = 5, writer: 'SummaryWriter' = None,  **kwargs):
         self.name = name
         self.buf_len = buf_len
         self.type = 'UNSPECIFIED'
         self.train_steps = train_steps
+        self.task_reward_weights = task_reward_weights
         self.writer = writer    #don't save the writer on disc, inject a new one if needed
 
         self.act_space = act_space
@@ -50,6 +53,7 @@ class AgentTrainer(ABC):
             'obs_space': obs_space,
             'act_space': act_space,
             'train_steps': self.train_steps,
+            'task_reward_weights': self.task_reward_weights,
             'agent_interaction_freq': agent_interaction_freq
         }
         self.dt = 1.0/agent_interaction_freq    #the step time between two agent interactions in [sec] (for the PID controller)
@@ -83,7 +87,11 @@ class AgentTrainer(ABC):
 
         Overwrite at your convenience for special agents
         """
-        return rwd_list.sum()
+        if self.task_reward_weights:
+
+            return sum([rwd*weight for rwd, weight in zip(rwd_list, self.task_reward_weights)])/sum(self.task_reward_weights)
+        else:
+            return rwd_list.sum()/len(rwd_list)
 
     def store_experience(self, experience: Experience):
         self.replay_buffer.store_transition(*experience)
@@ -280,7 +288,7 @@ class MADDPG_AgentTrainer(AgentTrainer):
         :param critic_state_space: critic_state_space must be the concatenation of [own_obs_space | other_obs_spaces | other_action_spaces]
         :param buf_len: size of replay buffer
         """
-        super().__init__(name, obs_space, act_space, buf_len, train_steps, agent_interaction_freq, writer, noise_sigma = noise_sigma, noise_theta = noise_theta, **kwargs)
+        super().__init__(name, obs_space, act_space, buf_len, train_steps=train_steps, agent_interaction_freq=agent_interaction_freq, writer=writer, noise_sigma = noise_sigma, noise_theta = noise_theta, **kwargs)
         self.type = 'MADDPG'
         self.calculate_grad_norms = kwargs.get('calculate_grad_norms', False)   #don't save to disc
         self.batch_size = batch_size
