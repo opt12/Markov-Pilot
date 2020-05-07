@@ -294,7 +294,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                 make_base_reward_components: Callable[['AgentTask'], Tuple[RewardComponent, ...]] = None,
                 is_done: Callable[['AgentTask'], bool] = None, 
                 # change_setpoint_callback: Callable[[float], None] = None, #TODO: we used to have that, but it's not used anymore, remove
-                measurement_in_degrees = True, max_allowed_error = 30,
+                measurement_in_degrees = True, max_allowed_error = None,
                 integral_limit = float('inf'), integral_decay = 1):
         """
         :param actuating_prop: The actuation variable to be controlled
@@ -314,14 +314,18 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
 
         self.init_dict.update({
             'actuating_prop': actuating_prop,  
-            'setpoint_props': list(setpoints.keys()), 
-            'setpoint_values': list(setpoints.values()), 
             'presented_state': presented_state,   
             'measurement_in_degrees': measurement_in_degrees, 
             'max_allowed_error': max_allowed_error,
             'integral_limit': integral_limit, 
             'integral_decay': integral_decay
         })
+
+        if setpoints:
+            self.init_dict.update({
+                'setpoint_props': list(setpoints.keys()), 
+                'setpoint_values': list(setpoints.values()), 
+            })
 
         self.measurement_in_degrees = measurement_in_degrees
         self.max_allowed_error = max_allowed_error
@@ -388,7 +392,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         May be overwritten by injected custom function.
         """
         base_components = (     
-            rewards.ConstantDummyRewardComponent(0.0),
+            rewards.ConstantDummyRewardComponent(name = self.name+'_dummyRwd', const_output=0.0),
             )
         return base_components
     
@@ -453,7 +457,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                 self._last_action = self.sim[self.actuating_prop]
 
     def get_props_to_output(self) -> List[prp.Property]:
-        output_props = self.custom_props + [self.setpoint_value_props[0]]
+        output_props = self.custom_props
+        if self.setpoint_value_props: output_props.extend([self.setpoint_value_props[0]])
         return output_props
 
     def change_setpoints(self, new_setpoints: Dict[BoundedProperty, float]):
@@ -477,3 +482,19 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
             except ValueError:
                 #ok, it's not in the list, so it's not for me and I can ignore it
                 pass
+
+
+class SingleChannel_NoMarkov_Task(SingleChannel_FlightAgentTask):
+
+    def define_obs_props(self):
+        """
+        Defines the obs_props presented to the agent
+
+        Additionally, the props, which are evaluated in the reward components will automatically be added
+        """
+        # no need to add the self.prop_delta_cmd to the standard set of obs_props as it will be added if it is evaluated in the reward function
+        # self.obs_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral, self.prop_delta_cmd] + self.presented_state
+        self.obs_props = []
+        if self.setpoint_props:
+            self.obs_props +=[self.prop_error, self.prop_error_integral]
+        self.obs_props += self.presented_state
