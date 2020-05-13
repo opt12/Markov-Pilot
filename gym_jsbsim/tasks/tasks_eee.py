@@ -484,7 +484,12 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                 pass
 
 
-class SingleChannel_NoMarkov_Task(SingleChannel_FlightAgentTask):
+class SingleChannel_MinimumProps_Task(SingleChannel_FlightAgentTask):
+    '''The presented obs_props are reduced to the error. No integral  nor derivative is included in the obs_props.
+    Everything else is left unchanged.
+
+    Additional properties can be included by adding them to the presented_state list
+    '''
 
     def define_obs_props(self):
         """
@@ -496,5 +501,5 @@ class SingleChannel_NoMarkov_Task(SingleChannel_FlightAgentTask):
         # self.obs_props = [self.prop_error, self.prop_error_derivative, self.prop_error_integral, self.prop_delta_cmd] + self.presented_state
         self.obs_props = []
         if self.setpoint_props:
-            self.obs_props +=[self.prop_error, self.prop_error_integral]
+            self.obs_props +=[self.prop_error]
         self.obs_props += self.presented_state
