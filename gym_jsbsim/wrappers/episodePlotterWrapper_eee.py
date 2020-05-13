@@ -221,7 +221,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             pRwd.toolbar.active_scroll = pRwd.toolbar.tools[1]    #this selects the WheelZoomTool instance                                          
             #Add the title
             tReward = Title()
-            tReward.text = f'{t.name}: actual Reward over {data_frame[name].size} Timesteps (∑ = {data_frame[name].sum():.2f})'
+            tReward.text = f'{t.name}: last Reward over {data_frame[name].size} Timesteps (∑ = {data_frame[name].sum():.2f})'
             pRwd.title = tReward
             pRwd.xaxis.axis_label = 'timestep [s]'
             pRwd.yaxis[0].axis_label = 'actual Reward [norm.]'
