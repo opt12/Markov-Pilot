@@ -686,31 +686,6 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                             last = event_idxs[evt+1]-1
                             did_settle = True
                         settle_times_per_eps.append((start-event_idxs[evt])*dt if did_settle else float('nan'))  
-                    # print(f'{evt}: settlement time: {settle_times_per_eps[-1]:.1f}\t settled in between {(start*dt, last*dt)}')
-
-                    # for evt in range(len(event_idxs)-1):
-                    #     #search the first idx, so that at least min_length subsequent steps are smaller than eps 
-                    #     for start in range(event_idxs[evt], event_idxs[evt+1]-min_length):  #TODO: this is real slow if we have a lot of oscillations, however, a binary search won't do, as the data is not sorted
-                    #         if all(data_frame[error_names[channel]][start:start+min_length].abs().lt(eps)):
-                    #             break
-                    #     #from this start index check tha max value in the following slice
-                    #     # try:
-                    #     if event_idxs[evt+1] - event_idxs[evt] <=min_length:
-                    #         #we did not settle
-                    #         max_idx = event_idxs[evt+1]-1
-                    #         max_value = eps+5
-                    #     else:
-                    #         max_idx = data_frame[error_names[channel]][start:event_idxs[evt+1]-1].abs().idxmax()
-                    #         max_value = abs(data_frame[error_names[channel]][max_idx])
-                    #     if max_value > eps:
-                    #         # if the max is greater eps, than the bounds are broken
-                    #         last = max_idx
-                    #         did_settle = False
-                    #     else:
-                    #         last = event_idxs[evt+1]-1
-                    #         did_settle = True
-                    #     settle_times_per_eps.append((start-event_idxs[evt])*dt if did_settle else float('nan'))  
-                    #     # print(f'{evt}: settlement time: {settle_times_per_eps[-1]:.1f}\t settled in between {(start*dt, last*dt)}')
                 else:
                     settle_times_per_eps = np.empty(len(event_idxs[:-1]))
                     settle_times_per_eps[:] = np.NaN
@@ -721,8 +696,6 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             [data_for_frame.append(row) for row in settle_times]
 
             settle_times_frame = pd.DataFrame(data_for_frame, index=['setpoints', 'setpoint_changes', *epsilons])
-
-            # settle_times_frame = pd.DataFrame(settle_times, index=epsilons, columns = setpoint_changes[channel].round(2))
 
             settlement_times_per_task.append(settle_times_frame)
         return settlement_times_per_task
