@@ -95,10 +95,8 @@ class JsbSimEnv_multi_agent(gym.Env):
                              f'{self.JSBSIM_DT_HZ} Hz.')
         self.sim_steps_per_agent_step: int = self.JSBSIM_DT_HZ // agent_interaction_freq
         self.dt = 1/agent_interaction_freq  #length of a timestep in seconds        
-        self.max_time_s = episode_time_s
-        episode_steps = math.ceil(self.max_time_s * agent_interaction_freq)
-        self.steps_left = BoundedProperty('info/steps_left', 'steps remaining in episode', 0,
-                                          episode_steps)
+        self.episode_steps = math.ceil(episode_time_s * agent_interaction_freq)
+        self.steps_left = BoundedProperty('info/steps_left', 'steps remaining in episode', 0, float('+inf'))
 
         self.engines_running = False    #we usually use a gliding descent
         self.throttle_cmd, self.mixture_cmd = self.THROTTLE_CMD_default, self.MIXTURE_CMD_default
@@ -233,7 +231,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         TODO: check if this can integrated with _update_custom_properties()
         """
         #update environments custom_props
-        self.sim[self.steps_left] = self.steps_left.max
+        self.sim[self.steps_left] = self.episode_steps
 
         #update Task_Agent specific custom_props
         [t.initialize_custom_properties() for t in self.task_list]
@@ -497,7 +495,12 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         with open(os.path.join(self.save_path, 'task_agent.pickle'), 'wb') as file:
             pickle.dump(task_agent_dict, file)
-        
+
+    def change_next_episode_length(self, episode_time_s):
+        '''changes the length of the next episode'''
+        self.episode_steps = self.episode_steps = math.ceil(episode_time_s /self.dt)
+
+
 class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.
