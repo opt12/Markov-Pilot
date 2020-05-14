@@ -37,13 +37,54 @@ def make_glide_angle_reward_components(self):
                     potential_difference_based=False,
                     scaling_factor=ELEVATOR_CMD_TRAVEL_MAX,
                     weight=2),
-        rewards.LinearErrorComponent(name='rwd_angular_velocity_q_rad',
-                    prop=prp.q_radps,
+        # rewards.LinearErrorComponent(name='rwd_angular_velocity_q_rad',
+        #             prop=prp.q_radps,
+        #             state_variables=self.obs_props,
+        #             target=0.0,
+        #             potential_difference_based=False,
+        #             scaling_factor=GLIDE_ANGULAR_VELOCITY_SCALING,
+        #             weight=1),
+    )
+    return base_components
+
+def make_elevator_actuation_reward_components(self):
+    ELEVATOR_CMD_TRAVEL_MAX = 2/4 # a quarter of the max. absolute value of the delta-cmd; leverage the non-linearities
+    base_components = (
+        rewards.LinearErrorComponent(name='rwd_elevator_cmd_travel_error',
+                    prop=self.prop_delta_cmd,
                     state_variables=self.obs_props,
                     target=0.0,
                     potential_difference_based=False,
-                    scaling_factor=GLIDE_ANGULAR_VELOCITY_SCALING,
-                    weight=1),
+                    scaling_factor=ELEVATOR_CMD_TRAVEL_MAX,
+                    weight=2),
+    )
+    return base_components
+
+def make_glide_path_angle_reward_components(self):
+    GLIDE_ANGLE_DEG_ERROR_SCALING = 0.1
+    GLIDE_ANGLE_INT_DEG_MAX = self.integral_limit
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_glideAngle_error',
+                    prop=self.prop_error,
+                    state_variables=self.obs_props,
+                    target=0.0,
+                    potential_difference_based=False,
+                    scaling_factor=GLIDE_ANGLE_DEG_ERROR_SCALING,
+                    weight=4),
+        rewards.LinearErrorComponent(name='rwd_glideAngle_error_derivative',
+            prop=self.prop_error_derivative,
+            state_variables=self.obs_props,
+            target=0.0,
+            potential_difference_based=False,
+            scaling_factor=2,
+            weight=1),
+        rewards.LinearErrorComponent(name='rwd_glideAngle_error_Integral',
+                    prop=self.prop_error_integral,
+                    state_variables=self.obs_props,
+                    target=0.0,
+                    potential_difference_based=False,
+                    scaling_factor=GLIDE_ANGLE_INT_DEG_MAX,
+                    weight=9),
     )
     return base_components
 

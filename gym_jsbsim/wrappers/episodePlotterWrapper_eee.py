@@ -8,6 +8,7 @@ import os
 import math
 import shutil   #to have copyfile available
 from timeit import timeit
+import time
 
 from bokeh.io import output_file, show, reset_output, save, export_png
 from bokeh.models import ColumnDataSource, DataTable, TableColumn
@@ -15,7 +16,9 @@ from bokeh.plotting import figure
 from bokeh.layouts import row, column, gridplot
 from bokeh.io import output_file, show, reset_output, save, export_png
 from bokeh.models.annotations import Title, Legend
-from bokeh.models.widgets.markups import Div
+# from bokeh.models.widgets.markups import Div
+from bokeh.models import Button, Div, CustomJS, CheckboxGroup
+from bokeh import events
 from bokeh.models import LinearAxis, Range1d
 from bokeh.palettes import Viridis7, Viridis4, Inferno7
 
@@ -54,8 +57,13 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # self.done = False
 
         #stash away the properties for the individual panels for each AgentTask:
+        #also stash away the setpoint_names, the error_names and the delta_cmd_names for the evaluation
         self.task_names = [t.name for t in env.task_list]
         self.panel_contents = {}
+        # self.setpoint_names = ['setpoint_attitude_phi_deg', 'setpoint_flight_path_gamma_deg']
+        # self.error_names = ['error_aileron_err', 'error_elevator_err']
+        # self.delta_cmd_names = ['info_aileron_delta_cmd', 'info_elevator_delta_cmd']
+
         for i, t in enumerate(env.task_list):
             reward_component_names = [cmp.name for cmp in t.assessor.base_components]
             self.panel_contents[t.name] = {'panel1': {},
@@ -65,6 +73,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                                         }
             if t.action_props:
                 self.panel_contents[t.name]['panel1'].update({'action_prop': t.action_props[0]})
+
             if t.setpoint_props:
                 self.panel_contents[t.name]['panel1'].update({'setpoint_value_prop': t.setpoint_value_props[0],
                                                 'current_value_prop': t.setpoint_props[0]})
@@ -115,7 +124,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                 dataRecorder = pd.DataFrame(self.recorderDictList)    
                 if self.save_to_csv and self.save_path:
                     #save the entire pandas frame to CSV file
-                    csv_dir_name = os.path.join(self.save_path, '/csv')
+                    csv_dir_name = os.path.join(self.save_path, 'csv')
                     #create the directory for this csv
                     os.makedirs(csv_dir_name, exist_ok=True)
                     filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
@@ -221,7 +230,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             pRwd.toolbar.active_scroll = pRwd.toolbar.tools[1]    #this selects the WheelZoomTool instance                                          
             #Add the title
             tReward = Title()
-            tReward.text = f'{t.name}: last Reward over {data_frame[name].size} Timesteps (∑ = {data_frame[name].sum():.2f})'
+            tReward.text = f'{t.name}: last Reward over {data_frame[name].size-1} Timesteps (∑ = {data_frame[name].sum():.2f})'
             pRwd.title = tReward
             pRwd.xaxis.axis_label = 'timestep [s]'
             pRwd.yaxis[0].axis_label = 'actual Reward [norm.]'
@@ -335,8 +344,59 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # else: 
         #     discriminator = self.env.meta_dict['model_discriminator']
 
+        ts = time.time()
+        overshoot_frames_per_task = self.analyze_overshoot(data_frame)
+        overshoot_divs = [Div(text = ovs_fr.round(3).to_html(), width = 600) for ovs_fr in overshoot_frames_per_task]
+        print("Overshoot analysis done in %.2f sec" % (time.time() - ts))
+
+        ts = time.time()
+        settlement_times_per_task = self.analyze_settle_times(data_frame)
+        settlement_divs = [Div(text = settle_fr.round(3).to_html(), width = 600) for settle_fr in settlement_times_per_task]
+        print("Settlement analysis done in %.2f sec" % (time.time() - ts))
+
+        panel_grid = []
+        panel_grid.append([Div(text='<h3>'+t.name+'</h3>', id='div_'+t.name) for t in self.env.task_list])
+
+        # to switch on and off the statistics panels, this is unfortuntely the best, I could achive
+        # https://stackoverflow.com/a/52416676/2682209
+        cols = []
+        checkbox = CheckboxGroup(labels=["show stats"], active=[], width=100)   #checkbox is added to header_col later on
+
+        for i, t in enumerate(self.env.task_list):
+            # overshoot_stat = overshoot_divs[i]
+            c = column(Div())   #empty for the beginning
+            cols.append(c)
+
+        callback = CustomJS(args=dict(overshoot_divs=overshoot_divs, settlement_divs=settlement_divs, cols=cols, checkbox=checkbox), code="""
+                    for (var j = 0; j < cols.length; j++) {
+                        console.log('col', j)
+                        const children = []
+                        for (const i of checkbox.active) {
+                            console.log('active', i)
+                            children.push(overshoot_divs[j])
+                            children.push(settlement_divs[j])
+                        } 
+                        console.log('children', children)
+                        cols[j].children = children
+                    }
+                    """)
+        checkbox.js_on_change('active', callback)
+
+
+
+        # show_stats_btn = [Div(text="""
+        # <button onclick="display_event(%s)">Try it</button>
+        # """ %t.name for t in self.env.task_list]
+        # for t, b in zip(self.env.task_list, show_stats_btn):
+        #     b.tags = ['id', 'btn_'+t.name]
+        # panel_grid.append(show_stats_btn)
+        # [b.js_on_event(events.ButtonClick, display_event(b, t.name)) for t, b in zip(self.env.task_list, show_stats_btn)]
+
+        # panel_grid.append(chkbxs)
+        panel_grid.append(cols)
+
         panel_grid_t = [ [panels[name]['panel1'],panels[name]['panel2'],panels[name]['panel3']] for name in self.task_names]
-        panel_grid= list(zip(*panel_grid_t))
+        [panel_grid.append(fig) for fig in list(zip(*panel_grid_t))]
 
         # add the additional plots
         panel_grid.append([pAltitude, pSideslip])
@@ -361,7 +421,8 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             Div(text="<h1>" + self.env.unwrapped.spec.id + 
             (" - " + self.env.meta_dict['env_info']) if 'env_info' in self.meta_dict else "" + 
             "</h1>"), 
-            Div(text="<h2>"+titleString+"</h2>")) 
+            row(
+            Div(text="<h2>"+titleString+"</h2>", width=1200), checkbox) )
 
         webpage = gridplot([[header_col],[panel_grid_plot]], toolbar_location=None, sizing_mode='stretch_width')
 
@@ -421,5 +482,254 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             ]
         return DataTable(source=source, columns=columns, fit_columns= True, reorderable=False, editable=True)
 
-        
+    def _prepare_analysis_data(self, data_frame):
+        setpoint_names = []
+        error_names = []
+        delta_cmd_names = []
+        intial_setpoints = []
+        for t in self.env.task_list:
+            try:
+                setpoint_name = t.setpoint_value_props[0].get_legal_name()
+                intial_setpoint = data_frame[t.setpoint_props[0].get_legal_name()][0]    #the initial setpoin is the first entry of the current value in the data_frameS
+            except IndexError:
+                #there is no setpoint in that task
+                setpoint_name = ''  #set it to empty as a marker
+                intial_setpoint = float('nan') 
+            try:
+                error_name = t.prop_error.get_legal_name()
+            except AttributeError:
+                #there is no error in that task (as there is no setpoint)
+                error_name = ''   #set it to empty as a marker
+            try:
+                delta_cmd_name = t.prop_delta_cmd.get_legal_name()
+            except AttributeError:
+                #there is no command in that task
+                delta_cmd_name = ''   #set it to empty as a marker
+            
+            setpoint_names.append(setpoint_name)
+            intial_setpoints.append(intial_setpoint)
+            error_names.append(error_name)
+            delta_cmd_names.append(delta_cmd_name)
+
+        #check when the setpoint changes for each task individually
+        change_idxs = [np.array(data_frame[setp_name].diff()[data_frame[setp_name].diff() != 0].index.values) 
+                            for setp_name in setpoint_names if setp_name!='']
+        #an event occurs whenever a setpoint changes in any task
+        event_idxs = np.unique(np.sort(np.hstack(change_idxs)))
+        #the setpoints at each event
+        setpoints = []
+        setpoint_changes = []
+        for channel,setp_name in enumerate(setpoint_names):
+            if setp_name!='':
+                setpt = np.array(data_frame[setpoint_names[channel]])[event_idxs]
+                sp_ch = np.array(data_frame[setpoint_names[channel]].diff()[event_idxs])
+                if math.isnan(sp_ch[0]):
+                    sp_ch[0] = data_frame[setpoint_names[channel]][change_idxs[0][0]] -intial_setpoints[channel]
+            else: 
+                setpt = np.empty(len(event_idxs))
+                setpt[:] = np.NaN
+                sp_ch = np.empty(len(event_idxs))
+                sp_ch[:] = np.NaN
+            setpoints.append(setpt)
+            setpoint_changes.append(sp_ch)
+        event_idxs = np.append(event_idxs, data_frame.last_valid_index()+1)
+
+        return setpoint_names, error_names, delta_cmd_names, event_idxs, setpoints, setpoint_changes
+
+    def analyze_overshoot(self, data_frame):
+        #see http://localhost:8888/notebooks/git/gym-jsbsim-eee/testruns/generic/csv/evaluate_control.ipynb#
+
+        setpoint_names, error_names, delta_cmd_names, event_idxs, setpoints, setpoint_changes = self._prepare_analysis_data(data_frame)
+
+        dt = self.step_time
+        min_length = 10
+        epsilons = [0.5, 0.1, 0.05, 0.01]
+
+        overshoot_frames_per_task = []
+        for channel, t in enumerate(self.env.task_list):
+            if error_names[channel] != '':
+                #split the dataframe in event-wise segments
+                data_segs = [data_frame.loc[event_idxs[i]:event_idxs[i+1]-1] for i in range(len(event_idxs)-1)]
+                setpoint_current = setpoints[channel]
+                setpoint_changes_current = setpoint_changes[channel]
+                #calculate all overshoot values
+                max_segs = [data_segs[i][error_names[channel]].max() for i in range(len(data_segs))]
+                max_idxs = [data_segs[i][error_names[channel]].idxmax() for i in range(len(data_segs))]
+                min_segs = [data_segs[i][error_names[channel]].min() for i in range(len(data_segs))]
+                min_idxs = [data_segs[i][error_names[channel]].idxmin() for i in range(len(data_segs))]
+
+                #the overshoot and its idx depending on the change direction
+                overshoot = []
+                overshoot_idxs = []
+                for i in range(len(data_segs)):
+                    if setpoint_changes[channel][i] > 0:
+                        ovs = max_segs[i] 
+                        ovs_idx = int(max_idxs[i])
+                    elif setpoint_changes[channel][i] < 0:
+                        ovs = min_segs[i] 
+                        ovs_idx = int(min_idxs[i])
+                    else:
+                        #the change is 0, so we use the max absolute value
+                        if abs(max_segs[i]) > abs(min_segs[i]):
+                            ovs = max_segs[i] 
+                            ovs_idx = int(max_idxs[i])
+                        else:
+                            ovs = min_segs[i] 
+                            ovs_idx = int(min_idxs[i])
+                    overshoot.append(ovs)
+                    overshoot_idxs.append(ovs_idx)
+                overshoot_idxs = np.array(overshoot_idxs)  #otherwise, we canot multiply it with dt afterwards
+
+                # overshoot = [max_segs[i] if setpoint_changes[channel][i] > 0 else min_segs[i] 
+                #             for i in range(len(data_segs))]
+                # #th eindex when the peak occurs
+                # overshoot_idxs = np.array([int(max_idxs[i]) if setpoint_changes[channel][i] > 0 else min_idxs[i] 
+                #             for i in range(len(data_segs))])
+                #the overshoot relative to the change
+                overshoot_relative = [ovs / setpoint_changes[channel][i] if setpoint_changes[channel][i] != 0 else float('nan')
+                                    for i, ovs in enumerate(overshoot)]
+                #the min/max values of the peaks
+                extreme_values = [data_frame[error_names[channel]][ovs_idx]+ data_frame[setpoint_names[channel]][ovs_idx]
+                                for ovs_idx in overshoot_idxs]
+
+                #the absolute and squared errors
+                abs_errors = [data_frame[error_names[channel]][start:end].abs() for start, end in (zip(event_idxs[:-1], event_idxs[1:]-1))]
+                squared_errors = [data_frame[error_names[channel]][start:end]**2 for start, end in (zip(event_idxs[:-1], event_idxs[1:]-1))]
+
+                #the mean values over each event-segment
+                abs_mean = [abse.mean() for abse in abs_errors]
+                msqe = [sqe.mean() for sqe in squared_errors]
+            else:
+                overshoot_idxs = np.empty(len(event_idxs[:-1]))
+                setpoint_current = np.empty(len(event_idxs[:-1]))
+                extreme_values = np.empty(len(event_idxs[:-1]))
+                setpoint_changes_current = np.empty(len(event_idxs[:-1]))
+                overshoot = np.empty(len(event_idxs[:-1]))
+                overshoot_relative = np.empty(len(event_idxs[:-1]))
+                abs_mean = np.empty(len(event_idxs[:-1]))
+                msqe = np.empty(len(event_idxs[:-1]))
+                overshoot_idxs[:] = np.NaN
+                setpoint_current[:] = np.NaN
+                extreme_values[:] = np.NaN
+                setpoint_changes_current[:] = np.NaN
+                overshoot[:] = np.NaN
+                overshoot_relative[:] = np.NaN
+                abs_mean[:] = np.NaN
+                msqe[:] = np.NaN
+
+            if delta_cmd_names[channel] != '':
+                #calculate the actuation energies
+                deltas = [data_frame[delta_cmd_names[channel]][start:end]**2 for start, end in (zip(event_idxs[:-1], event_idxs[1:]-1))]
+                actuation_energies = [delta.sum() for delta in deltas]
+            else:
+                actuation_energies = np.empty(len(event_idxs[:-1]))
+                actuation_energies[:] = np.NaN
+
+            #put everything into a new dataframe 
+            overshoot_frame = pd.DataFrame(data=[
+                                                event_idxs[:-1]*dt, 
+                                                overshoot_idxs*dt, 
+                                                (overshoot_idxs-event_idxs[:-1])*dt, 
+                                                setpoint_current, 
+                                                extreme_values, 
+                                                setpoint_changes_current, 
+                                                overshoot, 
+                                                overshoot_relative,
+                                                abs_mean,
+                                                msqe,
+                                                actuation_energies],
+                                            index=[
+                                                'event_time',
+                                                'peak_time',
+                                                'delay_secs', 
+                                                'setpoint', 
+                                                'actual_value', 
+                                                'setpoint_change', 
+                                                'abs_overshoot', 
+                                                'rel_overshoot',
+                                                'abs_mean',
+                                                'MSE',
+                                                'actuation_energy'])
+            
+            overshoot_frames_per_task.append(overshoot_frame)
+        return overshoot_frames_per_task
+
+    def analyze_settle_times(self, data_frame):
+        #see http://localhost:8888/notebooks/git/gym-jsbsim-eee/testruns/generic/csv/evaluate_control.ipynb#
+
+        setpoint_names, error_names, delta_cmd_names, event_idxs, setpoints, setpoint_changes = self._prepare_analysis_data(data_frame)
+
+        dt = self.step_time
+        min_length = 10
+        epsilons = [0.5, 0.1, 0.05, 0.01]
+
+        settlement_times_per_task = []
+        for channel, t in enumerate(self.env.task_list):
+            settle_times = []
+            for eps in epsilons:
+                if error_names[channel] != '':
+                    # print(f'*** Settlement to ±{eps}:')
+                    settle_times_per_eps = []
+                    for evt in range(len(event_idxs)-1):
+                        #check the last min_length steps
+                        start = event_idxs[evt+1]
+                            #the last min_length steps are witin bounds, so let's go forward
+                        for start in range (event_idxs[evt+1]-1, event_idxs[evt]-1, -1):
+                            if abs(data_frame[error_names[channel]][start]) > eps:
+                                start = start +1
+                                break
+                        if not all(data_frame[error_names[channel]][start:event_idxs[evt+1]].abs().lt(eps)) \
+                            or event_idxs[evt+1]-start < min_length:
+                            last = event_idxs[evt+1]
+                            did_settle = False
+                        else:
+                            last = event_idxs[evt+1]-1
+                            did_settle = True
+                        settle_times_per_eps.append((start-event_idxs[evt])*dt if did_settle else float('nan'))  
+                    # print(f'{evt}: settlement time: {settle_times_per_eps[-1]:.1f}\t settled in between {(start*dt, last*dt)}')
+
+                    # for evt in range(len(event_idxs)-1):
+                    #     #search the first idx, so that at least min_length subsequent steps are smaller than eps 
+                    #     for start in range(event_idxs[evt], event_idxs[evt+1]-min_length):  #TODO: this is real slow if we have a lot of oscillations, however, a binary search won't do, as the data is not sorted
+                    #         if all(data_frame[error_names[channel]][start:start+min_length].abs().lt(eps)):
+                    #             break
+                    #     #from this start index check tha max value in the following slice
+                    #     # try:
+                    #     if event_idxs[evt+1] - event_idxs[evt] <=min_length:
+                    #         #we did not settle
+                    #         max_idx = event_idxs[evt+1]-1
+                    #         max_value = eps+5
+                    #     else:
+                    #         max_idx = data_frame[error_names[channel]][start:event_idxs[evt+1]-1].abs().idxmax()
+                    #         max_value = abs(data_frame[error_names[channel]][max_idx])
+                    #     if max_value > eps:
+                    #         # if the max is greater eps, than the bounds are broken
+                    #         last = max_idx
+                    #         did_settle = False
+                    #     else:
+                    #         last = event_idxs[evt+1]-1
+                    #         did_settle = True
+                    #     settle_times_per_eps.append((start-event_idxs[evt])*dt if did_settle else float('nan'))  
+                    #     # print(f'{evt}: settlement time: {settle_times_per_eps[-1]:.1f}\t settled in between {(start*dt, last*dt)}')
+                else:
+                    settle_times_per_eps = np.empty(len(event_idxs[:-1]))
+                    settle_times_per_eps[:] = np.NaN
+                settle_times.append(settle_times_per_eps)
+            #put everything into a new dataframe 
+            data_for_frame = [setpoints[channel]]
+            data_for_frame.append(setpoint_changes[channel])
+            [data_for_frame.append(row) for row in settle_times]
+
+            settle_times_frame = pd.DataFrame(data_for_frame, index=['setpoints', 'setpoint_changes', *epsilons])
+
+            # settle_times_frame = pd.DataFrame(settle_times, index=epsilons, columns = setpoint_changes[channel].round(2))
+
+            settlement_times_per_task.append(settle_times_frame)
+        return settlement_times_per_task
+
+
+
+
+
+
         

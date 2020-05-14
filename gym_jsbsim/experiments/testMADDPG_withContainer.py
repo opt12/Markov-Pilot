@@ -24,7 +24,8 @@ import gym_jsbsim.environment.properties as prp
 from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
 from gym_jsbsim.helper.lab_journal import LabJournal
 
-from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components
+from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
+                            make_glide_path_angle_reward_components, make_elevator_actuation_reward_components
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5
@@ -101,6 +102,16 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_glide_angle_reward_components,
                                 integral_limit = 0.5)
 
+    glide_path_task = SingleChannel_FlightAgentTask('glide_path_task', [], {prp.flight_path_deg: target_path_angle_gamma_deg},
+                                presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
+                                max_allowed_error= 30, 
+                                make_base_reward_components= make_glide_path_angle_reward_components,
+                                integral_limit = 0.5)
+
+    elevator_actuation_task = SingleChannel_FlightAgentTask('elevator_actuation_task', prp.elevator_cmd, {},
+                                presented_state=[prp.elevator_cmd],
+                                make_base_reward_components= make_elevator_actuation_reward_components)
+
     elevator_Speed_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
                                 presented_state=[prp.elevator_cmd, prp.q_radps],
                                 max_allowed_error= 50, 
@@ -132,33 +143,16 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 make_base_reward_components= make_speed_reward_components,
                                 integral_limit = 0.25)
 
-    elevator_action = SingleChannel_FlightAgentTask('elevator_action', prp.elevator_cmd, None, 
-                                presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
-                                make_base_reward_components= make_no_elevator_flitter_components)
-
-    throttle_action = SingleChannel_FlightAgentTask('throttle_action', prp.throttle_cmd, None, 
-                                presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
-                                make_base_reward_components= make_no_throttle_flitter_components)
-
-    glidepath_setpoint = SingleChannel_FlightAgentTask('glidepath_setpoint', None, {prp.flight_path_deg: target_path_angle_gamma_deg},
-                                presented_state=[],
-                                max_allowed_error= 30, 
-                                make_base_reward_components= make_glide_angle_setpoint_reward_components,
-                                integral_limit = 0.5)
-
 
     agent_task_list = [elevator_AT, aileron_AT]
-    agent_task_list = [velocity_AT, elevator_AT, aileron_AT_for_PID]
+    agent_task_list = [elevator_actuation_task, glide_path_task, aileron_AT]
+    # agent_task_list = [elevator_AT_for_PID, aileron_AT]
     
     # agent_task_list = [elevator_AT_for_PID, aileron_AT_full_state_dev_only]
 
     # agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
-    # agent_task_types = ['PID', 'PID']
-    # agent_task_types = ['PID', 'DDPG']  #TODO: This is irrelevant for the env!!! REMOVE
-    # agent_task_types = ['DDPG', 'MADDPG']
-    # agent_task_types = ['MADDPG', 'MADDPG']
 
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)  #TODO: task_list is irrelevant for the env!!! REMOVE
+    env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
     env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
@@ -211,6 +205,7 @@ def setup_container_from_env(env, arglist):
         **vars(arglist),
         # 'layer1_size': 800,
         # 'layer2_size': 600,
+
         'writer': None,
     }
 
@@ -231,7 +226,7 @@ def setup_container_from_env(env, arglist):
         **vars(arglist),
         # 'layer1_size': 800,
         # 'layer2_size': 600,
-        # 'task_reward_weights': [13, 2],
+        'task_reward_weights': [2, 14],
         'writer': None,
     }
     
@@ -242,12 +237,14 @@ def setup_container_from_env(env, arglist):
     agent_spec_rudder_DDPG = AgentSpec('rudder', 'DDPG', ['rudder'], params_DDPG_MADDPG_agent)
     agent_spec_rudder_PID = AgentSpec('rudder', 'PID', ['rudder'], params_rudder_pid_agent)
 
+    agent_spec_glide_path_MADDPG = AgentSpec('elevator', 'MADDPG', ['elevator_actuation_task', 'glide_path_task'], params_DDPG_MADDPG_separated_agent)
     agent_spec_elevator_aileron_DDPG = AgentSpec('elevator_aileron', 'DDPG', ['elevator', 'aileron'], params_DDPG_MADDPG_agent)
 
     #Here we specify which agents shall be initiated; chose form the above defined single-specs
-    agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG, agent_spec_rudder_MADDPG]
+    # agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG, agent_spec_rudder_MADDPG]
     # agent_spec = [agent_spec_elevator_aileron_DDPG]
-    agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG]
+    agent_spec = [agent_spec_glide_path_MADDPG, agent_spec_aileron_MADDPG]
+    # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_MADDPG]
 
     task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
     agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
@@ -472,12 +469,12 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # testing_env = restore_env_from_journal(lab_journal, 91)
+    # testing_env = restore_env_from_journal(lab_journal, 52)
 
-    # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30))#, (0.05, 0.5))
-    # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30))#, (0.05, 0.5))
+    # # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30))#, (0.05, 0.5))
+    # # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30))#, (0.05, 0.5))
 
-    # agent_container = restore_agent_container_from_journal(lab_journal, [91, 90,101])
+    # agent_container = restore_agent_container_from_journal(lab_journal, [53,52, 54])
     # evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
     # exit(0)
 
