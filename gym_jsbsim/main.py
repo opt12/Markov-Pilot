@@ -21,7 +21,7 @@ from gym_jsbsim.agents.train import perform_training
 from gym_jsbsim.helper.lab_journal import LabJournal
 from gym_jsbsim.helper.load_store import restore_agent_container_from_journal, restore_env_from_journal, save_test_run
 
-from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
+from gym_jsbsim.testbed.evaluate_training_eee import evaluate_training
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5
@@ -256,14 +256,14 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # testing_env = restore_env_from_journal(lab_journal, 52)
+    testing_env = restore_env_from_journal(lab_journal, 1337)
 
     # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30), (0.05, 0.5))
     # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30), (0.05, 0.5))
 
-    # agent_container = restore_agent_container_from_journal(lab_journal, [53,52, 54])
-    # evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
-    # exit(0)
+    agent_container = restore_agent_container_from_journal(lab_journal, [1336, 1337, 1338])
+    evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
+    exit(0)
 
     training_env = setup_env(arglist)
     testing_env = setup_env(arglist)

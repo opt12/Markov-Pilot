@@ -6,7 +6,7 @@ import pickle
 from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
 from gym_jsbsim.agents import AgentContainer
 from gym_jsbsim.helper.lab_journal import LabJournal
-from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
+from gym_jsbsim.testbed.evaluate_training_eee import evaluate_training
 
 
 def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv_multi_agent, agent_container: AgentContainer, lab_journal: LabJournal, arglist: argparse.Namespace):
