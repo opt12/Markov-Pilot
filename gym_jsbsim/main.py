@@ -2,30 +2,26 @@ import sys
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
 import argparse
-import time
-import os
-import csv
-import json
-import datetime
-import pickle
-import numpy as np
-import importlib
 
-from typing import Union, List
-
-from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
-from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask, SingleChannel_MinimumProps_Task
-from gym_jsbsim.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
-from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
-from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
-from gym_jsbsim.wrappers.varySetpointsWrapper import VarySetpointsWrapper
 import gym_jsbsim.environment.properties as prp
 
-from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
-from gym_jsbsim.helper.lab_journal import LabJournal
+from gym_jsbsim.environment.environment_eee import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
+from gym_jsbsim.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
+from gym_jsbsim.wrappers.varySetpointsWrapper import VarySetpointsWrapper
+
+from gym_jsbsim.tasks.tasks_eee import SingleChannel_FlightAgentTask, SingleChannel_MinimumProps_Task
 
 from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
                             make_glide_path_angle_reward_components, make_elevator_actuation_reward_components
+
+from gym_jsbsim.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
+from gym_jsbsim.agents.agent_container_eee import AgentContainer, AgentSpec
+from gym_jsbsim.agents.train import perform_training
+
+from gym_jsbsim.helper.lab_journal import LabJournal
+from gym_jsbsim.helper.load_store import restore_agent_container_from_journal, restore_env_from_journal, save_test_run
+
+from gym_jsbsim.experiments.evaluate_training_eee import evaluate_training
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5
@@ -132,7 +128,9 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 integral_limit = 0.25)
 
     rudder_AT = SingleChannel_FlightAgentTask('rudder', prp.rudder_cmd, {prp.sideslip_deg: 0}, 
-                                presented_state=[prp.rudder_cmd, prp.aileron_cmd, prp.r_radps, prp.p_radps, prp.indicated_airspeed],
+                                presented_state=[prp.rudder_cmd, prp.r_radps, prp.p_radps, prp.indicated_airspeed, 
+                                                aileron_AT.prop_error   #TODO: this relies on defining aileron_AT before rudder_AT :-()
+                                                ],
                                 max_allowed_error= 60, 
                                 make_base_reward_components= make_sideslip_angle_reward_components,
                                 integral_limit = 0.25)
@@ -144,8 +142,8 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
                                 integral_limit = 0.25)
 
 
-    agent_task_list = [elevator_AT, aileron_AT]
-    agent_task_list = [elevator_actuation_task, glide_path_task, aileron_AT]
+    agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
+    # agent_task_list = [elevator_actuation_task, glide_path_task, aileron_AT]
     # agent_task_list = [elevator_AT_for_PID, aileron_AT]
     
     # agent_task_list = [elevator_AT_for_PID, aileron_AT_full_state_dev_only]
@@ -165,7 +163,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     env.set_meta_information(experiment_name = arglist.exp_name)
     return env
 
-def setup_container_from_env(env, arglist):
+def setup_container(task_list, arglist):
     
     agent_classes_dict = {
         'PID': PID_AgentTrainer,
@@ -237,231 +235,20 @@ def setup_container_from_env(env, arglist):
     agent_spec_rudder_DDPG = AgentSpec('rudder', 'DDPG', ['rudder'], params_DDPG_MADDPG_agent)
     agent_spec_rudder_PID = AgentSpec('rudder', 'PID', ['rudder'], params_rudder_pid_agent)
 
-    agent_spec_glide_path_MADDPG = AgentSpec('elevator', 'MADDPG', ['elevator_actuation_task', 'glide_path_task'], params_DDPG_MADDPG_separated_agent)
+    agent_spec_glide_path_MADDPG_separated_tasks = AgentSpec('elevator', 'MADDPG', ['elevator_actuation_task', 'glide_path_task'], params_DDPG_MADDPG_separated_agent)
     agent_spec_elevator_aileron_DDPG = AgentSpec('elevator_aileron', 'DDPG', ['elevator', 'aileron'], params_DDPG_MADDPG_agent)
 
     #Here we specify which agents shall be initiated; chose form the above defined single-specs
     # agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG, agent_spec_rudder_MADDPG]
     # agent_spec = [agent_spec_elevator_aileron_DDPG]
-    agent_spec = [agent_spec_glide_path_MADDPG, agent_spec_aileron_MADDPG]
+    agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG, agent_spec_rudder_MADDPG]
     # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_MADDPG]
 
-    task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
+    task_list_n = task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
     agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
 
     return agent_container
 
-def save_test_run(env: JsbSimEnv_multi_agent, agent_container: AgentContainer, lab_journal: LabJournal, arglist):
-    """
-    - creates a suitable directory for the test run
-    - adds a sidecar file containing the meta information on the run (dict saved as pickle)
-    - adds a text file containing the meta information on the run
-    - add a line to the global csv-file for the test run
-    """
-    # IMPORTANT to do this first,  to make the lab_journal aware of the start time of the run
-    lab_journal.set_run_start()
-
-    task_names = '_'.join([t.name for t in env.task_list])
-    date = lab_journal.run_start.strftime("%Y_%m_%d")
-    time = lab_journal.run_start.strftime("%H-%M")
-
-    #build the path name for the run protocol
-    save_path = os.path.join(lab_journal.journal_save_dir, env.aircraft.name, arglist.exp_name, task_names, date+'-'+time)
-
-    #create the base directory for this test_run
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    #create the directories for each agent_task
-    for a in agent_container.agents_m:
-        agent_path = os.path.join(save_path, a.name)
-        os.makedirs(os.path.join(save_path, a.name), exist_ok=True)
-        a.set_save_path(agent_path)
-
-    env.save_env_data(arglist, save_path)
-    agent_container.save_agent_container_data(save_path)
-    #eventually append the run data to the csv-file. 
-    csv_line_nr = lab_journal.append_run_data(env, agent_container.agents_m, save_path)
-    env.set_meta_information(csv_line_nr = csv_line_nr)
-
-def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
-    ENV_PICKLE = 'environment_init.pickle'  #these are hard default names for the files
-    TASKS_PICKLE ='task_agent.pickle'       #these are hard default names for the files
-
-    ln = line_numbers if isinstance(line_numbers, int) else line_numbers[0]
-
-    #get run protocol
-    try:
-        model_file = lab_journal.get_model_filename(ln)
-        run_protocol_path = lab_journal.find_associated_run_path(model_file)
-    except TypeError:
-        print(f"there was no run protocol found that is associated with line_number {ln}")
-        exit()
-
-    if run_protocol_path == None:
-        print(f"there was no run protocol found that is associated with line_number {ln}")
-        exit()
-
-    #load the TASKS_PICKLE and restore the task_list
-    with open(os.path.join(run_protocol_path, TASKS_PICKLE), 'rb') as infile:
-        task_agent_data = pickle.load(infile)
-    
-    task_agents = []
-    for idx in range(len(task_agent_data['task_list_class_names'])):
-        task_list_init = task_agent_data['task_list_init'][idx]
-        task_list_class_name = task_agent_data['task_list_class_names'][idx]
-        make_base_reward_components_file = task_agent_data['make_base_reward_components_file'][idx]
-        make_base_reward_components_fn = task_agent_data['make_base_reward_components_fn'][idx]
-
-        #load the make_base_reward_components function from a python-file
-        #load function from given filepath  https://stackoverflow.com/a/67692/2682209
-        spec = importlib.util.spec_from_file_location("make_base_rwd", os.path.join(run_protocol_path, make_base_reward_components_file))
-        func_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(func_module)
-        make_base_reward_components = getattr(func_module, make_base_reward_components_fn)
-
-        #get the class for the task_agent https://stackoverflow.com/a/17960039/2682209
-        class_ = getattr(sys.modules[__name__], task_list_class_name)
-        #add the make_base_reward_components function to the parameter dict
-        task_list_init.update({'make_base_reward_components': make_base_reward_components})
-        #transform the setpoint_props and setpoint_values lists to setpoints dict
-        task_list_init.update({'setpoints': dict(zip(task_list_init['setpoint_props'], task_list_init['setpoint_values']))})
-        del task_list_init['setpoint_props']
-        del task_list_init['setpoint_values']
-        ta = class_(**task_list_init)
-        task_agents.append(ta)
-
-    #the task_agents are now ready, so now let's prepare the environment
-    #load the ENV_PICKLE and restore the task_list
-    with open(os.path.join(run_protocol_path, ENV_PICKLE), 'rb') as infile:
-        env_data = pickle.load(infile)
-
-    env_init_dicts = env_data['init_dicts']
-    env_classes = env_data['env_classes']
-
-    #create the innermost environment with the task_list added
-    #load the env class
-    env_class_ = getattr(sys.modules[__name__], env_classes[0])
-    env_init = env_init_dicts[0]
-    env_init.update({'task_list':task_agents})
-
-    env = env_class_(**env_init)
-    
-    #apply wrappers if available
-    #TODO: what about other wrappers than EpisodePlotterWrapper? We don't save the VarySetpointWrapper to the wrappers list.
-    for idx in range(1, len(env_init_dicts)):
-        wrapper_class_ = getattr(sys.modules[__name__], env_classes[idx])
-        wrap_init = env_init_dicts[idx]
-        wrap_init.update({'env': env})
-        env = wrapper_class_(**wrap_init)
-    
-    env.set_meta_information(csv_line_nr = ln)  #set the line number, the environment was loaded from
-    return env
-
-def restore_agent_container_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -> 'AgentContainer':
-    CONTAINER_PICKLE = 'agent_container.pickle'
-
-    ln = [line_numbers] if isinstance(line_numbers, int) else line_numbers
-
-    #get run protocol
-
-    agent_pickle_files_m = [lab_journal.get_model_filename(line) for line in ln]
-    try:
-        model_file = lab_journal.get_model_filename(ln[0])
-        run_protocol_path = lab_journal.find_associated_run_path(model_file)
-    except TypeError:
-        print(f"there was no run protocol found that is associated with line_number {ln}")
-        exit()
-
-    agent_container = AgentContainer.init_from_save(os.path.join(run_protocol_path, CONTAINER_PICKLE), agent_pickle_files_m)
-
-    return agent_container
-
-def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv_multi_agent, agent_container: AgentContainer, arglist: argparse.Namespace):
-
-    episode_rewards = [0.0]  # sum of rewards for all agents
-    agent_rewards = [[0.0] for _ in range(len(agent_container.agents_m))]  # individual agent reward
-    final_ep_rewards = []  # sum of rewards for training curve
-    final_ep_ag_rewards = []  # agent rewards for training curve
-    # saver = tf.train.Saver()  #TODO: need to add some save/restore code compatible to pytorch
-    obs_n = training_env.reset()
-    episode_step = 0
-    episode_counter = 0
-    train_step = 0
-    t_start = time.time()
-
-    add_exploration_noise=True
-    
-    print('Starting iterations...')
-    while True:
-        # get action
-
-        actions_n = agent_container.get_action(obs_n, add_exploration_noise=add_exploration_noise)
-        # environment step
-        new_obs_n, rew_n, done_n, _ = training_env.step(actions_n)   #no need to process info_n
-        episode_step += 1
-        done = any(done_n)  #we end the episode if any of the involved tasks came to an end
-        terminal = training_env.is_terminal()   #there may be agent independent terminal conditions like the number of episode steps
-        # collect experience, store to per-agent-replay buffers
-        agent_experience_m = agent_container.remember(obs_n, actions_n, rew_n, new_obs_n, done_n)
-        obs_n = new_obs_n
-
-        #track episode and agent rewards
-        for i, exp in enumerate(agent_experience_m):         #there should be some np-magic to convert to a one liner
-            episode_rewards[-1] += exp.rew      #overall reward as sum of all agent rewards
-            agent_rewards[i][-1] += exp.rew
-
-        # perform an actual training step
-        agent_container.train_agents()
-
-        # increment global step counter
-        train_step += 1
-
-        #do some housekeeping when episode is over
-        if done or terminal:        #episode is over
-            episode_counter += 1
-            obs_n = training_env.reset()    #start new episode
-            
-            showPlot = False    #this is here for debugging purposes, you can enable plotting for one time
-            training_env.showNextPlot(show = showPlot)
-
-            episode_step = 0
-            episode_rewards.append(0)
-            for a in agent_rewards:
-                a.append(0)
-
-        # progress indicator
-        if (train_step) % (arglist.testing_iters/20) == 0:
-            print('.', end='', flush=True)
-        # every arglist.testing_iters training steps, an evaluation run is started in the testing_env
-        if (train_step) % arglist.testing_iters == 0:
-            print('')
-            t_end = time.time()
-            print(f"train_step {train_step}, Episode {episode_counter}: performed {arglist.testing_iters} steps in {t_end-t_start:.2f} seconds; that's {arglist.testing_iters/(t_end-t_start):.2f} steps/sec")
-            testing_env.set_meta_information(episode_number = episode_counter)
-            testing_env.set_meta_information(train_step = train_step)
-            testing_env.showNextPlot(True)
-            evaluate_training(agent_container, testing_env, lab_journal=lab_journal, add_exploration_noise=False)    #run the standardized test on the test_env TODO: add lab_journal again
-            t_start = time.time()
-
-        # env.render(mode='flightgear') #not really useful in training
-
-        #TODO: check the useful outputs for tracking the training progress
-        # save model, display training output   
-        if terminal and (len(episode_rewards) % arglist.save_rate == 0):    #save every arglist.save_rate completed episodes    
-            # Keep track of final episode reward    TODO: check which outputs are really needed
-            final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
-            for rew in agent_rewards:
-                final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
-
-        # saves final episode reward for plotting training curve later
-        if train_step > arglist.num_steps:
-            rew_file_name = arglist.plots_dir + arglist.exp_name + '_rewards.pkl'
-            with open(rew_file_name, 'wb') as fp:
-                pickle.dump(final_ep_rewards, fp)
-            agrew_file_name = arglist.plots_dir + arglist.exp_name + '_agrewards.pkl'
-            with open(agrew_file_name, 'wb') as fp:
-                pickle.dump(final_ep_ag_rewards, fp)
-            print('...Finished total of {} episodes.'.format(len(episode_rewards)))
-            break
 
 if __name__ == '__main__':
 
@@ -471,14 +258,11 @@ if __name__ == '__main__':
 
     # testing_env = restore_env_from_journal(lab_journal, 52)
 
-    # # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30))#, (0.05, 0.5))
-    # # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30))#, (0.05, 0.5))
+    # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30), (0.05, 0.5))
+    # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30), (0.05, 0.5))
 
     # agent_container = restore_agent_container_from_journal(lab_journal, [53,52, 54])
     # evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
-    # exit(0)
-
-
     # exit(0)
 
     training_env = setup_env(arglist)
@@ -490,11 +274,11 @@ if __name__ == '__main__':
     # training_env = VarySetpointsWrapper(training_env, prp.sideslip_deg, (-3, 3), (10, 45), (5, 30), (0.05, 0.5))
 
 
-    agent_container = setup_container_from_env(training_env, arglist)
+    agent_container = setup_container(training_env.task_list, arglist)
 
     save_test_run(testing_env, agent_container, lab_journal, arglist)  #use the testing_env here to have the save_path available in the evaluation
 
-    perform_training(training_env, testing_env, agent_container, arglist)
+    perform_training(training_env, testing_env, agent_container, lab_journal, arglist)
     
     training_env.close()
     testing_env.close()
