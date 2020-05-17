@@ -160,7 +160,7 @@ if __name__ == '__main__':
 
     from markov_pilot.environment.environment_eee import NoFGJsbSimEnv_multi_agent
     from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
-    from markov_pilot.tasks.tasks_eee import SingleChannel_FlightAgentTask
+    from markov_pilot.tasks.tasks_eee import SingleChannel_FlightTask
     from markov_pilot.agents.AgentTrainer import PID_AgentTrainer, PidParameters
     from markov_pilot.agents.agent_container_eee import AgentContainer, AgentSpec
     from markov_pilot.helper.lab_journal import LabJournal
@@ -168,11 +168,11 @@ if __name__ == '__main__':
     #setup an environment
     agent_interaction_freq = 5
 
-    elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 0},
+    elevator_AT_for_PID = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 0},
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
 
-    aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: 0}, 
+    aileron_AT_for_PID = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: 0}, 
                                 max_allowed_error= 60, 
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
 
     task_list_n = env.task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
-    agent_container = AgentContainer.init_from_env(task_list_n, agent_spec, agent_classes_dict, agent_interaction_freq=agent_interaction_freq)
+    agent_container = AgentContainer.init_from_specs(task_list_n, agent_spec, agent_classes_dict, agent_interaction_freq=agent_interaction_freq)
 
     env.showNextPlot(show = True)
 

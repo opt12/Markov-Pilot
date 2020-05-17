@@ -13,7 +13,7 @@ import importlib
 
 from typing import Union, List
 
-from markov_pilot.agent_task_eee import SingleChannel_FlightAgentTask
+from markov_pilot.agent_task_eee import SingleChannel_FlightTask
 TASK_AGENT_MODULE = 'markov_pilot.agent_task_eee' #TODO: make this smarter
 from markov_pilot.agents.pidAgent_eee import PID_Agent_no_State, PidParameters, SingleDDPG_Agent, MultiDDPG_Agent
 from markov_pilot.environment_eee import NoFGJsbSimEnv_multi_agent
@@ -72,23 +72,23 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     agent_interaction_freq = arglist.interaction_frequency
     episode_time_s=arglist.max_episode_len_sec
 
-    elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
+    elevator_AT_for_PID = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
 
-    aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+    aileron_AT_for_PID = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components,
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
 
-    elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
+    elevator_AT = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
                                 presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
                                 max_allowed_error= 30, 
                                 make_base_reward_components= make_glide_angle_reward_components,
                                 integral_limit = 1)
 
-    aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+    aileron_AT = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
                                 presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
                                 max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components,

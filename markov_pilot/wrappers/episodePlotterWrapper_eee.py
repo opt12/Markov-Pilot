@@ -48,15 +48,15 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         # |state | reward | done | action| per each step with property names as data
         self.action_variables = self.env.action_props
         state_variables = self.env.state_props
-        self.reward_variables = [prp.Property('rwd_'+t.name, 'the reward obtained in this step by TaskAgent '+t.name) for t in self.env.task_list]
-        done_variables = [prp.Property('done_'+t.name, 'the done flag for TaskAgent '+t.name) for t in self.env.task_list]
+        self.reward_variables = [prp.Property('rwd_'+t.name, 'the reward obtained in this step by Task '+t.name) for t in self.env.task_list]
+        done_variables = [prp.Property('done_'+t.name, 'the done flag for Task '+t.name) for t in self.env.task_list]
         task_agent_output_props = []
         [ task_agent_output_props.extend(t.get_props_to_output()) for t in self.env.task_list ]
         # self.state = np.empty(self.env.observation_space.shape)
         # self.reward = 0.0
         # self.done = False
 
-        #stash away the properties for the individual panels for each AgentTask:
+        #stash away the properties for the individual panels for each FlightTask:
         #also stash away the setpoint_names, the error_names and the delta_cmd_names for the evaluation
         self.task_names = [t.name for t in env.task_list]
         self.panel_contents = {}
@@ -104,6 +104,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         return collected_data
     
     def step(self, actions_n):
+        # pylint: disable=method-hidden
         #let's move on to the next step
         self.newObs_n = self.env.step(actions_n)
         _, reward_n, done_n, info_n = self.newObs_n
@@ -130,7 +131,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                     filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
                     dataRecorder.to_csv(filename)
                 # print(f"available properties for plotting:\n{dataRecorder.keys()}")   #this is handy if you want to change the plot to get the available data headings
-                self.showGraph(dataRecorder)
+                self._show_graph(dataRecorder)
 
         return self.newObs_n
 
@@ -146,9 +147,10 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                 filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
                 dataRecorder.to_csv(filename)
             # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
-            self.showGraph(dataRecorder)
+            self._show_graph(dataRecorder)
 
     def reset(self):
+        # pylint: disable=method-hidden
         self.recorderDictList = []   #see https://stackoverflow.com/a/17496530/2682209
         self.obs_n = self.env.reset()
         #save the initial state
@@ -158,7 +160,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
 
         return self.obs_n
     
-    def create_task_panels(self, data_frame):
+    def _create_task_panels(self, data_frame):
         panels = {}
         top_left_x_range = None
         for i, t in enumerate(self.env.task_list):
@@ -277,10 +279,10 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         
         return panels
 
-    def showGraph(self,data_frame):
+    def _show_graph(self,data_frame):
 
         #create the plot panels for the Agent_Tasks
-        panels = self.create_task_panels(data_frame)
+        panels = self._create_task_panels(data_frame)
 
         top_left_x_range = panels[list(panels.keys())[0]]['panel1'].x_range
 
@@ -345,12 +347,12 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         #     discriminator = self.env.meta_dict['model_discriminator']
 
         ts = time.time()
-        overshoot_frames_per_task = self.analyze_overshoot(data_frame)
+        overshoot_frames_per_task = self._analyze_overshoot(data_frame)
         overshoot_divs = [Div(text = ovs_fr.round(3).to_html(), width = 600) for ovs_fr in overshoot_frames_per_task]
         print("Overshoot analysis done in %.2f sec" % (time.time() - ts))
 
         ts = time.time()
-        settlement_times_per_task = self.analyze_settle_times(data_frame)
+        settlement_times_per_task = self._analyze_settle_times(data_frame)
         settlement_divs = [Div(text = settle_fr.round(3).to_html(), width = 600) for settle_fr in settlement_times_per_task]
         print("Settlement analysis done in %.2f sec" % (time.time() - ts))
 
@@ -463,7 +465,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         self.exportNextPlotFlag = export
         self.save_to_csv = save_to_csv
     
-    def prepare_plot_meta(self):
+    def _prepare_plot_meta(self):
         env_id = "<h1>" + self.env.unwrapped.spec.id + "</h1>"
 
         meta_info_string = ""
@@ -471,7 +473,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             meta_info_string += f"{item}<br>"
         return env_id + "<h2>"+"</h2>" + meta_info_string
     
-    def get_meta_info_table(self):
+    def _get_meta_info_table(self):
         data = {'keys': list(self.env.meta_dict.keys()),
                 'vals': list(self.env.meta_dict.values())}
         source = ColumnDataSource(data = data)
@@ -536,7 +538,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
 
         return setpoint_names, error_names, delta_cmd_names, event_idxs, setpoints, setpoint_changes
 
-    def analyze_overshoot(self, data_frame):
+    def _analyze_overshoot(self, data_frame):
         #see http://localhost:8888/notebooks/git/gym-jsbsim-eee/testruns/generic/csv/evaluate_control.ipynb#
 
         setpoint_names, error_names, delta_cmd_names, event_idxs, setpoints, setpoint_changes = self._prepare_analysis_data(data_frame)
@@ -654,7 +656,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             overshoot_frames_per_task.append(overshoot_frame)
         return overshoot_frames_per_task
 
-    def analyze_settle_times(self, data_frame):
+    def _analyze_settle_times(self, data_frame):
         #see http://localhost:8888/notebooks/git/gym-jsbsim-eee/testruns/generic/csv/evaluate_control.ipynb#
 
         setpoint_names, error_names, delta_cmd_names, event_idxs, setpoints, setpoint_changes = self._prepare_analysis_data(data_frame)

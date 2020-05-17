@@ -104,7 +104,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         self.aircraft = aircraft
         self.task_list = task_list
         self.task_types = task_types
-        self.n = len(self.task_list)    #the number of AgentTasks registered for the environment
+        self.n = len(self.task_list)    #the number of FlightTasks registered for the environment
 
         self.inital_attitude: Dict[Property, float] = {     #the default initial conditions; shall be overwritten by calling set_initial_conditions()
               prp.initial_u_fps: self.aircraft.get_cruise_speed_fps()*0.9    #forward speed
@@ -226,7 +226,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         Iitializes any custom properties.
 
         First, the environmental custom properties are initialized (empty at the moment)
-        and later on, all TaskAgent specific custom properties are initialized.
+        and later on, all Task specific custom properties are initialized.
 
         TODO: check if this can integrated with _update_custom_properties()
         """
@@ -241,7 +241,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         Updates any custom properties.
 
         First, the environmental custom properties are updated (empty at the moment)
-        and later on, all TaskAgent specific custom properties are updated.
+        and later on, all Task specific custom properties are updated.
         """
         #update environments custom_props
         self.sim[self.steps_left] -= 1  #decrement the remaining task steps
@@ -436,9 +436,9 @@ class JsbSimEnv_multi_agent(gym.Env):
 
     def change_setpoints(self, setpoints: Dict[Property, float]):
         """
-        Forwards the new setpoints to all AgentTasks. They decide on their own whether it matters for them.
+        Forwards the new setpoints to all FlightTasks. They decide on their own whether it matters for them.
 
-        (Why not just update the setpoints in the sim object? -> The AgentTasks read it from there, as we want to reset the integrators inside the AgentTasks)
+        (Why not just update the setpoints in the sim object? -> The FlightTasks read it from there, as we want to reset the integrators inside the FlightTasks)
         """
         [t.change_setpoints(setpoints) for t in self.task_list]
 

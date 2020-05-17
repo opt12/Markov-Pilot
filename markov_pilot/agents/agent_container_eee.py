@@ -24,7 +24,7 @@ class AgentContainer():
     """
     """
 
-    def __init__(self, task_list_n: List['AgentTask'], agents_m: List['AgentTrainer'], mapping_dict: Dict[str, List[str]]):
+    def __init__(self, task_list_n: List['FlightTask'], agents_m: List['AgentTrainer'], mapping_dict: Dict[str, List[str]]):
         """
         
         :param task_list_n: the list with references off all tasks in the environemnt; used to query structural information
@@ -227,7 +227,7 @@ class AgentContainer():
         return instance
 
     @classmethod
-    def init_from_env(cls, task_list_n: List['Agent_Task'], agent_spec: List[AgentSpec], 
+    def init_from_specs(cls, task_list_n: List['Agent_Task'], agent_spec: List[AgentSpec], 
                       agent_classes_dict: Dict['str', 'Class'], **kwargs) -> 'AgentContainer':
         """
         Instantiate the specified agents. Then instantiate an AgentContainer holding those agents
@@ -253,7 +253,7 @@ class AgentContainer():
         try:
             interaction_frequency = kwargs['interaction_frequency']
         except KeyError:
-            print(f'*** INFO: no interaction frequency given for AgentContainer.init_from_env(); Using 5Hz as default.')
+            print(f'*** INFO: no interaction frequency given for AgentContainer.init_from_specs(); Using 5Hz as default.')
             interaction_frequency = 5
         
         # figure out the input and output widths for the agents
@@ -395,7 +395,7 @@ if __name__ == '__main__':
     agent_classes_dict['MADDPG']('hello', Box(np.array([-1,-2,-3]), np.array([1,2,3])), hello='world')
 
     env = MiniEnv(task_list)
-    ag_container = AgentContainer.init_from_env(task_list, agent_spec, agent_classes_dict)
+    ag_container = AgentContainer.init_from_specs(task_list, agent_spec, agent_classes_dict)
 
     agents_m = [
         MiniAgent('ag1', act_space= Box(np.array([-1,-2,-3]), np.array([1,2,3]))),
@@ -438,13 +438,13 @@ if __name__ == '__main__':
 
     from markov_pilot.agents.AgentTrainer import PID_AgentTrainer, DDPG_AgentTrainer, MADDPG_AgentTrainer, PidParameters
     import markov_pilot.environment.properties as prp
-    from markov_pilot.tasks.tasks_eee import SingleChannel_FlightAgentTask
+    from markov_pilot.tasks.tasks_eee import SingleChannel_FlightTask
 
-    elevator_AT_for_PID = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 66},
+    elevator_AT_for_PID = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 66},
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
 
-    aileron_AT_for_PID = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: 99}, 
+    aileron_AT_for_PID = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: 99}, 
                                 max_allowed_error= 60, 
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
@@ -482,7 +482,7 @@ if __name__ == '__main__':
     }
 
     env = MiniEnv(task_list)
-    ag_container = AgentContainer.init_from_env(task_list, agent_spec, agent_classes_dict)
+    ag_container = AgentContainer.init_from_specs(task_list, agent_spec, agent_classes_dict)
     ag_container.save_agent_container_data('./test_save/')
 
     restored_cont = AgentContainer.init_from_save('./test_save/agent_container.pickle')

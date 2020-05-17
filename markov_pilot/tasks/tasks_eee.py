@@ -20,20 +20,20 @@ from markov_pilot.environment.environment_eee import JsbSimEnv_multi_agent
 from markov_pilot.helper.utils import reduce_reflex_angle_deg
 
 
-class AgentTask(ABC):
+class FlightTask(ABC):
     """
-    Interface for AgentTasks, which implement the reward calculation and state observation in a multi-agent environment.
+    Interface for FlightTasks, which implement the reward calculation and state observation in a multi-agent environment.
 
-    An AgentTask defines its observation space, custom properties, setpoints, action space, termination conditions and agent_reward function.
+    An FlightTask defines its observation space, custom properties, setpoints, action space, termination conditions and agent_reward function.
 
-    A List of AgentTasks is injected into a Multi-Agent environment to handle the observations, the rewards and the done flags.
+    A List of FlightTasks is injected into a Multi-Agent environment to handle the observations, the rewards and the done flags.
     """
     def __init__(self, name: str, 
-                 make_base_reward_components: Callable[['AgentTask'], Tuple[RewardComponent, ...]] = None,
-                 is_done: Callable[['AgentTask'], bool] = None):
+                 make_base_reward_components: Callable[['FlightTask'], Tuple[RewardComponent, ...]] = None,
+                 is_done: Callable[['FlightTask'], bool] = None):
         """ Each Agent Taskt needs those porperty lists initialized to be queried.
 
-        The content of the lists must be set for each AgentTask individually.
+        The content of the lists must be set for each FlightTask individually.
         Each list entry shall be of type BoundedProperty (TODO: Do I need to define all of them in the properties.py file, or can there be local ones as well?)
         """
 
@@ -48,11 +48,11 @@ class AgentTask(ABC):
 
         self.name = name                                    # name of the agent, used for the naming of properties
         self.obs_props: List[BoundedProperty] = []          # properties returned to the Agent as observation. Either directly from JSBSim or from custom_props
-        self.custom_props: List[BoundedProperty] = []       # properties calculated by the AgentTask. May or may not be part of the obs_props
+        self.custom_props: List[BoundedProperty] = []       # properties calculated by the FlightTask. May or may not be part of the obs_props
         self.setpoint_props = ()                            # the properties assigned to the setpoints; subtract the value of setpoint prop from the base prop to calculate the error
         self.initial_setpoint_values = ()                   # the initial setpoint values, used to store values to sim object, don't get updated on hange_setpoint
         self.setpoint_value_props = []                      # setpoints to use in the error/deviation calculation. May be (dynamically) changed in the course of the simulation. Stored into the sim-object
-        self.action_props: List[BoundedProperty] = []       # actions issued to JSBSim in each step from the associated Agent. Informative for AgentTask to e. g. incorporate it into reward calculation
+        self.action_props: List[BoundedProperty] = []       # actions issued to JSBSim in each step from the associated Agent. Informative for FlightTask to e. g. incorporate it into reward calculation
         self.positive_rewards = True                        # determines whether only positive rewards are possible (see Gor-Ren's documentation)
 
         if make_base_reward_components:
@@ -65,7 +65,7 @@ class AgentTask(ABC):
 
     def _make_assessor(self):
         """
-        Returns an Assessor Object to evaluate the value of a state in the context of the AgentTask
+        Returns an Assessor Object to evaluate the value of a state in the context of the FlightTask
 
         In contrast to Gor-Ren's original implementation, only the STANDARD model 
         is supported with no reward shaping nor sequential rewards. (If needed in the future, this
@@ -73,7 +73,7 @@ class AgentTask(ABC):
 
         The function 
         _make_base_reward_components(self)
-        shall be injected into the concrete AgentTask at construction time
+        shall be injected into the concrete FlightTask at construction time
 
         """
         while True:
@@ -90,7 +90,7 @@ class AgentTask(ABC):
                     raise ValueError(f'{e.prop}  is not in list.')
 
                 self.obs_props.append(e.prop)
-                print(f"AgentTask: {self.name}: Added property {e.prop} to self.obs_props.")
+                print(f"FlightTask: {self.name}: Added property {e.prop} to self.obs_props.")
                 continue
             break
 
@@ -98,13 +98,13 @@ class AgentTask(ABC):
         return AssessorImpl(base_components, (), positive_rewards=self.positive_rewards)
     
     def inject_environment(self, env: JsbSimEnv_multi_agent):
-        """ Injects the environment, the AgentTask is acting in.
+        """ Injects the environment, the FlightTask is acting in.
         Mostly used to have access to the env.sim object for data storage and retrieval.
         
-        It's really easier to consider the AgentTasks as part of the environment with access to the sim object.
+        It's really easier to consider the FlightTasks as part of the environment with access to the sim object.
         """
         if self.env:
-            raise ReferenceError('The inject_environment must be called exactly once per AgentTask. Looks like you called it twice.')
+            raise ReferenceError('The inject_environment must be called exactly once per FlightTask. Looks like you called it twice.')
         self.env = env
         self.sim = self.env.sim #for caching the simulator object used as data storage
         self.dt  = self.env.dt  #for caching the step-time to calculate the integral
@@ -114,7 +114,7 @@ class AgentTask(ABC):
     
     def assess(self, obs, last_obs) -> Tuple[float, bool, Dict]:
         """ Calculate the task specific reward from the actual observation and 
-        checks end of episode wrt. the specific AgentTask. Additional info is 
+        checks end of episode wrt. the specific FlightTask. Additional info is 
         also determined (reward components).
 
         The reward is a function of the actual observation and -if necessary- 
@@ -123,8 +123,8 @@ class AgentTask(ABC):
         Each task calculates its own reward components. Hence, each task may follow 
         individual targets. May it be collaborative with other tasks or competitive.
 
-        Each AgentTask may have individual termination conditions wrt. its own observations. 
-        If one AgentTask detects the end of an episode, the episode for all agents must terminate
+        Each FlightTask may have individual termination conditions wrt. its own observations. 
+        If one FlightTask detects the end of an episode, the episode for all agents must terminate
         """
         done = self._is_done()
         rwd, rwd_components = self.assessor.assess(obs, last_obs, done)
@@ -135,7 +135,7 @@ class AgentTask(ABC):
     def state_space(self) -> gym.Space:
         """ Get the task's state/observation space object. 
         
-        Returns the observation space, the AgentTask operates on.
+        Returns the observation space, the FlightTask operates on.
 
         Naming is in line with Go-Ren's JsbSimEnv.
         """
@@ -153,26 +153,26 @@ class AgentTask(ABC):
     @abstractmethod
     def change_setpoints(self, new_setpoints: Dict[BoundedProperty, float]):
         """
-        Changes the setpoints for the AgentTask. The changes will take effect within the next environment step. (call to env.step())
+        Changes the setpoints for the FlightTask. The changes will take effect within the next environment step. (call to env.step())
         The setpoint values are stored within a property in the env's sim object.
 
-        If needed, clean-up actions shall be performed here (like e. g. reset integrators which is most likely undesired see commment in SingleChannel_FlightAgentTask)
+        If needed, clean-up actions shall be performed here (like e. g. reset integrators which is most likely undesired see commment in SingleChannel_FlightTask)
 
         :param new_setpoints: A dictionary with new setpoints to be used. New values overwrite old ones.
         """
         pass
                 
     def get_setpoint_props(self) -> Dict[BoundedProperty, float]:
-        """ just returns the props with setpoints for the AgentTask
+        """ just returns the props with setpoints for the FlightTask
         """
         return self.setpoint_value_props
 
     def print_info(self):
         """
-        Prints out all relevant information on the TaskAgent
+        Prints out all relevant information on the Task
         """
         print("********************************************")
-        print(f"TaskAgent '{self.name}':")
+        print(f"Task '{self.name}':")
         obs_props_list = [prop.name for prop in self.obs_props]
         print(f"obs_props[{len(self.obs_props)}]:", end="")
         print(*obs_props_list, sep = ", ")
@@ -194,7 +194,7 @@ class AgentTask(ABC):
         # pylint: disable=method-hidden
         """ Defines the components used in the state assessment.
         
-        This function shall be injected into the AgentTask at construction time as it is 
+        This function shall be injected into the FlightTask at construction time as it is 
         individual for each of them. The injected function is bound to the instantiated object 
         and hence has access to all instance variables.
         This seems to be more flexible than subclassing.
@@ -209,8 +209,8 @@ class AgentTask(ABC):
         """
         Checks if the episode shall end due to any condition (e. g. properties is out of bounds.)
 
-        Each AgentTask may have individual termination conditions wrt. its own observations. 
-        If one AgentTask detects the end of an episode, the episode for all agents must terminate
+        Each FlightTask may have individual termination conditions wrt. its own observations. 
+        If one FlightTask detects the end of an episode, the episode for all agents must terminate
 
         Shall be overridden in inherited classes or injected in individual instances as method.
 
@@ -224,21 +224,21 @@ class AgentTask(ABC):
         Initializes all custom properties after a reset() to the environment.
         This includes staes and controls.
 
-        Called on every AgentTask from env.reset()
+        Called on every FlightTask from env.reset()
         """
         pass
 
     @abstractmethod
     def update_custom_properties(self):
-        """ Updates state elements (custom properties) within the AgentTask's own responsibility.
+        """ Updates state elements (custom properties) within the FlightTask's own responsibility.
 
-        Is called from within the env.step() function for each AgentTask taking part in the environemnt. 
+        Is called from within the env.step() function for each FlightTask taking part in the environemnt. 
         Is called after the simulator did its work before the individual rewards and dones are calculated.
 
         Only properties depending on locally known values (e. g. the last action) may be part of the custom properties.
-        No properties with interdependencies between different AgentTasks may be part of these custom_properties 
+        No properties with interdependencies between different FlightTasks may be part of these custom_properties 
         as the calculation order is undefined. However, it is possible to include "foreign" custom props in the 
-        observation space of an AgentTask.
+        observation space of an FlightTask.
         
         :param action: the actions issued by the associated Agent. May or may not be used to be incorporated in custom_props 
            (and later on in the reward calculation)
@@ -250,7 +250,7 @@ class AgentTask(ABC):
         """
         Provides a list or properties to be collected by the EpisodePlotter wrapper to include in an episode plot.
 
-        By means of this method, any AgentTask can provide a whishlist of plotted props without adding it to the state.
+        By means of this method, any FlightTask can provide a whishlist of plotted props without adding it to the state.
 
         """
         return []
@@ -276,30 +276,30 @@ class AgentTask(ABC):
         }
 
 
-class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be better to call it SingleAngularChannel_FlightAgentTask(AgentTask)
+class SingleChannel_FlightTask(FlightTask): #TODO: check whether it would be better to call it SingleAngularChannel_FlightTask(FlightTask)
     """ A class to implement a controller for a single channel actuation with a single error measurement.
 
-    The class SingleChannel_FlightAgentTask takes the value to be controlled as an input state. 
+    The class SingleChannel_FlightTask takes the value to be controlled as an input state. 
 
-    The SingleChannel_FlightAgentTask calculates the error wrt. the setpoint and some limited error integral to the custom properties. 
+    The SingleChannel_FlightTask calculates the error wrt. the setpoint and some limited error integral to the custom properties. 
     Additionally, the current action and the last actuator travel (Δ-Value) are added to the custom properties and the observation.
 
     The reward uses the approach of Gor-Ren. The make_base_reward_components-Function shall be injected to the 
-    AgentTask object at instantiation time.
+    FlightTask object at instantiation time.
     """
 
     def __init__(self, name: str, actuating_prop: BoundedProperty = None,  
                 setpoints: Dict[BoundedProperty, float] = [], #TODO: either make this a single value or make measurement_in_degrees, integral_limit and max_allowed error lists as well.
                 presented_state: List[BoundedProperty] = [], 
-                make_base_reward_components: Callable[['AgentTask'], Tuple[RewardComponent, ...]] = None,
-                is_done: Callable[['AgentTask'], bool] = None, 
+                make_base_reward_components: Callable[['FlightTask'], Tuple[RewardComponent, ...]] = None,
+                is_done: Callable[['FlightTask'], bool] = None, 
                 # change_setpoint_callback: Callable[[float], None] = None, #TODO: we used to have that, but it's not used anymore, remove
                 measurement_in_degrees = True, max_allowed_error = None,
                 integral_limit = float('inf'), integral_decay = 1):
         """
         :param actuating_prop: The actuation variable to be controlled
         :param setpoints: The setpoint property to be used for deviation calculation. On the setpoint properties, the derivative and the integral are calculated and presented in the state.
-        :param presented_state: The additional state properties that shall be presented to the Agent besides the props defined within the AgentTask. 
+        :param presented_state: The additional state properties that shall be presented to the Agent besides the props defined within the FlightTask. 
         :param make_base_reward_components = None: Inject a custom function to be bound to instance.
         :param is_done = None: Inject a custom function to be bound to instance.
             Default just checks for max_allowed_error in the self.prop_error custom property.
@@ -308,7 +308,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         :param integral_limit = float('inf'): the limiting value for the error integrator Error integral is clipped to [-integral_limit, integral_limit]
         :param integral_decay = 1: the decay factor for the integral value
         """
-        super(SingleChannel_FlightAgentTask, self).__init__(name, 
+        super(SingleChannel_FlightTask, self).__init__(name, 
                                             make_base_reward_components=make_base_reward_components,
                                             is_done=is_done)
 
@@ -355,7 +355,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
 
     def define_custom_properties(self):
         """
-        defines the custom properties that are calculated by the SingleChannel_FlightAgentTask
+        defines the custom properties that are calculated by the SingleChannel_FlightTask
         """
         #custom properties 
         if self.setpoint_props: #there may be tasks without a setpoint
@@ -387,7 +387,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
     def _make_base_reward_components(self):     #may be overwritten by injected custom function
         # pylint: disable=method-hidden
         """
-        Just adds an Asymptotic error component as standard reward to the PID_AgentTask.
+        Just adds an Asymptotic error component as standard reward to the PID_FlightTask.
 
         May be overwritten by injected custom function.
         """
@@ -410,8 +410,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
     
     def update_custom_properties(self): #TODO: make all the calculations suitable for lists; it's easy
         if self.setpoint_props:     #there may be tasks without a setpoint
-            cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
-            error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
+            cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightTask
+            error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightTask
             if self.measurement_in_degrees:
                 error = reduce_reflex_angle_deg(error)
             self.sim[self.prop_error] = error
@@ -436,8 +436,8 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
         """
         #now set the custom_props to the start-of-episode values
         if self.setpoint_props:     #there may be tasks without a setpoint
-            cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightAgentTask
-            error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightAgentTask
+            cur_value = self.sim[self.setpoint_props[0]]    #only one setpoint for SingleChannel_FlightTask
+            error = cur_value - self.sim[self.setpoint_value_props[0]]   #only one setpoint for SingleChannel_FlightTask
             if self.measurement_in_degrees:
                 error = reduce_reflex_angle_deg(error)
             self.sim[self.prop_error] = error
@@ -463,7 +463,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
 
     def change_setpoints(self, new_setpoints: Dict[BoundedProperty, float]):
         """
-        Changes the setpoints for the AgentTask. The changes will take effect within the next environment step. (call to env.step())
+        Changes the setpoints for the FlightTask. The changes will take effect within the next environment step. (call to env.step())
         The setpoint values are stored within a property in the env's sim object.
 
         If needed, clean-up actions shall be performed here (like e. g. reset integrators)
@@ -484,7 +484,7 @@ class SingleChannel_FlightAgentTask(AgentTask): #TODO: check whether it would be
                 pass
 
 
-class SingleChannel_MinimumProps_Task(SingleChannel_FlightAgentTask):
+class SingleChannel_MinimumProps_Task(SingleChannel_FlightTask):
     '''The presented obs_props are reduced to the error. No integral  nor derivative is included in the obs_props.
     Everything else is left unchanged.
 

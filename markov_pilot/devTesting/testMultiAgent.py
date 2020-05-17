@@ -1,7 +1,7 @@
 import sys            
 sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? Dunno! It works!
 
-from markov_pilot.agent_task_eee import SingleChannel_FlightAgentTask
+from markov_pilot.agent_task_eee import SingleChannel_FlightTask
 from markov_pilot.agents.pidAgent_eee import PID_Agent, PidParameters
 from markov_pilot.environment_eee import NoFGJsbSimEnv_multi_agent
 from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
@@ -13,12 +13,12 @@ if __name__ == '__main__':
 
     agent_interaction_freq = 5
 
-    pid_elevator_AT = SingleChannel_FlightAgentTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5},
+    pid_elevator_AT = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: -6.5},
                                 make_base_reward_components= make_glide_angle_reward_components)
     elevator_pid_params = PidParameters( -5e-2, -6.5e-2, -1e-3)
     pid_elevator_agent = PID_Agent('elevator', elevator_pid_params, pid_elevator_AT.action_space, agent_interaction_freq = agent_interaction_freq)
 
-    pid_aileron_AT = SingleChannel_FlightAgentTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, max_allowed_error= 60, 
+    pid_aileron_AT = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: -15}, max_allowed_error= 60, 
                                 make_base_reward_components= make_roll_angle_reward_components)
     aileron_pid_params = PidParameters(3.5e-2,    1e-2,   0.0)
     pid_aileron_agent = PID_Agent('aileron', aileron_pid_params, pid_aileron_AT.action_space, agent_interaction_freq = agent_interaction_freq)

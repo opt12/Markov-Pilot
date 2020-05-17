@@ -33,6 +33,7 @@ class VarySetpointsWrapper(gym.Wrapper):
             ''' starts the setpoint variation for the first time in the upcoming interval
             :return: the first setpoint to be passed to the env'''
             ...
+
     class StepVariator(SetpointVariator):
         def __init__(self, setpoint_range):
             self.min = setpoint_range[0]
@@ -88,7 +89,6 @@ class VarySetpointsWrapper(gym.Wrapper):
 
             self.step = 0
             return self.vary()
-
 
     def __init__(self, env, setpoint_property: BoundedProperty, 
                 setpoint_range: Tuple[float, float], 
