@@ -148,7 +148,7 @@ class LabJournal():
         #we assume the lab_journal file to be open and all data available in self.journal_entries
         idx = self._find_key_in_journal(line_number)
         file_name = None
-        if idx:
+        if idx != None:
             file_name =  self.journal_entries[idx].get('path', None)
             prefix = 'file://'
             file_name = file_name[file_name.startswith(prefix) and len(prefix):]
