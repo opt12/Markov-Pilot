@@ -18,7 +18,7 @@ from typing import List, Tuple, Dict
 
 from markov_pilot.helper.ReplayBuffer import ReplayBuffer
 from markov_pilot.helper.OUNoise import OUNoise
-from markov_pilot.agents.networks import ActorNetwork, CriticNetwork
+from markov_pilot.helper.networks import ActorNetwork, CriticNetwork
 from markov_pilot.helper.utils import soft_update
 
 Experience = namedtuple('Experience', ['obs', 'act', 'rew', 'next_obs', 'done'])

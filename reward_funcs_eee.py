@@ -1,4 +1,4 @@
-import markov_pilot.environment.rewards as rewards
+import markov_pilot.tasks.rewards as rewards
 import markov_pilot.environment.properties as prp
 
 from typing import Tuple

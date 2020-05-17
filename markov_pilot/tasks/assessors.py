@@ -2,7 +2,7 @@ import warnings
 from markov_pilot.helper import utils
 from abc import ABC, abstractmethod
 from typing import Iterable, Tuple, Dict
-from markov_pilot.environment.rewards import State, Reward, RewardComponent
+from markov_pilot.tasks.rewards import State, Reward, RewardComponent
 
 
 class Assessor(ABC):

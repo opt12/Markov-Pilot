@@ -10,9 +10,9 @@ from collections import namedtuple
 from abc import ABC, abstractmethod
 
 import markov_pilot.environment.properties as prp
-import markov_pilot.environment.rewards as rewards
-from markov_pilot.environment.rewards import RewardComponent
-from markov_pilot.environment.assessors import AssessorImpl
+import markov_pilot.tasks.rewards as rewards
+from markov_pilot.tasks.rewards import RewardComponent
+from markov_pilot.tasks.assessors import AssessorImpl
 from markov_pilot.environment.properties import BoundedProperty
 from markov_pilot.environment.simulation import Simulation
 from markov_pilot.environment.environment_eee import JsbSimEnv_multi_agent
@@ -264,7 +264,7 @@ class AgentTask(ABC):
         filename = os.path.join(basedir, f'{self.name}_make_base_reward_components.py')
         os.makedirs(basedir, exist_ok=True)
         with open(filename, 'w') as file:  
-            file.write('import markov_pilot.environment.rewards as rewards\n')
+            file.write('import markov_pilot.tasks.rewards as rewards\n')
             file.write('import markov_pilot.environment.properties as prp\n')
             file.write('from typing import List, Dict, Tuple, Callable, Optional\n')
             file.write('\n')
