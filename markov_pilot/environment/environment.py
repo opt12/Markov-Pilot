@@ -14,7 +14,7 @@ import types
 from typing import Type, Tuple, Dict, List, Sequence, NamedTuple, Optional
 
 from markov_pilot.environment.simulation import Simulation
-# from markov_pilot.helper.visualiser import FlightGearVisualiser, TimeLineVisualiser
+from markov_pilot.helper.visualiser import FlightGearVisualiser, TimeLineVisualiser
 from .aircraft import Aircraft, cessna172P
 from markov_pilot.environment import properties as prp
 from markov_pilot.environment.properties import BoundedProperty, Property
@@ -52,20 +52,21 @@ class JsbSimEnv_multi_agent(gym.Env):
     INITIAL_HEADING_DEG_default = 270
     DEFAULT_EPISODE_TIME_S = 120.
 
+    TIMELINE_PROPS = [prp.flight_path_deg, prp.roll_deg, prp.sideslip_deg]
+
     metadata = {'render.modes': ['human', 'flightgear', 'timeline']}    # TODO:: fix the rendering and include the bokeh episode plotting
     state_props: Tuple[Property, ...]
     # action_variables: Tuple[Property, ...]
     State: Type[namedtuple]
     Actions: Type[namedtuple]
 
-    def __init__(self, task_list: List['Agent_Task'], task_types: List['str'], aircraft: Aircraft = cessna172P,
+    def __init__(self, task_list: List['Agent_Task'], aircraft: Aircraft = cessna172P,
                  agent_interaction_freq: int = 5, episode_time_s: float = DEFAULT_EPISODE_TIME_S, base_dir: str = './'):
         """
         Constructor. Inits some internal state, and calls JsbSimEnv_multi_agent.reset()
         for a first time to prepare the internal simulation sim object.
 
         :param task_list: the list of Task_multi_agent instances to take part in the Markov Game
-        :param task_types: the list of task types for each task in the task_list. maybe 'PID', 'DDPG' or 'MADDPG'
         :param aircraft: the JSBSim aircraft to be used
         :param agent_interaction_freq: int, how many times per second the agent
             should interact with environment.
@@ -79,7 +80,6 @@ class JsbSimEnv_multi_agent(gym.Env):
         # self.class_name = self.__class__.__name__
         #to restore the environment, a list of class_names and init_dicts is constructed which represent the env with surrounding wrappers
         self.env_init_dicts = [{
-            'task_types': task_types,
             'aircraft': aircraft,
             'agent_interaction_freq': agent_interaction_freq, 
             'episode_time_s': episode_time_s,
@@ -103,7 +103,6 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         self.aircraft = aircraft
         self.task_list = task_list
-        self.task_types = task_types
         self.n = len(self.task_list)    #the number of FlightTasks registered for the environment
 
         self.inital_attitude: Dict[Property, float] = {     #the default initial conditions; shall be overwritten by calling set_initial_conditions()
@@ -189,13 +188,14 @@ class JsbSimEnv_multi_agent(gym.Env):
 
         # set visualisation objects
         self.flightgear_visualiser: FlightGearVisualiser = None
+        self.timeline_visualiser: TimeLineVisualiser = None
         self.meta_dict = {'model_type': 'trained', 'model_discriminator': 'no file'} #to store additional meta information (e. g. used ny Episode Plotter Wrapper)
 
     def get_agent_task_info(self) -> List[Tuple[str, 'Box', 'Box', str]]:
         """
         :return: a list of Tuples (name, obs_space, action_space, task_type) which can be used to initilize the agents
         """
-        return [(at.name, at.state_space, at.action_space, tt) for at, tt in zip(self.task_list, self.task_types)]
+        return [(at.name, at.state_space, at.action_space, tt) for at, tt in zip(self.task_list)]
 
     def reset(self) -> List[np.ndarray]:
         """
@@ -371,8 +371,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         #TODO: get this right with the properties to plot to the timeline
         if mode == 'human' or mode == 'timeline':
             if not self.timeline_visualiser:
-                self.timeline_visualiser = TimeLineVisualiser(self.sim,
-                                                          self.get_timeline_props_to_output())
+                self.timeline_visualiser = TimeLineVisualiser(self.sim, self.TIMELINE_PROPS)
             self.timeline_visualiser.plot(self.sim)
         elif mode == 'flightgear':
             if not self.flightgear_visualiser:
@@ -470,7 +469,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         reward_components_info_dict = {k: [dic[k] for dic in ld] for k in ld[0]}
         data_to_save.update(reward_components_info_dict)
 
-        #save the init_dict and the arglist without the task_list and task_types to a pickle file
+        #save the init_dict and the arglist without the task_list to a pickle file
         with open(os.path.join(self.save_path, 'environment_init.pickle'), 'wb') as file:
             pickle.dump(data_to_save, file)
 
@@ -481,7 +480,6 @@ class JsbSimEnv_multi_agent(gym.Env):
                            'params': at.init_dict,
                            } for at in self.task_list], 
             'task_names': [at.name for at in self.task_list], 
-            'task_types': self.task_types, 
         })
         with open(json_filename, 'w') as file:
             file.write(json.dumps(data_to_save, indent=4))

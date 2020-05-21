@@ -12,7 +12,7 @@ best_score_n = []  #we don't like globals, but it really helps here
 eval_number = 0
 
 
-def evaluate_training(agent_container, env, lab_journal = None, add_exploration_noise=False, store_evaluation_experience = True):
+def evaluate_training(agent_container, env, lab_journal = None, store_evaluation_experience = True, add_exploration_noise=False, render_mode = None):
     global best_score_n 
     if len(best_score_n) != agent_container.m:
         best_score_n = np.zeros(agent_container.m)
@@ -49,6 +49,9 @@ def evaluate_training(agent_container, env, lab_journal = None, add_exploration_
         actions_n = agent_container.get_action(obs_n, add_exploration_noise=exploration_noise)
         # environment step
         new_obs_n, rew_n, done_n, info_n = env.step(actions_n) 
+        
+        if render_mode == 'flightgear' or render_mode == 'timeline':
+            env.render(mode = render_mode)
 
         terminal = env.is_terminal()   #there may be agent independent terminal conditions like the number of episode steps
 

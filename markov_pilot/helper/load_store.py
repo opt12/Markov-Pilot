@@ -45,7 +45,7 @@ def save_test_run(env: JsbSimEnv_multi_agent, agent_container: AgentContainer, l
     csv_line_nr = lab_journal.append_run_data(env, agent_container.agents_m, save_path)
     env.set_meta_information(csv_line_nr = csv_line_nr)
 
-def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
+def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]], target_environment = None) -> NoFGJsbSimEnv_multi_agent:
     ENV_PICKLE = 'environment_init.pickle'  #these are hard default names for the files
     TASKS_PICKLE ='task_agent.pickle'       #these are hard default names for the files
 
@@ -103,6 +103,16 @@ def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -
     #create the innermost environment with the task_list added
     #load the env class
     env_class_ = getattr(sys.modules[__name__], env_classes[0])
+
+    if target_environment and (env_class_ == JsbSimEnv_multi_agent or env_class_ == NoFGJsbSimEnv_multi_agent):
+        #the user wants us to exchange the innermost environment
+        if target_environment == 'NoFG':
+            env_class_ = NoFGJsbSimEnv_multi_agent
+        elif target_environment == 'FG':
+            env_class_ = JsbSimEnv_multi_agent
+        else:
+            raise ValueError("parameter target_:environment must be either 'NoFG' or 'FG' or entirely omitted. Other values not allowed.")
+
     env_init = env_init_dicts[0]
     env_init.update({'task_list':task_agents})
 
