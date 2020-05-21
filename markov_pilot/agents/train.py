@@ -2,6 +2,7 @@ import time
 import argparse
 import numpy as np
 import pickle
+import os
 
 from markov_pilot.environment.environment import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
 from markov_pilot.agents import AgentContainer
@@ -88,6 +89,7 @@ def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv
 
         # saves final episode reward for plotting training curve later
         if train_step > arglist.num_steps:
+            os.makedirs(os.path.dirname(arglist.plots_dir), exist_ok=True)
             rew_file_name = arglist.plots_dir + arglist.exp_name + '_rewards.pkl'
             with open(rew_file_name, 'wb') as fp:
                 pickle.dump(final_ep_rewards, fp)
