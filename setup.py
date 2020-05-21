@@ -1,17 +1,20 @@
 from setuptools import setup, find_packages
 
 
-setup(name='gym_jsbsim',
+setup(name='Markov-Pilot',
       version='0.1',
       description='A package of reinforcement learning environments for flight '
-                  'control using the JSBSim flight dynamics model.',
-      url='https://github.com/Gor-Ren/gym-jsbsim',
+                  'control using the JSBSim flight dynamics model.'
+                  'This package supports Multi-Agents to learn how to fly.'
+                  'It supports the MADDPG algorithm.',
+      url='https://github.com/opt12/Markov-Pilot',
       author='Gor-Ren',
       license='MIT',
       install_requires=[
             'numpy',
             'gym',
-            'matplotlib',
+            'matplotlib',   #TODO: a lot is missing
+            'pandas'
       ],
       packages=find_packages(),
       classifiers=[
