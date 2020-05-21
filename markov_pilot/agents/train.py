@@ -3,10 +3,10 @@ import argparse
 import numpy as np
 import pickle
 
-from markov_pilot.environment.environment_eee import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
+from markov_pilot.environment.environment import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
 from markov_pilot.agents import AgentContainer
 from markov_pilot.helper.lab_journal import LabJournal
-from markov_pilot.testbed.evaluate_training_eee import evaluate_training
+from markov_pilot.testbed.evaluate_training import evaluate_training
 
 
 def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv_multi_agent, agent_container: AgentContainer, lab_journal: LabJournal, arglist: argparse.Namespace):

@@ -15,7 +15,7 @@ from markov_pilot.tasks.rewards import RewardComponent
 from markov_pilot.tasks.assessors import AssessorImpl
 from markov_pilot.environment.properties import BoundedProperty
 from markov_pilot.environment.simulation import Simulation
-from markov_pilot.environment.environment_eee import JsbSimEnv_multi_agent
+from markov_pilot.environment.environment import JsbSimEnv_multi_agent
 
 from markov_pilot.helper.utils import reduce_reflex_angle_deg
 

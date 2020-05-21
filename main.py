@@ -7,23 +7,23 @@ import argparse
 
 import markov_pilot.environment.properties as prp
 
-from markov_pilot.environment.environment_eee import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
-from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
+from markov_pilot.environment.environment import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
+from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi_agent
 from markov_pilot.wrappers.varySetpointsWrapper import VarySetpointsWrapper
 
-from markov_pilot.tasks.tasks_eee import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
+from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
 
-from reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
+from reward_funcs import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
                             make_glide_path_angle_reward_components, make_elevator_actuation_reward_components
 
 from markov_pilot.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
-from markov_pilot.agents.agent_container_eee import AgentContainer, AgentSpec
+from markov_pilot.agents.agent_container import AgentContainer, AgentSpec
 from markov_pilot.agents.train import perform_training
 
 from markov_pilot.helper.lab_journal import LabJournal
 from markov_pilot.helper.load_store import restore_agent_container_from_journal, restore_env_from_journal, save_test_run
 
-from markov_pilot.testbed.evaluate_training_eee import evaluate_training
+from markov_pilot.testbed.evaluate_training import evaluate_training
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = -6.5

@@ -438,7 +438,7 @@ if __name__ == '__main__':
 
     from markov_pilot.agents.AgentTrainer import PID_AgentTrainer, DDPG_AgentTrainer, MADDPG_AgentTrainer, PidParameters
     import markov_pilot.environment.properties as prp
-    from markov_pilot.tasks.tasks_eee import SingleChannel_FlightTask
+    from markov_pilot.tasks.tasks import SingleChannel_FlightTask
 
     elevator_AT_for_PID = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: 66},
                                 integral_limit = 100)

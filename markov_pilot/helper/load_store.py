@@ -4,13 +4,13 @@ import pickle
 import importlib
 from typing import Union, List
 
-from markov_pilot.environment.environment_eee import JsbSimEnv_multi_agent, NoFGJsbSimEnv_multi_agent
-from markov_pilot.agents.agent_container_eee import AgentContainer
+from markov_pilot.environment.environment import JsbSimEnv_multi_agent, NoFGJsbSimEnv_multi_agent
+from markov_pilot.agents.agent_container import AgentContainer
 from markov_pilot.helper.lab_journal import LabJournal
 
 #these imports are needed to restore all the classes from the saved pickle-files
-from markov_pilot.tasks.tasks_eee import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
-from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
+from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
+from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi_agent
 
 
 
