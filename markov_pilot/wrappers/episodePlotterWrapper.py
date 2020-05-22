@@ -433,7 +433,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
         os.makedirs(os.path.dirname(html_output_name), exist_ok=True)
 
         if self.showNextPlotFlag:
-            output_file(html_output_name, mode='absolute') #use mode='absolute' to make it work offline with the js and css installed in the bokeh package locally
+            output_file(html_output_name, mode='inline') #mode='absolute') #use mode='absolute' to make it work offline with the js and css installed in the bokeh package locally
             if self.firstRun:
                 show(webpage)  #opens up a new browser window
                 self.firstRun = False
