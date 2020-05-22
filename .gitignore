@@ -7,6 +7,8 @@ runs/
 checkpoints/
 learning_curves/
 testruns/
+testruns_wron_elevator_params/
+testruns_wrong_parameter/
 test_save/
 
 gym_jsbsim/__pycache__/

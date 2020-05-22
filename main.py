@@ -13,8 +13,11 @@ from markov_pilot.wrappers.varySetpointsWrapper import VarySetpointsWrapper
 
 from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
 
-from reward_funcs import make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
-                            make_glide_path_angle_reward_components, make_elevator_actuation_reward_components
+from reward_funcs import _make_base_reward_components, \
+                            make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
+                            make_glide_path_angle_reward_components, make_elevator_actuation_reward_components, \
+                            make_roll_angle_error_only_reward_components, make_roll_angle_error_punish_actuation_reward_components, make_roll_angle_integral_reward_components, make_roll_angle_integral_reward_components, \
+                            make_angular_error_only_reward_components, make_angular_error_punish_actuation_reward_components, make_angular_integral_reward_components, make_angular_derivative_integral_reward_components
 
 from markov_pilot.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
 from markov_pilot.agents.agent_container import AgentContainer, AgentSpec
@@ -31,15 +34,11 @@ target_kias = 92
 target_roll_angle_phi_deg   = -15
 target_sideslip_angle_beta_deg = 0
 
-def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/maddpg/
+def parse_args():   #used https://github.com/openai/maddpg/ as a basis
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
-    # parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
     parser.add_argument("--max-episode-len-sec", type=int, default=120, help="maximum episode length in seconds (steps = seconds*interaction frequ.)")
     parser.add_argument("--num-steps", type=int, default=30000, help="number of training steps to perfoem")
-    # parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
-    # parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
-    # parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
     parser.add_argument("--interaction-frequency", type=float, default=5, help="frequency of agent interactions with the environment")
     # Core training parameters
     parser.add_argument("--lr_actor", type=float, default=1e-4, help="learning rate for the actor training Adam optimizer")
@@ -56,12 +55,9 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     # Evaluation
     parser.add_argument("--restore", nargs='+', type=int, default=False)    #to restore agents and env from lab-journal lines given as list and continue training
     parser.add_argument("--play", nargs='+', type=int, default=False)    #to play with agents and env restored from lab-journal lines
-    parser.add_argument("--best", type=bool, default=False)    #when given, the first line form restore or play will be used to restore the environment and the best agents for that run will be loaded
-    # TODO: --flightgear
-    parser.add_argument("--flightgear", type=bool, default=False)    #when given, together with --play [lines] the environment will be replaced with the flight-gear enabled and the player will render to FlightGear
-    # parser.add_argument("--display", action="store_true", default=False)
+    parser.add_argument("--best", type=bool, default=False)    #TODO: when given, the first line from restore or play will be used to restore the environment and the best agents for that run will be loaded 
+    parser.add_argument("--flightgear", type=bool, default=False)    #TODO: when given, together with --play [lines] the environment will be replaced with the flight-gear enabled and the player will render to FlightGear
     parser.add_argument("--testing-iters", type=int, default=2000, help="number of steps before running a performance test")
-    #parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--base-dir", type=str, default="./", help="directory the test_run date is saved")
     return parser.parse_args()
@@ -79,18 +75,18 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     # initial_altitude_ft          = 6000
 
     elevator_AT_for_PID = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
+                                make_base_reward_components=_make_base_reward_components,   #pass this in here as otherwise, the restore form disk gets nifty
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*6.5e-2 = 77
 
     aileron_AT_for_PID = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-                                max_allowed_error= 60, 
-                                make_base_reward_components= make_roll_angle_reward_components,
+                                make_base_reward_components=_make_base_reward_components,   #pass this in here as otherwise, the restore form disk gets nifty
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
 
     rudder_AT_for_PID = SingleChannel_FlightTask('rudder', prp.rudder_cmd, {prp.sideslip_deg: 0},
                                 max_allowed_error= 10, 
-                                make_base_reward_components= make_sideslip_angle_reward_components,
+                                make_base_reward_components=_make_base_reward_components,   #pass this in here as otherwise, the restore form disk gets nifty
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
 
@@ -145,6 +141,70 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
 
     agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
+
+    aileron_Exp1_1 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                presented_state=[],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_error_only_reward_components,
+                                integral_limit = 0.25)
+
+    aileron_Exp1_2 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                presented_state=[prp.p_radps, prp.indicated_airspeed],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_error_only_reward_components,
+                                integral_limit = 0.25)
+
+    aileron_Exp1_3 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                presented_state=[prp.p_radps, prp.aileron_cmd],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_error_punish_actuation_reward_components,
+                                integral_limit = 0.25)
+
+    aileron_Exp1_6 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                presented_state=[prp.p_radps, prp.aileron_cmd, prp.indicated_airspeed],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_error_punish_actuation_reward_components,
+                                integral_limit = 0.25)
+
+    aileron_Exp2_0 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                presented_state=[prp.p_radps, prp.aileron_cmd, prp.indicated_airspeed],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_roll_angle_integral_reward_components,
+                                integral_limit = 0.25)
+
+    elevator_Exp1_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
+                                presented_state=[prp.q_radps, prp.indicated_airspeed],#,,  , prp.elevator_cmd],
+                                max_allowed_error= 30, 
+                                make_base_reward_components= make_angular_error_only_reward_components,
+                                integral_limit = 0.25)
+
+    elevator_Exp2_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
+                                presented_state=[prp.q_radps, prp.indicated_airspeed, prp.elevator_cmd],#, , prp.elevator_cmd],
+                                max_allowed_error= 30, 
+                                make_base_reward_components= make_angular_error_punish_actuation_reward_components,
+                                integral_limit = 0.25)
+
+    elevator_Exp3_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
+                                presented_state=[prp.q_radps, prp.indicated_airspeed, prp.elevator_cmd],
+                                max_allowed_error= 30, 
+                                make_base_reward_components= make_angular_integral_reward_components,
+                                integral_limit = 0.5)
+
+    elevator_Exp4_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
+                                presented_state=[prp.q_radps, prp.indicated_airspeed, prp.elevator_cmd],
+                                max_allowed_error= 30, 
+                                make_base_reward_components= make_angular_derivative_integral_reward_components,
+                                integral_limit = 0.5)
+
+    aileron_Exp5_0 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
+                                presented_state=[prp.p_radps, prp.indicated_airspeed, prp.aileron_cmd],
+                                max_allowed_error= 60, 
+                                make_base_reward_components= make_angular_derivative_integral_reward_components(,
+                                integral_limit = 0.5)
+
+
+    agent_task_list = [elevator_AT_for_PID, aileron_Exp5_0]
+
     # agent_task_list = [elevator_actuation_task, glide_path_task, aileron_AT]
     # agent_task_list = [elevator_AT_for_PID, aileron_AT]
     
@@ -152,7 +212,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
     # agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
 
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
+    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
 
     env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
@@ -246,6 +306,8 @@ def setup_container(task_list, arglist):
     agent_spec = [agent_spec_elevator_MADDPG, agent_spec_aileron_MADDPG, agent_spec_rudder_MADDPG]
     # agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_MADDPG]
 
+    agent_spec = [agent_spec_elevator_PID, agent_spec_aileron_PID]
+
     task_list_n = task_list   #we only need the task list to create the mapping. Anything else form the env is not interesting for the agent container.
     agent_container = AgentContainer.init_from_specs(task_list_n, agent_spec, agent_classes_dict, **vars(arglist))
 
@@ -258,13 +320,14 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # testing_env = restore_env_from_journal(lab_journal, 53)
+    # restore_lines = [754,755]
+    # testing_env = restore_env_from_journal(lab_journal, restore_lines[0], target_environment='FG')
 
     # # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30), (0.05, 0.5))
     # # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-10, -5.5), (10, 120), (5, 30), (0.05, 0.5))
 
-    # agent_container = restore_agent_container_from_journal(lab_journal, [44, 45, 37])
-    # evaluate_training(agent_container, testing_env, lab_journal=None, add_exploration_noise=False)    #run the standardized test on the test_env
+    # agent_container = restore_agent_container_from_journal(lab_journal, restore_lines)
+    # evaluate_training(agent_container, testing_env, lab_journal=None, render_mode = 'flightgear')    #run the standardized test on the test_env
     # exit(0)
 
     training_env = setup_env(arglist)

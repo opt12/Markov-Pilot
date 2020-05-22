@@ -3,6 +3,20 @@ import markov_pilot.environment.properties as prp
 
 from typing import Tuple
 
+# the standard 0-output reward function. Pass it in from here, as otherwise, the restore gets nifty due to the indent within a class definition.
+def _make_base_reward_components(self):     #may be overwritten by injected custom function
+    # pylint: disable=method-hidden
+    """
+    Just adds an Asymptotic error component as standard reward to the PID_FlightTask.
+
+    May be overwritten by injected custom function.
+    """
+    base_components = (     
+        rewards.ConstantDummyRewardComponent(name = self.name+'_dummyRwd', const_output=0.0),
+        )
+    return base_components
+
+
 def make_glide_angle_reward_components(self):
     GLIDE_ANGLE_DEG_ERROR_SCALING = 0.1
     GLIDE_ANGLE_INT_DEG_MAX = self.integral_limit
@@ -165,7 +179,6 @@ def make_roll_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ..
     )
     return base_components
 
-
 def make_sideslip_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
     SIDESLIP_ANGLE_DEG_ERROR_SCALING = 0.5
     SIDESLIP_ANGLE_INT_DEG_MAX = self.integral_limit
@@ -213,3 +226,184 @@ def make_sideslip_angle_reward_components(self) -> Tuple[rewards.RewardComponent
     )
     return base_components
 
+def make_roll_angle_error_only_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ROLL_ANGLE_DEG_ERROR_SCALING = 0.5
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_rollAngle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ROLL_ANGLE_DEG_ERROR_SCALING,
+                                weight=1),
+    )
+    return base_components
+
+def make_roll_angle_error_punish_actuation_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ROLL_ANGLE_DEG_ERROR_SCALING = 0.5
+    AILERON_CMD_TRAVEL_MAX = 2  # the max. absolute value of the delta-cmd;
+
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_rollAngle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ROLL_ANGLE_DEG_ERROR_SCALING,
+                                weight=8),
+        rewards.LinearErrorComponent(name='rwd_aileron_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=AILERON_CMD_TRAVEL_MAX,
+                                weight=2),
+    )
+    return base_components
+
+def make_roll_angle_integral_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ROLL_ANGLE_DEG_ERROR_SCALING = 0.5
+    AILERON_CMD_TRAVEL_MAX = 2/4  # a qarter of the max. absolute value of the delta-cmd;
+    ROLL_ANGLE_INT_DEG_MAX = self.integral_limit
+    ROLL_ANGLE_DER_DEG_MAX = 10
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_rollAngle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ROLL_ANGLE_DEG_ERROR_SCALING,
+                                weight=4),
+        rewards.LinearErrorComponent(name='rwd_aileron_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=AILERON_CMD_TRAVEL_MAX,
+                                weight=2),
+        rewards.LinearErrorComponent(name='rwd_rollAngle_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ROLL_ANGLE_INT_DEG_MAX,
+                                weight=9),
+        rewards.QuadraticErrorComponent(name='rwd_rollAngle_error_Derivative',
+                                prop=self.prop_error_derivative,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ROLL_ANGLE_DER_DEG_MAX**2,
+                                weight=2),
+)
+    return base_components
+
+def make_angular_integral_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ANGLE_DEG_ERROR_SCALING = 0.1
+    CMD_TRAVEL_MAX = 2/4  # a qarter of the max. absolute value of the delta-cmd;
+    ANGLE_INT_DEG_MAX = self.integral_limit
+    # ANGLE_DER_DEG_MAX = 2
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_Angle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_DEG_ERROR_SCALING,
+                                weight=4),
+        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=CMD_TRAVEL_MAX,
+                                weight=3),
+        rewards.LinearErrorComponent(name='rwd_Angle_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_INT_DEG_MAX,
+                                weight=9),
+        # rewards.QuadraticErrorComponent(name='rwd_Angle_error_Derivative',
+        #                         prop=self.prop_error_derivative,
+        #                         state_variables=self.obs_props,
+        #                         target=0.0,
+        #                         potential_difference_based=False,
+        #                         scaling_factor=ANGLE_DER_DEG_MAX,
+        #                         weight=2),
+)
+    return base_components
+
+def make_angular_error_only_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ANGLE_DEG_ERROR_SCALING = 0.1
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_rollAngle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_DEG_ERROR_SCALING,
+                                weight=1),
+    )
+    return base_components
+
+def make_angular_error_punish_actuation_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ANGLE_DEG_ERROR_SCALING = 0.5
+    CMD_TRAVEL_MAX = 2/4  # a quarter of the max. absolute value of the delta-cmd;
+
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_Angle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_DEG_ERROR_SCALING,
+                                weight=8),
+        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=CMD_TRAVEL_MAX,
+                                weight=2),
+    )
+    return base_components
+
+
+def make_angular_derivative_integral_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ANGLE_DEG_ERROR_SCALING = 0.1
+    CMD_TRAVEL_MAX = 2/4  # a qarter of the max. absolute value of the delta-cmd;
+    ANGLE_INT_DEG_MAX = self.integral_limit
+    ANGLE_DER_DEG_MAX = 2
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_Angle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_DEG_ERROR_SCALING,
+                                weight=4),
+        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=CMD_TRAVEL_MAX,
+                                weight=3),
+        rewards.LinearErrorComponent(name='rwd_Angle_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_INT_DEG_MAX,
+                                weight=10),
+        rewards.QuadraticErrorComponent(name='rwd_Angle_error_Derivative',
+                                prop=self.prop_error_derivative,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_DER_DEG_MAX,
+                                weight=3),
+    )
+    return base_components
