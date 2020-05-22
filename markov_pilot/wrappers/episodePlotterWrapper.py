@@ -128,7 +128,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                     csv_dir_name = os.path.join(self.save_path, 'csv')
                     #create the directory for this csv
                     os.makedirs(csv_dir_name, exist_ok=True)
-                    filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
+                    filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M-%S")))
                     dataRecorder.to_csv(filename)
                 # print(f"available properties for plotting:\n{dataRecorder.keys()}")   #this is handy if you want to change the plot to get the available data headings
                 self._show_graph(dataRecorder)
@@ -144,7 +144,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
                 csv_dir_name = os.path.join(self.save_path, 'csv')
                 #create the directory for this csv
                 os.makedirs(csv_dir_name, exist_ok=True)
-                filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M:%S")))
+                filename = os.path.join(csv_dir_name, 'state_record_{}.csv'.format(datetime.datetime.now().strftime("%H-%M-%S")))
                 dataRecorder.to_csv(filename)
             # print(dataRecorder.keys())   #this is handy if you want to change the plot to get the available data headings
             self._show_graph(dataRecorder)
@@ -445,8 +445,8 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
             #build the filename including the individual rewards
             task_rewards = [self.reward_variables[i].get_legal_name() for i in range(len(self.task_list))]
             task_names_with_rewards = [t.name+'_'+f'{data_frame[task_rewards[i]].sum():.2f}' for i, t in enumerate(self.task_list)]
-            name_with_rewards = 'Run_' + '_'.join(task_names_with_rewards)+'time_{}'.format(datetime.datetime.now().strftime("%H-%M:%S"))
-            base_filename = os.path.join(self.save_path, 'plots', name_with_rewards) # 'glideAngle_Elevator_Reward_{:.2f}_time_{}'.format(data_frame['reward'].sum(), datetime.datetime.now().strftime("%H-%M:%S")))
+            name_with_rewards = 'Run_' + '_'.join(task_names_with_rewards)+'time_{}'.format(datetime.datetime.now().strftime("%H-%M-%S"))
+            base_filename = os.path.join(self.save_path, 'plots', name_with_rewards) # 'glideAngle_Elevator_Reward_{:.2f}_time_{}'.format(data_frame['reward'].sum(), datetime.datetime.now().strftime("%H-%M-%S")))
             if self.showNextPlotFlag:
                 #we keep the html as well for easy exploration
                 shutil.copyfile(html_output_name, base_filename+'.html')
