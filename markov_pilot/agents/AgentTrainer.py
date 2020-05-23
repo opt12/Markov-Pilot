@@ -61,7 +61,7 @@ class AgentTrainer(ABC):
         self.replay_buffer = ReplayBuffer(buf_len, obs_space.shape, act_space.shape)
 
         try:
-            self.agent_save_path = kwargs['base_dir']
+            self.agent_save_path = os.path.join(kwargs['base_dir'], 'testruns/generic/'+self.name)
         except KeyError:
             self.agent_save_path = './testruns/generic/'+self.name
 
