@@ -94,6 +94,10 @@ class FlightTask(ABC):
                 continue
             break
 
+        #suffix the names of the reward components with the task_name to enable generic _make_base_reward_components() functions
+        name_suffix = '_'+self.name
+        for cmp in base_components:
+            cmp.name += name_suffix
 
         return AssessorImpl(base_components, (), positive_rewards=self.positive_rewards)
     
