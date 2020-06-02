@@ -334,17 +334,16 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # uncomment the following lines when trying to restore from disk
-    # restore_lines = [4674, 4721, 4768]
+    # # uncomment the following lines when trying to restore from disk
+    # restore_lines = [3463, 3488, 3489]
 
-    # # testing_env = restore_env_from_journal(lab_journal, restore_lines[0])
-
-    # #alternatively, use setup_env() to create a new testin_env
-    # testing_env = setup_env(arglist)
-    
+    # testing_env = restore_env_from_journal(lab_journal, restore_lines[0])
     # # if needed, change to FlightGear enabled environment
     # # testing_env = restore_env_from_journal(lab_journal, restore_lines[0], target_environment='FG')
 
+    # #alternatively, use setup_env() to create a new testin_env
+    # # testing_env = setup_env(arglist)
+    
     # # if needed, apply VarySetpointsWrapper to see wild action: 
     # # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30), (0.05, 0.1))
     # # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-9, -5.5), (10, 120), (5, 30), (0.05, 0.1))
