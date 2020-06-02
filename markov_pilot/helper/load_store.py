@@ -129,7 +129,7 @@ def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]], t
     env.set_meta_information(csv_line_nr = ln)  #set the line number, the environment was loaded from
     return env
 
-def restore_agent_container_from_journal(lab_journal, line_numbers: Union[int, List[int]]) -> 'AgentContainer':
+def restore_agent_container_from_journal(lab_journal, line_numbers: Union[int, List[int]], task_list_n = None, mapping_dict = None) -> 'AgentContainer':
     CONTAINER_PICKLE = 'agent_container.pickle'
 
     ln = [line_numbers] if isinstance(line_numbers, int) else line_numbers
@@ -144,6 +144,6 @@ def restore_agent_container_from_journal(lab_journal, line_numbers: Union[int, L
         print(f"there was no run protocol found that is associated with line_number {ln}")
         exit()
 
-    agent_container = AgentContainer.init_from_save(os.path.join(run_protocol_path, CONTAINER_PICKLE), agent_pickle_files_m)
+    agent_container = AgentContainer.init_from_save(os.path.join(run_protocol_path, CONTAINER_PICKLE), agent_pickle_files_m, task_list_n, mapping_dict)
 
     return agent_container

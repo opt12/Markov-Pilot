@@ -187,7 +187,7 @@ class AgentContainer():
             pickle.dump(data_to_save, file)
 
     @classmethod
-    def init_from_save(cls, container_pickle_file: str, agent_pickle_files_m: List[str] = []) ->'AgentContainer':
+    def init_from_save(cls, container_pickle_file: str, agent_pickle_files_m: List[str] = [], task_list_n = None, mapping_dict=None) ->'AgentContainer':
         """
         restores an agent container from the files on disk. If no agents ar given, new ones are created.
         
@@ -222,6 +222,13 @@ class AgentContainer():
             'mapping_dict': container_pickle_data['mapping_dict'],
         }
 
+        if task_list_n: #we were passed a task_list of another environment, so let's use that one instead of the one in the container pickle. This enables using agents later on in other environments
+            container_dict.update({'task_list_n': task_list_n})
+        
+        if mapping_dict: #we were passed a mapping_dict of another environment, so let's use that one instead of the one in the container pickle. This enables using agents later on in other environments
+            container_dict.update({'mapping_dict': mapping_dict})
+
+        
         instance = cls(**container_dict)     #call to the own constructor to initialize the agents
         instance.init_dict = container_dict  #stash away the parameters used for agent instantiation
         return instance
