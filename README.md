@@ -1,37 +1,25 @@
-# WORK IN PROGRES
+# Markov-Pilot
 
-The entire repo is still under heavy development.
+This is the software developed in the course of a Master's thesis at Fernuniversität Hagen in 2020 with the title:
 
-It will contain an implementation of a Multi-Agent Reinforcement learning environment together with appropriate DDPG and MADDPG agents.
+**Learning to Fly -- Building an Autopilot System based on Neural Networks and Reinforcement Learning**
+
+The software contains an implementation of a Multi-Agent Reinforcement learning environment together with appropriate DDPG and MADDPG agents.
 
 It is based on the [groundwork of Gor-Ren](https://github.com/Gor-Ren/gym-jsbsim), but has evolved a lot since forking his repo.
 
-More documentation is about to come.
+The software and its usage is documented in chapter 5 of the thesis which can be found in the [thesis](https://github.com/opt12/Markov-Pilot/tree/master/thesis) directory of this repo.
 
-The followin text is the original [readme by Gor-Ren](https://github.com/Gor-Ren/gym-jsbsim/blob/master/README.md), but is not entirely valid anymore.
 
-Stay tuned!
 
-# Gym-Jsbsim
+This work contributes to the final goal of building an autopilot system based on artificial neural networks.
+Firstly, an overview is given on the state of the art of reinforcement learning in continuous spaces and the deep deterministic policy gradient (DDPG) algorithm utilized in this work. This is followed by reasoning about the application of reinforcement learning techniques on aircraft control and the formulation of continuous control tasks as Markov decision processes respectively Markov games. Based on this theory, a flexible software framework for experimentation is implemented that supports the definition of multiple tasks in a simulated aircraft environment with multiple reinforcement learning agents. Eventually, experiments were conducted using this software to determine a suitable reward structure for the flight control task definition. Several 3-axes flight controllers were trained using different algorithmic settings. The results are compared with conventional PID control, which was outperformed by one of the trained controllers. A results summary and an outlook on future research desiderata conclude this work.
 
-Gym-JSBSim provides reinforcement learning environments for the control of fixed-wing aircraft using the JSBSim flight dynamics model. Gym-JSBSim requires a Unix-like OS and Python 3.6.
 
-The package's environments implement the OpenAI Gym interface allowing environments to be created and interacted with in the usual way, e.g.:
-
-```
-import gym
-import gym_jsbsim
-
-env = gym.make(ENV_ID)
-env.reset()
-state, reward, done, info = env.step(action)
-```
-
-Gym-JSBSim optionally provides 3D visualisation of controlled aircraft using the FlightGear simulator.
 
 ## Dependencies
 
-* [JSBSim](https://github.com/JSBSim-Team/jsbsim) flight dynamics model, including the C++ and Python libraries
+* [JSBSim](https://github.com/JSBSim-Team/jsbsim) flight dynamics model, including the C++ and Python libraries; It's crucial to have the patch from this issue available in your version of JSBSim: https://github.com/JSBSim-Team/jsbsim/issues/201
 * FlightGear simulator (optional for visualisation)
 * gym, numpy, matplotlib
 
@@ -51,102 +39,5 @@ and confirm that its Python library is correctly installed from a Python interpr
 import jsbsim
 ```
 
-Gym-JSBSim is pip installable using its GitHub:
-
-```
-pip install git+https://github.com/Gor-Ren/gym-jsbsim
-```
-
-## Environments
-
-Gym-JSBSim implements two tasks for controlling the altitude and heading of aircraft:
-
-* **HeadingControl**: aircraft must fly in a straight line, maintaining its initial altitude and direction of travel (heading)
-* **TurnHeadingControl**: aircraft must turn to face a random target heading while maintaining their initial altitude
-
-The environment can be configured to use one of three aircraft:
-
-* **Cessna172P** light aircraft
-* **F15** fighter jet
-* **A320** airliner
-
-
-
-Environment ID strings are constructed as follows:
-```
-f'JSBSim-{task}-{aircraft}-SHAPING_STANDARD-NoFG-v0'
-```
-
-For example, to fly a Cessna on the TurnHeadingControl task,
-
-```
-env = gym.make('JSBSim-TurnHeadingControl-Cessna172P-SHAPING.STANDARD-NoFG-v0')
-```
-
-
-## Visualisation
-
-### 2D
-
-A basic plot of agent actions and current state information can be using `human` render mode by calling `env.render(mode='human')`.
-
-
-### 3D
-
-3D visualisation requires installation of the FlightGear simulator. Confirm it is runnable from terminal with:
-
-```
-fgfs --version
-```
-
-Visualising with FlightGear requires the Gym to be created with a FlightGear-enabled environment ID by changing 'NoFG' -> 'FG'. For example,
-```
-env = gym.make('JSBSim-TurnHeadingControlTask-Cessna172P-Shaping.STANDARD-NoFG-v0')
-```
-Then, the first call to `env.render(mode='flightgear')` will launch FlightGear and begin visualisation. 
-
-## State and Action Space
-
-Gym-JSBSim's environments have a continuous state and action space. The state is a 17-tuple:
-
-```
-(name='position/h-sl-ft', description='altitude above mean sea level [ft]', min=-1400, max=85000)
-(name='attitude/pitch-rad', description='pitch [rad]', min=-1.5707963267948966, max=1.5707963267948966)
-(name='attitude/roll-rad', description='roll [rad]', min=-3.141592653589793, max=3.141592653589793)
-(name='velocities/u-fps', description='body frame x-axis velocity [ft/s]', min=-2200, max=2200)
-(name='velocities/v-fps', description='body frame y-axis velocity [ft/s]', min=-2200, max=2200)
-(name='velocities/w-fps', description='body frame z-axis velocity [ft/s]', min=-2200, max=2200)
-(name='velocities/p-rad_sec', description='roll rate [rad/s]', min=-6.283185307179586, max=6.283185307179586)
-(name='velocities/q-rad_sec', description='pitch rate [rad/s]', min=-6.283185307179586, max=6.283185307179586)
-(name='velocities/r-rad_sec', description='yaw rate [rad/s]', min=-6.283185307179586, max=6.283185307179586)
-(name='fcs/left-aileron-pos-norm', description='left aileron position, normalised', min=-1, max=1)
-(name='fcs/right-aileron-pos-norm', description='right aileron position, normalised', min=-1, max=1)
-(name='fcs/elevator-pos-norm', description='elevator position, normalised', min=-1, max=1)
-(name='fcs/rudder-pos-norm', description='rudder position, normalised', min=-1, max=1)
-(name='error/altitude-error-ft', description='error to desired altitude [ft]', min=-1400, max=85000)
-(name='aero/beta-deg', description='sideslip [deg]', min=-180, max=180)
-(name='error/track-error-deg', description='error to desired track [deg]', min=-180, max=180)
-(name='info/steps_left', description='steps remaining in episode', min=0, max=300)
- ```
- Actions are 3-tuples of floats in the range [-1,+1] describing commands to move the aircraft's control surfaces (ailerons, elevator, rudder):
- ```
- (name='fcs/aileron-cmd-norm', description='aileron commanded position, normalised', min=-1.0, max=1.0)
- (name='fcs/elevator-cmd-norm', description='elevator commanded position, normalised', min=-1.0, max=1.0)
- (name='fcs/rudder-cmd-norm', description='rudder commanded position, normalised', min=-1.0, max=1.0)
- ```
-## Other Materials
-
-* Gym-JSBSim was created for my MSc dissertation, which can be accessed [here](https://drive.google.com/open?id=1jPLG-OYcPiffh4ZAWW1N1__4l68jh-G_). 
-* A video montage of trained agent behaviour is available [here](https://drive.google.com/open?id=1wEq4Fg31Nf_6jb6bLLO24gt15GaZ-wbv).
-* jrjbertram has a fork [here](https://github.com/jrjbertram/jsbsim_rl) with Docker and openAI Baselines integration
-
-## Limitations / FYI
-
-* Limitations in JSBSim restrict you to one JSBSim instance per process. Therefore parallelising Gym JSBSim environments requires you to use multiprocessing, rather than multithreading.
-* Gym-JSBSim has some relatively sophisticated reward shaping capabilities. I embarked on reward shaping when my agents weren't learning... turns out I had simply turned off an undocumented but essential flag in my RL agent library's hyperparameters which basically turned off learning. In the end, my results showed that my principled and well-intentioned reward shaping efforts had no improvement over the "STANDARD" reward setting. Such is life :-)
-* The FlightTask classes rely heavily on inheritance and overriding methods for correct behaviour... a "favour composition over inheritance" would have been better. But hey, it was documented.
-* I had to add a voodoo pause to the FlightGear visualisation code, otherwise it could hang during start-up. It's probably pretty brittle as a result.
-
-
-
+The installation of the *Markov-Pilot* itself is still under construction. Sorry!
 
