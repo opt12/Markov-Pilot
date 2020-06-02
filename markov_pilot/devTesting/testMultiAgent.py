@@ -3,8 +3,8 @@ sys.path.append(r'/home/felix/git/gym-jsbsim-eee/') #TODO: Is this a good idea? 
 
 from markov_pilot.agent_task_eee import SingleChannel_FlightTask
 from markov_pilot.agents.pidAgent_eee import PID_Agent, PidParameters
-from markov_pilot.environment_eee import NoFGJsbSimEnv_multi_agent
-from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
+from markov_pilot.environment_eee import NoFGJsbSimEnv_multi
+from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi
 import markov_pilot.properties as prp
 
 from markov_pilot.reward_funcs_eee import make_glide_angle_reward_components, make_roll_angle_reward_components
@@ -26,8 +26,8 @@ if __name__ == '__main__':
     agent_task_list = [pid_elevator_AT, pid_aileron_AT]
     trainers = [pid_elevator_agent, pid_aileron_agent]
 
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s=120)
-    env = EpisodePlotterWrapper_multi_agent(env)
+    env = NoFGJsbSimEnv_multi(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s=120)
+    env = EpisodePlotterWrapper_multi(env)
 
     
     env.set_initial_conditions({prp.initial_flight_path_deg: -1.5}) #just an example, sane defaults are already set in env.__init()__ constructor

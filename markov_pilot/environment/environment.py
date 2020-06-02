@@ -20,7 +20,7 @@ from markov_pilot.environment import properties as prp
 from markov_pilot.environment.properties import BoundedProperty, Property
 
 
-class JsbSimEnv_multi_agent(gym.Env):
+class JsbSimEnv_multi(gym.Env):
     """
     A class wrapping the JSBSim flight dynamics module (FDM) for simulating
     aircraft as an RL multi-agent environment conforming to the OpenAI Gym Env
@@ -36,7 +36,7 @@ class JsbSimEnv_multi_agent(gym.Env):
       - individual rewards
       - individual done flags
 
-    An JsbSimEnv_multi_agent is instantiated with a list of Task_multi_agent objects.
+    An JsbSimEnv_multi is instantiated with a list of Task_multi_agent objects.
     Each implements a specific
     aircraft control task with its own specific observation/action space and
     variables and agent_reward calculation.
@@ -63,7 +63,7 @@ class JsbSimEnv_multi_agent(gym.Env):
     def __init__(self, task_list: List['Agent_Task'], aircraft: Aircraft = cessna172P,
                  agent_interaction_freq: int = 5, episode_time_s: float = DEFAULT_EPISODE_TIME_S, base_dir: str = './'):
         """
-        Constructor. Inits some internal state, and calls JsbSimEnv_multi_agent.reset()
+        Constructor. Inits some internal state, and calls JsbSimEnv_multi.reset()
         for a first time to prepare the internal simulation sim object.
 
         :param task_list: the list of Task_multi_agent instances to take part in the Markov Game
@@ -499,7 +499,7 @@ class JsbSimEnv_multi_agent(gym.Env):
         self.episode_steps = self.episode_steps = math.ceil(episode_time_s /self.dt)
 
 
-class NoFGJsbSimEnv_multi_agent(JsbSimEnv_multi_agent):
+class NoFGJsbSimEnv_multi(JsbSimEnv_multi):
     """
     An RL environment for JSBSim with rendering to FlightGear disabled.
 

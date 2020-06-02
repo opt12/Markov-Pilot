@@ -4,17 +4,17 @@ import pickle
 import importlib
 from typing import Union, List
 
-from markov_pilot.environment.environment import JsbSimEnv_multi_agent, NoFGJsbSimEnv_multi_agent
+from markov_pilot.environment.environment import JsbSimEnv_multi, NoFGJsbSimEnv_multi
 from markov_pilot.agents.agent_container import AgentContainer
 from markov_pilot.helper.lab_journal import LabJournal
 
 #these imports are needed to restore all the classes from the saved pickle-files
 from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
-from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi_agent
+from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi
 
 
 
-def save_test_run(env: JsbSimEnv_multi_agent, agent_container: AgentContainer, lab_journal: LabJournal, arglist):
+def save_test_run(env: JsbSimEnv_multi, agent_container: AgentContainer, lab_journal: LabJournal, arglist):
     """
     - creates a suitable directory for the test run
     - adds a sidecar file containing the meta information on the run (dict saved as pickle)
@@ -45,7 +45,7 @@ def save_test_run(env: JsbSimEnv_multi_agent, agent_container: AgentContainer, l
     csv_line_nr = lab_journal.append_run_data(env, agent_container.agents_m, save_path)
     env.set_meta_information(csv_line_nr = csv_line_nr)
 
-def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]], target_environment = None) -> NoFGJsbSimEnv_multi_agent:
+def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]], target_environment = None) -> NoFGJsbSimEnv_multi:
     ENV_PICKLE = 'environment_init.pickle'  #these are hard default names for the files
     TASKS_PICKLE ='task_agent.pickle'       #these are hard default names for the files
 
@@ -104,12 +104,12 @@ def restore_env_from_journal(lab_journal, line_numbers: Union[int, List[int]], t
     #load the env class
     env_class_ = getattr(sys.modules[__name__], env_classes[0])
 
-    if target_environment and (env_class_ == JsbSimEnv_multi_agent or env_class_ == NoFGJsbSimEnv_multi_agent):
+    if target_environment and (env_class_ == JsbSimEnv_multi or env_class_ == NoFGJsbSimEnv_multi):
         #the user wants us to exchange the innermost environment
         if target_environment == 'NoFG':
-            env_class_ = NoFGJsbSimEnv_multi_agent
+            env_class_ = NoFGJsbSimEnv_multi
         elif target_environment == 'FG':
-            env_class_ = JsbSimEnv_multi_agent
+            env_class_ = JsbSimEnv_multi
         else:
             raise ValueError("parameter target_:environment must be either 'NoFG' or 'FG' or entirely omitted. Other values not allowed.")
 

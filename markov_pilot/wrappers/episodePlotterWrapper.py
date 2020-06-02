@@ -22,7 +22,7 @@ from bokeh import events
 from bokeh.models import LinearAxis, Range1d
 from bokeh.palettes import Viridis7, Viridis4, Inferno7
 
-class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
+class EpisodePlotterWrapper_multi(gym.Wrapper):
 
     standard_output_props = [
         prp.altitude_sl_ft
@@ -33,7 +33,7 @@ class EpisodePlotterWrapper_multi_agent(gym.Wrapper):
     ]
 
     def __init__(self, env, output_props = []):
-        super(EpisodePlotterWrapper_multi_agent, self).__init__(env)
+        super(EpisodePlotterWrapper_multi, self).__init__(env)
 
         #append the restore data
         self.env_init_dicts.append({

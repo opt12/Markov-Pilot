@@ -161,8 +161,8 @@ def save_last_run(lab_journal, agent_container, score_m):
 #local test code
 if __name__ == '__main__':
 
-    from markov_pilot.environment.environment import NoFGJsbSimEnv_multi_agent
-    from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi_agent
+    from markov_pilot.environment.environment import NoFGJsbSimEnv_multi
+    from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi
     from markov_pilot.tasks.tasks import SingleChannel_FlightTask
     from markov_pilot.agents.AgentTrainer import PID_AgentTrainer, PidParameters
     from markov_pilot.agents.agent_container import AgentContainer, AgentSpec
@@ -182,8 +182,8 @@ if __name__ == '__main__':
 
     agent_task_list = [elevator_AT_for_PID, aileron_AT_for_PID]
 
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = 120)  #TODO: task_list is irrelevant for the env!!! REMOVE
-    env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
+    env = NoFGJsbSimEnv_multi(agent_task_list, [], agent_interaction_freq = agent_interaction_freq, episode_time_s = 120)  #TODO: task_list is irrelevant for the env!!! REMOVE
+    env = EpisodePlotterWrapper_multi(env, output_props=[prp.sideslip_deg])
 
     #now setup an agent container with simple PID agents
     agent_classes_dict = {

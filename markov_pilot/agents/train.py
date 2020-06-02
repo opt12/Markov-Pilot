@@ -4,13 +4,13 @@ import numpy as np
 import pickle
 import os
 
-from markov_pilot.environment.environment import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
+from markov_pilot.environment.environment import NoFGJsbSimEnv_multi, JsbSimEnv_multi
 from markov_pilot.agents import AgentContainer
 from markov_pilot.helper.lab_journal import LabJournal
 from markov_pilot.testbed.evaluate_training import evaluate_training
 
 
-def perform_training(training_env: JsbSimEnv_multi_agent, testing_env: JsbSimEnv_multi_agent, agent_container: AgentContainer, lab_journal: LabJournal, arglist: argparse.Namespace):
+def perform_training(training_env: JsbSimEnv_multi, testing_env: JsbSimEnv_multi, agent_container: AgentContainer, lab_journal: LabJournal, arglist: argparse.Namespace):
 
     episode_rewards = [0.0]  # sum of rewards for all agents
     agent_rewards = [[0.0] for _ in range(len(agent_container.agents_m))]  # individual agent reward

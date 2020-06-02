@@ -7,8 +7,8 @@ import argparse
 
 import markov_pilot.environment.properties as prp
 
-from markov_pilot.environment.environment import NoFGJsbSimEnv_multi_agent, JsbSimEnv_multi_agent
-from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi_agent
+from markov_pilot.environment.environment import NoFGJsbSimEnv_multi, JsbSimEnv_multi
+from markov_pilot.wrappers.episodePlotterWrapper import EpisodePlotterWrapper_multi
 from markov_pilot.wrappers.varySetpointsWrapper import VarySetpointsWrapper
 
 from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
@@ -63,7 +63,7 @@ def parse_args():   #used https://github.com/openai/maddpg/ as a basis
     parser.add_argument("--base-dir", type=str, default="./", help="directory the test_run date is saved")
     return parser.parse_args()
 
-def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
+def setup_env(arglist) -> NoFGJsbSimEnv_multi:
     agent_interaction_freq = arglist.interaction_frequency
     episode_time_s=arglist.max_episode_len_sec
 
@@ -223,8 +223,8 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
 
     # agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
 
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
-    env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
+    env = NoFGJsbSimEnv_multi(agent_task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
+    env = EpisodePlotterWrapper_multi(env, output_props=[prp.sideslip_deg])
 
     env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
                                     , prp.initial_flight_path_deg: initial_path_angle_gamma_deg

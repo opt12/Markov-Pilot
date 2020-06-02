@@ -16,8 +16,8 @@ from typing import Union, List
 from markov_pilot.agent_task_eee import SingleChannel_FlightTask
 TASK_AGENT_MODULE = 'markov_pilot.agent_task_eee' #TODO: make this smarter
 from markov_pilot.agents.pidAgent_eee import PID_Agent_no_State, PidParameters, SingleDDPG_Agent, MultiDDPG_Agent
-from markov_pilot.environment_eee import NoFGJsbSimEnv_multi_agent
-from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi_agent
+from markov_pilot.environment_eee import NoFGJsbSimEnv_multi
+from markov_pilot.wrappers.episodePlotterWrapper_eee import EpisodePlotterWrapper_multi
 import markov_pilot.properties as prp
 
 from markov_pilot.learn.evaluate_training_eee import evaluate_training
@@ -68,7 +68,7 @@ def parse_args():   #TODO: adapt this. Taken from https://github.com/openai/madd
     parser.add_argument("--base-dir", type=str, default="./", help="directory the test_run date is saved")
     return parser.parse_args()
 
-def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
+def setup_env(arglist) -> NoFGJsbSimEnv_multi:
     agent_interaction_freq = arglist.interaction_frequency
     episode_time_s=arglist.max_episode_len_sec
 
@@ -100,8 +100,8 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     # agent_task_types = ['DDPG', 'MADDPG']
     # agent_task_types = ['MADDPG', 'MADDPG']
     
-    env = NoFGJsbSimEnv_multi_agent(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
-    env = EpisodePlotterWrapper_multi_agent(env, output_props=[prp.sideslip_deg])
+    env = NoFGJsbSimEnv_multi(agent_task_list, agent_task_types, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
+    env = EpisodePlotterWrapper_multi(env, output_props=[prp.sideslip_deg])
 
     env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
                                     , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
@@ -111,7 +111,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi_agent:
     
     return env
 
-def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi_agent:
+def restore_env_from_journal(line_numbers: Union[int, List[int]]) -> NoFGJsbSimEnv_multi:
     ENV_PICKLE = 'environment_init.pickle'
     TAG_PICKLE ='task_agent.pickle'
 
