@@ -1,5 +1,7 @@
 from setuptools import setup, find_packages
 
+#This setup.py is still work under construction. Currently, I don't have another machine available to test this.
+#Any help in creating a working setup.py is highöy appreciated.
 
 setup(name='Markov-Pilot',
       version='0.1',
@@ -8,13 +10,15 @@ setup(name='Markov-Pilot',
                   'This package supports Multi-Agents to learn how to fly.'
                   'It supports the MADDPG algorithm.',
       url='https://github.com/opt12/Markov-Pilot',
-      author='Gor-Ren',
+      author='opt12',
       license='MIT',
       install_requires=[
             'numpy',
             'gym',
             'matplotlib',   #TODO: a lot is missing
-            'pandas'
+            'pandas',
+            'bokeh',
+            'pytorch',
       ],
       packages=find_packages(),
       classifiers=[
