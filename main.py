@@ -13,12 +13,7 @@ from markov_pilot.wrappers.varySetpointsWrapper import VarySetpointsWrapper
 
 from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_MinimumProps_Task
 
-from reward_funcs import _make_base_reward_components, \
-                            make_glide_angle_reward_components, make_roll_angle_reward_components, make_speed_reward_components, make_sideslip_angle_reward_components, \
-                            make_glide_path_angle_reward_components, make_elevator_actuation_reward_components, \
-                            make_roll_angle_error_only_reward_components, make_roll_angle_error_punish_actuation_reward_components, make_roll_angle_integral_reward_components, make_roll_angle_integral_reward_components, \
-                            make_angular_error_only_reward_components, make_angular_error_punish_actuation_reward_components, make_angular_integral_reward_components, make_angular_derivative_integral_reward_components, \
-                            make_rudder_reward_components
+from reward_funcs import _make_base_reward_components, make_angular_integral_reward_components, make_sideslip_angle_reward_components
 
 from markov_pilot.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
 from markov_pilot.agents.agent_container import AgentContainer, AgentSpec
@@ -107,7 +102,6 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
                                 presented_state=[prp.r_radps, prp.indicated_airspeed, prp.rudder_cmd, prp.aileron_cmd, prp.elevator_cmd,
                                 coop_banking_task.setpoint_value_props[0], coop_banking_task.setpoint_props[0]],   #TODO: this relies on defining coop_banking_task before coop_sideslip_task :-()
                                 max_allowed_error= 30, 
-                                # make_base_reward_components= make_sideslip_angle_reward_components,
                                 make_base_reward_components= make_sideslip_angle_reward_components,
                                 integral_limit = 0.25)
 
