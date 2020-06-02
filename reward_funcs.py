@@ -3,6 +3,8 @@ import markov_pilot.environment.properties as prp
 
 from typing import Tuple
 
+# the next three make_base_reward_components functions re successfully used in the experiments
+
 # the standard 0-output reward function. Pass it in from here, as otherwise, the restore gets nifty due to the indent within a class definition.
 def _make_base_reward_components(self):     #may be overwritten by injected custom function
     # pylint: disable=method-hidden
@@ -13,9 +15,72 @@ def _make_base_reward_components(self):     #may be overwritten by injected cust
     """
     base_components = (     
         rewards.ConstantDummyRewardComponent(name = self.name+'_dummyRwd', const_output=0.0),
-        )
+    )
     return base_components
 
+def make_angular_integral_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ANGLE_DEG_ERROR_SCALING = 0.1
+    CMD_TRAVEL_MAX = 2/4  # a qarter of the max. absolute value of the delta-cmd;
+    ANGLE_INT_DEG_MAX = self.integral_limit
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_Angle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_DEG_ERROR_SCALING,
+                                weight=6),
+        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=CMD_TRAVEL_MAX,
+                                weight=4),
+        rewards.LinearErrorComponent(name='rwd_Angle_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ANGLE_INT_DEG_MAX,
+                                weight=10),
+    )
+    return base_components
+
+def make_sideslip_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    SIDESLIP_ANGLE_DEG_ERROR_SCALING = 0.5
+    RUDDER_CMD_TRAVEL_MAX = 2/4  # a quarter of the max. absolute value of the delta-cmd; leverage the non-linearities
+    SIDESLIP_ANGLE_INT_DEG_MAX = self.integral_limit
+    base_components = (
+        rewards.AngularAsymptoticErrorComponent(name='rwd_sideslipAngle_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=SIDESLIP_ANGLE_DEG_ERROR_SCALING,
+                                weight=4),
+        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
+                                prop=self.prop_delta_cmd,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=RUDDER_CMD_TRAVEL_MAX,
+                                weight=1),      #for the rudder, we increase this priority
+        rewards.LinearErrorComponent(name='rwd_sideslipAngle_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=SIDESLIP_ANGLE_INT_DEG_MAX,
+                                weight=1),
+    )
+    return base_components
+
+
+
+###########################################################################
+# all make_base_reward_components below were just used during experiments
+# some might be useful, but no guarantees
 
 def make_glide_angle_reward_components(self):
     GLIDE_ANGLE_DEG_ERROR_SCALING = 0.1
@@ -277,64 +342,6 @@ def make_roll_angle_integral_reward_components(self) -> Tuple[rewards.RewardComp
                                 potential_difference_based=False,
                                 scaling_factor=ROLL_ANGLE_DER_DEG_MAX**2,
                                 weight=2),
-)
-    return base_components
-
-def make_angular_integral_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
-    ANGLE_DEG_ERROR_SCALING = 0.1
-    CMD_TRAVEL_MAX = 2/4  # a qarter of the max. absolute value of the delta-cmd;
-    ANGLE_INT_DEG_MAX = self.integral_limit
-    base_components = (
-        rewards.AngularAsymptoticErrorComponent(name='rwd_Angle_error',
-                                prop=self.prop_error,
-                                state_variables=self.obs_props,
-                                target=0.0,
-                                potential_difference_based=False,
-                                scaling_factor=ANGLE_DEG_ERROR_SCALING,
-                                weight=6),
-        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
-                                prop=self.prop_delta_cmd,
-                                state_variables=self.obs_props,
-                                target=0.0,
-                                potential_difference_based=False,
-                                scaling_factor=CMD_TRAVEL_MAX,
-                                weight=4),
-        rewards.LinearErrorComponent(name='rwd_Angle_error_Integral',
-                                prop=self.prop_error_integral,
-                                state_variables=self.obs_props,
-                                target=0.0,
-                                potential_difference_based=False,
-                                scaling_factor=ANGLE_INT_DEG_MAX,
-                                weight=10),
-    )
-    return base_components
-
-def make_sideslip_angle_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
-    SIDESLIP_ANGLE_DEG_ERROR_SCALING = 0.5
-    RUDDER_CMD_TRAVEL_MAX = 2/4  # a quarter of the max. absolute value of the delta-cmd; leverage the non-linearities
-    SIDESLIP_ANGLE_INT_DEG_MAX = self.integral_limit
-    base_components = (
-        rewards.AngularAsymptoticErrorComponent(name='rwd_sideslipAngle_error',
-                                prop=self.prop_error,
-                                state_variables=self.obs_props,
-                                target=0.0,
-                                potential_difference_based=False,
-                                scaling_factor=SIDESLIP_ANGLE_DEG_ERROR_SCALING,
-                                weight=4),
-        rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
-                                prop=self.prop_delta_cmd,
-                                state_variables=self.obs_props,
-                                target=0.0,
-                                potential_difference_based=False,
-                                scaling_factor=RUDDER_CMD_TRAVEL_MAX,
-                                weight=1),      #for the rudder, we increase this priority
-        rewards.LinearErrorComponent(name='rwd_sideslipAngle_error_Integral',
-                                prop=self.prop_error_integral,
-                                state_variables=self.obs_props,
-                                target=0.0,
-                                potential_difference_based=False,
-                                scaling_factor=SIDESLIP_ANGLE_INT_DEG_MAX,
-                                weight=1),
     )
     return base_components
 
