@@ -91,106 +91,6 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
                                 integral_limit = 100)
                                 #integral_limit: self.Ki * dt * int <= output_limit --> int <= 1/0.2*1e-2 = 500
 
-    # elevator_AT = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg},
-    #                             presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
-    #                             max_allowed_error= 30, 
-    #                             make_base_reward_components= make_glide_angle_reward_components,
-    #                             integral_limit = 0.5)
-
-    # glide_path_task = SingleChannel_FlightTask('glide_path_task', [], {prp.flight_path_deg: target_path_angle_gamma_deg},
-    #                             presented_state=[prp.elevator_cmd, prp.q_radps, prp.indicated_airspeed],
-    #                             max_allowed_error= 30, 
-    #                             make_base_reward_components= make_glide_path_angle_reward_components,
-    #                             integral_limit = 0.5)
-
-    # elevator_actuation_task = SingleChannel_FlightTask('elevator_actuation_task', prp.elevator_cmd, {},
-    #                             presented_state=[prp.elevator_cmd],
-    #                             make_base_reward_components= make_elevator_actuation_reward_components)
-
-    # elevator_Speed_AT = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
-    #                             presented_state=[prp.elevator_cmd, prp.q_radps],
-    #                             max_allowed_error= 50, 
-    #                             make_base_reward_components= make_speed_reward_components,
-    #                             integral_limit = 2)
-
-    # elevator_Speed_AT_for_PID = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.indicated_airspeed: target_kias},
-    #                             presented_state=[prp.elevator_cmd, prp.q_radps],
-    #                             max_allowed_error= 50, 
-    #                             make_base_reward_components= make_speed_reward_components,
-    #                             integral_limit = 200)
-
-
-    # aileron_AT = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-    #                             presented_state=[prp.aileron_cmd, prp.p_radps, prp.indicated_airspeed],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_roll_angle_reward_components,
-    #                             integral_limit = 0.25)
-
-    # rudder_AT = SingleChannel_FlightTask('rudder', prp.rudder_cmd, {prp.sideslip_deg: 0}, 
-    #                             presented_state=[prp.rudder_cmd, prp.r_radps, prp.p_radps, prp.indicated_airspeed, 
-    #                                             # aileron_AT.prop_error   #TODO: this relies on defining aileron_AT before rudder_AT :-()
-    #                                             ],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_sideslip_angle_reward_components,
-    #                             integral_limit = 0.25)
-
-    # velocity_AT = SingleChannel_FlightTask('velocity_kias', prp.throttle_cmd, {prp.indicated_airspeed: target_kias}, 
-    #                             presented_state=[prp.throttle_cmd],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_speed_reward_components,
-    #                             integral_limit = 0.25)
-
-
-    # agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
-
-    # aileron_Exp1_1 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-    #                             presented_state=[],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_roll_angle_error_only_reward_components,
-    #                             integral_limit = 0.25)
-
-    # aileron_Exp1_2 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-    #                             presented_state=[prp.p_radps, prp.indicated_airspeed],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_roll_angle_error_only_reward_components,
-    #                             integral_limit = 0.25)
-
-    # aileron_Exp1_3 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-    #                             presented_state=[prp.p_radps, prp.aileron_cmd],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_roll_angle_error_punish_actuation_reward_components,
-    #                             integral_limit = 0.25)
-
-    # aileron_Exp1_6 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-    #                             presented_state=[prp.p_radps, prp.aileron_cmd, prp.indicated_airspeed],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_roll_angle_error_punish_actuation_reward_components,
-    #                             integral_limit = 0.25)
-
-    # aileron_Exp2_0 = SingleChannel_FlightTask('aileron', prp.aileron_cmd, {prp.roll_deg: initial_roll_angle_phi_deg}, 
-    #                             presented_state=[prp.p_radps, prp.aileron_cmd, prp.indicated_airspeed],
-    #                             max_allowed_error= 60, 
-    #                             make_base_reward_components= make_roll_angle_integral_reward_components,
-    #                             integral_limit = 0.25)
-
-    # elevator_Exp1_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
-    #                             presented_state=[prp.q_radps, prp.indicated_airspeed], 
-    #                             max_allowed_error= 30, 
-    #                             make_base_reward_components= make_angular_error_only_reward_components,
-    #                             integral_limit = 0.25)
-
-    # elevator_Exp2_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
-    #                             presented_state=[prp.q_radps, prp.indicated_airspeed, prp.elevator_cmd],
-    #                             max_allowed_error= 30, 
-    #                             make_base_reward_components= make_angular_error_punish_actuation_reward_components,
-    #                             integral_limit = 0.25)
-
-    # elevator_Exp3_0 = SingleChannel_FlightTask('elevator', prp.elevator_cmd, {prp.flight_path_deg: initial_path_angle_gamma_deg}, 
-    #                             presented_state=[prp.q_radps, prp.indicated_airspeed, prp.elevator_cmd],
-    #                             max_allowed_error= 30, 
-    #                             make_base_reward_components= make_angular_integral_reward_components,
-    #                             integral_limit = 0.25)
-
     coop_flight_path_task = SingleChannel_FlightTask('flight_path_angle', prp.elevator_cmd, {prp.flight_path_deg: target_path_angle_gamma_deg}, 
                                 presented_state=[prp.q_radps, prp.indicated_airspeed, prp.elevator_cmd, prp.rudder_cmd, prp.aileron_cmd],
                                 max_allowed_error= 30, 
@@ -213,15 +113,6 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
 
 
     task_list = [coop_flight_path_task, coop_banking_task, coop_sideslip_task]
-    # agent_task_list = [elevator_AT_for_PID, aileron_AT_for_PID, rudder_Exp9_0]
-    # agent_task_list = [elevator_Exp4_0, aileron_Exp5_0, rudder_AT_for_PID]
-
-    # agent_task_list = [elevator_actuation_task, glide_path_task, aileron_AT]
-    # agent_task_list = [elevator_AT_for_PID, aileron_AT]
-    
-    # agent_task_list = [elevator_AT_for_PID, aileron_AT_full_state_dev_only]
-
-    # agent_task_list = [elevator_AT, aileron_AT, rudder_AT]
 
     env = NoFGJsbSimEnv_multi(task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi(env, output_props=[prp.sideslip_deg])
@@ -230,7 +121,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
                                     , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
                                     , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                     , prp.initial_aoa_deg: initial_aoa_deg
-                                    # , prp.initial_altitude_ft: initial_altitude_ft
+                                    , prp.initial_altitude_ft: initial_altitude_ft
                                     }) #just an example, sane defaults are already set in env.__init()__ constructor
 
     env.set_meta_information(experiment_name = arglist.exp_name)
@@ -334,17 +225,16 @@ if __name__ == '__main__':
 
     lab_journal = LabJournal(arglist.base_dir, arglist)
 
-    # uncomment the following lines when trying to restore from disk
-    # restore_lines = [4674, 4721, 4768]
+    # # uncomment the following lines when trying to restore from disk
+    # restore_lines = [3463, 3488, 3489]
 
-    # # testing_env = restore_env_from_journal(lab_journal, restore_lines[0])
-
-    # #alternatively, use setup_env() to create a new testin_env
-    # testing_env = setup_env(arglist)
-    
+    # testing_env = restore_env_from_journal(lab_journal, restore_lines[0])
     # # if needed, change to FlightGear enabled environment
     # # testing_env = restore_env_from_journal(lab_journal, restore_lines[0], target_environment='FG')
 
+    # #alternatively, use setup_env() to create a new testin_env
+    # # testing_env = setup_env(arglist)
+    
     # # if needed, apply VarySetpointsWrapper to see wild action: 
     # # testing_env = VarySetpointsWrapper(testing_env, prp.roll_deg, (-30, 30), (10, 120), (5, 30), (0.05, 0.1))
     # # testing_env = VarySetpointsWrapper(testing_env, prp.flight_path_deg, (-9, -5.5), (10, 120), (5, 30), (0.05, 0.1))
