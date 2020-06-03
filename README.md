@@ -21,7 +21,9 @@ Firstly, an overview is given on the state of the art of reinforcement learning 
 
 * [JSBSim](https://github.com/JSBSim-Team/jsbsim) flight dynamics model, including the C++ and Python libraries; It's crucial to have the patch from this issue available in your version of JSBSim: https://github.com/JSBSim-Team/jsbsim/issues/201
 * FlightGear simulator (optional for visualisation)
-* gym, numpy, matplotlib
+* numpy, gym, matplotlib, pandas, bokeh, pytorch, ...
+
+(There is supposedly something missing in the dependencies... I'll fix that, when I fix the setup.py)
 
 ## Installation
 Firstly, follow the instructions on the [JSBSim](https://github.com/JSBSim-Team/jsbsim) repository to install JSBSim and its libraries.
