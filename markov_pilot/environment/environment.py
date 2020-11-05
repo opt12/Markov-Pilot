@@ -47,7 +47,7 @@ class JsbSimEnv_multi(gym.Env):
     JSBSIM_DT_HZ: int = 60  # JSBSim integration frequency
     INITIAL_ALTITUDE_FT_default = 6000
     INITIAL_GEO_POSITION_LAT_LON_default = (53.248488, 10.459216)   #coordinates of the Lüneburg Airfield EDHG
-    THROTTLE_CMD_default = 0.8
+    THROTTLE_CMD_default = 0.5
     MIXTURE_CMD_default = 0.8
     INITIAL_HEADING_DEG_default = 270
     DEFAULT_EPISODE_TIME_S = 120.
@@ -98,7 +98,7 @@ class JsbSimEnv_multi(gym.Env):
         self.episode_steps = math.ceil(episode_time_s * agent_interaction_freq)
         self.steps_left = BoundedProperty('info/steps_left', 'steps remaining in episode', 0, float('+inf'))
 
-        self.engines_running = False    #we usually use a gliding descent
+        self.engines_running = True     #we usually use a gliding descent
         self.throttle_cmd, self.mixture_cmd = self.THROTTLE_CMD_default, self.MIXTURE_CMD_default
 
         self.aircraft = aircraft

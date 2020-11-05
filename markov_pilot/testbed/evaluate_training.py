@@ -8,27 +8,28 @@ from shutil import copyfile
 import numpy as np
 import markov_pilot.environment.properties as prp
 
-best_score_n = []  #we don't like globals, but it really helps here
+best_score_m = []  #we don't like globals, but it really helps here
 eval_number = 0
 
 
 def evaluate_training(agent_container, env, lab_journal = None, store_evaluation_experience = True, add_exploration_noise=False, render_mode = None):
-    global best_score_n 
-    if len(best_score_n) != agent_container.m:
-        best_score_n = np.zeros(agent_container.m)
+    global best_score_m 
+    if len(best_score_m) != agent_container.m:
+        best_score_m = np.zeros(agent_container.m)
 
-    tgt_flight_path_deg = -6.5
+    tgt_flight_path_deg = 0
     tgt_roll_angle_deg  = 15
     tgt_sideslip_deg    = 0
-    # target_kias = 92  #not used currently as only gliding descent is regulated
+    target_kias = 100 
     initial_path_angle_gamma_deg = 0
     initial_roll_angle_phi_deg   = 0
-    initial_fwd_speed_KAS        = env.aircraft.get_cruise_speed_fps()*0.9 / 1.6878099110965
+    initial_fwd_speed_KAS        = target_kias # env.aircraft.get_cruise_speed_fps()*0.9 / 1.6878099110965
     initial_aoa_deg              = 1.0  #arbitrary value but not far from a stable flight attitude
 
     env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                             prp.flight_path_deg: tgt_flight_path_deg,
-                            prp.sideslip_deg: tgt_sideslip_deg
+                            prp.sideslip_deg: tgt_sideslip_deg,
+                            prp.indicated_airspeed: target_kias
                         })
     env.set_initial_conditions( { prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
                                 , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
@@ -67,69 +68,72 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         score_m += [exp.rew for exp in agent_experience_m]
         steps += 1
         if steps == int(0.5 * 60 / env.dt): #after half a minute
-            tgt_flight_path_deg = -6
+            tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
-            # target_kias = 72
+            target_kias = 100
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.sideslip_deg: tgt_sideslip_deg
+                                   prp.indicated_airspeed: target_kias
                                 })
 
         if steps == int(1 *60 / env.dt):    #after a minute
-            tgt_flight_path_deg = -7.5
+            tgt_flight_path_deg = 3
             tgt_roll_angle_deg  = 0
-            # target_kias = 100
+            target_kias = 100
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.sideslip_deg: tgt_sideslip_deg
+                                   prp.indicated_airspeed: target_kias
                                 })
 
         if steps == int(1.5 *60 / env.dt): #after one and a half minutes
-            tgt_flight_path_deg = -7.5
+            tgt_flight_path_deg = 3
             tgt_roll_angle_deg  = -20
-            # target_kias = 80
+            target_kias = 100
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.sideslip_deg: tgt_sideslip_deg
+                                   prp.indicated_airspeed: target_kias
                                 })
 
         if steps == int(2.0 *60 / env.dt): #after two minutes
-            tgt_flight_path_deg = -7.5
+            tgt_flight_path_deg = 0
             tgt_roll_angle_deg  = 15
-            # target_kias = 80
+            target_kias = 110
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.sideslip_deg: tgt_sideslip_deg
+                                   prp.indicated_airspeed: target_kias
                                 })
 
         if steps == int(2.5 *60 / env.dt): #after two and a half minutes
-            tgt_flight_path_deg = -7.5
+            tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
-            # target_kias = 80
+            target_kias = 110
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.sideslip_deg: tgt_sideslip_deg
+                                   prp.indicated_airspeed: target_kias
                                 })
 
         if steps == int(3 *60 / env.dt): #after three minutes
-            tgt_flight_path_deg = -6
+            tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
-            # target_kias = 80
+            target_kias = 110
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.sideslip_deg: tgt_sideslip_deg
+                                   prp.indicated_airspeed: target_kias
                                 })
 
         terminal = any(done_n) or terminal
         #env.render()
     print("\tTest yielded a score of : [", end="")
     print(*["%.2f"%sc for sc in score_m], sep = ", ", end="")
+    print("].")
+    print("\Best scores: [", end="")
+    print(*["%.2f"%sc for sc in best_score_m], sep = ", ", end="")
     print("].")
 
     if lab_journal:
@@ -149,11 +153,11 @@ def save_last_run(lab_journal, agent_container, score_m):
         filename = f'{ag.name}_rwd-{score_m[i]:06.2f}_steps-{ag.train_steps}.pickle'
         ag.save_agent_state(filename)
         eval_dict.update({'path': os.path.join(save_path, filename)})
-        if best_score_n[i] < score_m[i]:
-            print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_n[i], score_m[i]))
+        if best_score_m[i] < score_m[i]:
+            print("%s: Best score updated: %.3f -> %.3f" % (ag.name, best_score_m[i], score_m[i]))
             bestname = f'{ag.name}_best.pickle'
             copyfile(os.path.join(save_path, filename), os.path.join(save_path, bestname))
-            best_score_n[i] = score_m[i]
+            best_score_m[i] = score_m[i]
 
         lab_journal.append_evaluation_data(eval_dict)
 

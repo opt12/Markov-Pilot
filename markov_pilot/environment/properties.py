@@ -55,7 +55,7 @@ p_radps = BoundedProperty('velocities/p-rad_sec', 'roll rate [rad/s]', -2 * math
 pdot_rad_sec2 = BoundedProperty('accelerations/pdot-rad_sec2', 'roll accell [rad/s²]', -2 * math.pi, 2 * math.pi)
 q_radps = BoundedProperty('velocities/q-rad_sec', 'pitch rate [rad/s]', -2 * math.pi, 2 * math.pi)
 r_radps = BoundedProperty('velocities/r-rad_sec', 'yaw rate [rad/s]', -2 * math.pi, 2 * math.pi)
-altitude_rate_fps = Property('velocities/h-dot-fps', 'Rate of altitude change [ft/s]')
+altitude_rate_fps = BoundedProperty('velocities/h-dot-fps', 'Rate of altitude change [ft/s]', float('-inf'), float('+inf'))
 indicated_airspeed = BoundedProperty('velocities/vc-kts', 'Indicated Airspeed [KIAS]', 0, 250)
 true_airspeed = BoundedProperty('velocities/vtrue-kts', 'True Airspeed [KTAS]', 0, 250)
 
