@@ -346,56 +346,57 @@ class EpisodePlotterWrapper_multi(gym.Wrapper):
         # else: 
         #     discriminator = self.env.meta_dict['model_discriminator']
 
-        ts = time.time()
-        overshoot_frames_per_task = self._analyze_overshoot(data_frame)
-        overshoot_divs = [Div(text = ovs_fr.round(3).to_html(), width = 600) for ovs_fr in overshoot_frames_per_task]
-        print("Overshoot analysis done in %.2f sec" % (time.time() - ts))
+        # BUG Hier geht noch etwas in die Grütze beim Multi-Task Agent
+        # ts = time.time()
+        # overshoot_frames_per_task = self._analyze_overshoot(data_frame)
+        # overshoot_divs = [Div(text = ovs_fr.round(3).to_html(), width = 600) for ovs_fr in overshoot_frames_per_task]
+        # print("Overshoot analysis done in %.2f sec" % (time.time() - ts))
 
-        ts = time.time()
-        settlement_times_per_task = self._analyze_settle_times(data_frame)
-        settlement_divs = [Div(text = settle_fr.round(3).to_html(), width = 600) for settle_fr in settlement_times_per_task]
-        print("Settlement analysis done in %.2f sec" % (time.time() - ts))
+        # ts = time.time()
+        # settlement_times_per_task = self._analyze_settle_times(data_frame)
+        # settlement_divs = [Div(text = settle_fr.round(3).to_html(), width = 600) for settle_fr in settlement_times_per_task]
+        # print("Settlement analysis done in %.2f sec" % (time.time() - ts))
 
         panel_grid = []
         panel_grid.append([Div(text='<h3>'+t.name+'</h3>', id='div_'+t.name) for t in self.env.task_list])
 
         # to switch on and off the statistics panels, this is unfortuntely the best, I could achive
         # https://stackoverflow.com/a/52416676/2682209
-        cols = []
-        checkbox = CheckboxGroup(labels=["show stats"], active=[], width=100)   #checkbox is added to header_col later on
+        # cols = []
+        # checkbox = CheckboxGroup(labels=["show stats"], active=[], width=100)   #checkbox is added to header_col later on
 
-        for i, t in enumerate(self.env.task_list):
-            # overshoot_stat = overshoot_divs[i]
-            c = column(Div())   #empty for the beginning
-            cols.append(c)
+        # for i, t in enumerate(self.env.task_list):
+        #     # overshoot_stat = overshoot_divs[i]
+        #     c = column(Div())   #empty for the beginning
+        #     cols.append(c)
 
-        callback = CustomJS(args=dict(overshoot_divs=overshoot_divs, settlement_divs=settlement_divs, cols=cols, checkbox=checkbox), code="""
-                    for (var j = 0; j < cols.length; j++) {
-                        console.log('col', j)
-                        const children = []
-                        for (const i of checkbox.active) {
-                            console.log('active', i)
-                            children.push(overshoot_divs[j])
-                            children.push(settlement_divs[j])
-                        } 
-                        console.log('children', children)
-                        cols[j].children = children
-                    }
-                    """)
-        checkbox.js_on_change('active', callback)
+        # callback = CustomJS(args=dict(overshoot_divs=overshoot_divs, settlement_divs=settlement_divs, cols=cols, checkbox=checkbox), code="""
+        #             for (var j = 0; j < cols.length; j++) {
+        #                 console.log('col', j)
+        #                 const children = []
+        #                 for (const i of checkbox.active) {
+        #                     console.log('active', i)
+        #                     children.push(overshoot_divs[j])
+        #                     children.push(settlement_divs[j])
+        #                 } 
+        #                 console.log('children', children)
+        #                 cols[j].children = children
+        #             }
+        #             """)
+        # checkbox.js_on_change('active', callback)
 
 
 
-        # show_stats_btn = [Div(text="""
-        # <button onclick="display_event(%s)">Try it</button>
-        # """ %t.name for t in self.env.task_list]
-        # for t, b in zip(self.env.task_list, show_stats_btn):
-        #     b.tags = ['id', 'btn_'+t.name]
-        # panel_grid.append(show_stats_btn)
-        # [b.js_on_event(events.ButtonClick, display_event(b, t.name)) for t, b in zip(self.env.task_list, show_stats_btn)]
+        # # show_stats_btn = [Div(text="""
+        # # <button onclick="display_event(%s)">Try it</button>
+        # # """ %t.name for t in self.env.task_list]
+        # # for t, b in zip(self.env.task_list, show_stats_btn):
+        # #     b.tags = ['id', 'btn_'+t.name]
+        # # panel_grid.append(show_stats_btn)
+        # # [b.js_on_event(events.ButtonClick, display_event(b, t.name)) for t, b in zip(self.env.task_list, show_stats_btn)]
 
-        # panel_grid.append(chkbxs)
-        panel_grid.append(cols)
+        # # panel_grid.append(chkbxs)
+        # panel_grid.append(cols)
 
         panel_grid_t = [ [panels[name]['panel1'],panels[name]['panel2'],panels[name]['panel3']] for name in self.task_names]
         [panel_grid.append(fig) for fig in list(zip(*panel_grid_t))]
@@ -424,7 +425,7 @@ class EpisodePlotterWrapper_multi(gym.Wrapper):
             (" - " + self.env.meta_dict['env_info']) if 'env_info' in self.meta_dict else "" + 
             "</h1>"), 
             row(
-            Div(text="<h2>"+titleString+"</h2>", width=1200), checkbox) )
+            Div(text="<h2>"+titleString+"</h2>", width=1200)))#, checkbox) )
 
         webpage = gridplot([[header_col],[panel_grid_plot]], toolbar_location=None, sizing_mode='stretch_width')
 

@@ -15,7 +15,9 @@ from markov_pilot.tasks.tasks import SingleChannel_FlightTask, SingleChannel_Min
 
 from reward_funcs import _make_base_reward_components, make_angular_integral_reward_components, \
                         make_glide_path_reward_components, make_elevator_reward_components,     \
-                        make_ias_reward_components, make_throttle_reward_components
+                        make_ias_reward_components, make_throttle_reward_components, \
+                        make_altitude_reward_components
+
 
 from markov_pilot.agents.AgentTrainer import DDPG_AgentTrainer, PID_AgentTrainer, PidParameters, MADDPG_AgentTrainer
 from markov_pilot.agents.agent_container import AgentContainer, AgentSpec
@@ -29,6 +31,7 @@ from markov_pilot.testbed.evaluate_training import evaluate_training
 ## define the initial setpoints
 target_path_angle_gamma_deg = 0
 target_kias = 100
+target_altitude = 6000
 target_roll_angle_phi_deg   = -15
 target_sideslip_angle_beta_deg = 0
 
@@ -82,6 +85,13 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
                                 make_base_reward_components= make_glide_path_reward_components,
                                 integral_limit = 2)
 
+    altitude_evaluation_task = SingleChannel_FlightTask('altitude_evaluation', None, {prp.altitude_sl_ft: target_altitude},
+                                measurement_in_degrees = False, 
+                                presented_state=[prp.q_radps, prp.flight_path_deg, prp.altitude_sl_ft, prp.altitude_rate_fps],
+                                max_allowed_error= 1000, #60, 
+                                make_base_reward_components= make_altitude_reward_components,
+                                integral_limit = 10)
+
     elevator_actuation_task = SingleChannel_FlightTask('elevator_actuation', prp.elevator_cmd, {}, 
                                 presented_state=[prp.q_radps, prp.indicated_airspeed, prp.throttle_cmd, prp.elevator_cmd, prp.aileron_cmd],
                                 max_allowed_error= None, 
@@ -89,7 +99,8 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
                                 integral_limit = 0.25)
 
     ias_evaluation_task = SingleChannel_FlightTask('ias_evaluation', None, {prp.indicated_airspeed: target_kias},
-                                presented_state=[prp.q_radps, prp.indicated_airspeed],
+                                measurement_in_degrees = False, 
+                                presented_state=[prp.q_radps, prp.flight_path_deg, prp.indicated_airspeed],
                                 max_allowed_error= None, #60, 
                                 make_base_reward_components= make_ias_reward_components,
                                 integral_limit = 1)
@@ -101,7 +112,8 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
                                 integral_limit = 0.25)
 
 
-    task_list = [glide_path_evaluation_task, ias_evaluation_task, elevator_actuation_task, throttle_actuation_task, aileron_AT_for_PID, ]
+    task_list = [altitude_evaluation_task, ias_evaluation_task, elevator_actuation_task, throttle_actuation_task, aileron_AT_for_PID, ]
+    # task_list = [glide_path_evaluation_task, ias_evaluation_task, elevator_actuation_task, throttle_actuation_task, aileron_AT_for_PID, ]
 
     env = NoFGJsbSimEnv_multi(task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi(env, output_props=[prp.sideslip_deg])
@@ -182,9 +194,11 @@ def setup_container(task_list, arglist):
     #following this scheme e. g. combined speed control and glide path angle tasks could be defined to control elevator and thrust
     params_DDPG_elevator_separated_agent = {
         **vars(arglist),
-        'layer1_size': 400,
-        'layer2_size': 300,
-        'task_reward_weights': [2, 10, 2],
+        'layer1_size': 600,
+        'layer2_size': 400,
+        'task_reward_weights': [2, 10, 1],
+        'noise_sigma': 0.3, #0.15,
+        'noise_theta': 0.4, #0.2
         'writer': None,
     }
 
@@ -192,12 +206,18 @@ def setup_container(task_list, arglist):
         **vars(arglist),
         'layer1_size': 600,
         'layer2_size': 400,
-        'task_reward_weights': [10, 2, 1],
+        'task_reward_weights': [20, 2, 1],  #maybe it's a good idea to increase the weight for the actuation over time; on the other hand this corrupts the learnt reward structure and thus is not Markov anymore.
+        # es scheint wichtig, dass gerade der Throttle nicht zu sehr durch den letzten Term eingeschränkt wird, weil sonst einfach nichts passiert.
+        # kann man dem throttle einen höheren Noise Level geben?
+        'noise_sigma': 0.3, #0.15,
+        'noise_theta': 0.4, #0.2
         'writer': None,
     }
 
-    agent_spec_separated_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['glide_path_evaluation', 'ias_evaluation', 'elevator_actuation'], params_DDPG_elevator_separated_agent)
-    agent_spec_separated_throttle_DDPG = AgentSpec('throttle', 'DDPG', ['glide_path_evaluation', 'ias_evaluation', 'throttle_actuation'], params_DDPG_throttle_separated_agent)
+    agent_spec_separated_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['altitude_evaluation', 'ias_evaluation', 'elevator_actuation'], params_DDPG_elevator_separated_agent)
+    # agent_spec_separated_elevator_DDPG = AgentSpec('elevator', 'DDPG', ['glide_path_evaluation', 'ias_evaluation', 'elevator_actuation'], params_DDPG_elevator_separated_agent)
+    agent_spec_separated_throttle_DDPG = AgentSpec('throttle', 'DDPG', ['altitude_evaluation', 'ias_evaluation', 'throttle_actuation'], params_DDPG_throttle_separated_agent)
+    # agent_spec_separated_throttle_DDPG = AgentSpec('throttle', 'DDPG', ['glide_path_evaluation', 'ias_evaluation', 'throttle_actuation'], params_DDPG_throttle_separated_agent)
 
     
     # attention, the tasks are currently undefined in setup_env()
@@ -253,9 +273,10 @@ if __name__ == '__main__':
     testing_env = setup_env(arglist)
 
     #apply Varyetpoints to the training to increase the variance of training data
-    training_env = VarySetpointsWrapper(training_env, prp.roll_deg, (-30, 30), (10, 30), (5, 30), (0.05, 0.5))
-    training_env = VarySetpointsWrapper(training_env, prp.flight_path_deg, (-2, 2), (40, 120), (40, 120), (0.005, 0.05))
+    # training_env = VarySetpointsWrapper(training_env, prp.roll_deg, (-30, 30), (10, 30), (5, 30), (0.05, 0.5))
+    # training_env = VarySetpointsWrapper(training_env, prp.flight_path_deg, (-2, 2), (40, 120), (40, 120), (0.005, 0.05))
     training_env = VarySetpointsWrapper(training_env, prp.indicated_airspeed, (90, 120), (60, 120), (60, 120), (0.005, 0.05))
+    training_env = VarySetpointsWrapper(training_env, prp.altitude_sl_ft, (5700, 6300), (60, 120), (60, 120), (0.005, 0.05))
     # training_env = VarySetpointsWrapper(training_env, prp.sideslip_deg, (-2, 2), (10, 45), (5, 30), (0.05, 0.5))
 
     agent_container = setup_container(training_env.task_list, arglist)

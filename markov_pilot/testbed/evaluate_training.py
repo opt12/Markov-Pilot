@@ -20,7 +20,8 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
     tgt_flight_path_deg = 0
     tgt_roll_angle_deg  = 15
     tgt_sideslip_deg    = 0
-    target_kias = 100 
+    target_kias = 100
+    target_altitude = 6000
     initial_path_angle_gamma_deg = 0
     initial_roll_angle_phi_deg   = 0
     initial_fwd_speed_KAS        = target_kias # env.aircraft.get_cruise_speed_fps()*0.9 / 1.6878099110965
@@ -29,9 +30,11 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
     env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                             prp.flight_path_deg: tgt_flight_path_deg,
                             prp.sideslip_deg: tgt_sideslip_deg,
-                            prp.indicated_airspeed: target_kias
+                            prp.indicated_airspeed: target_kias,
+                            prp.altitude_sl_ft: target_altitude,
                         })
     env.set_initial_conditions( { prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
+                                , prp.initial_altitude_ft: 6000
                                 , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
                                 , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                 , prp.initial_aoa_deg: initial_aoa_deg
@@ -71,60 +74,72 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
             tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
             target_kias = 100
+            target_altitude = 6000
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.indicated_airspeed: target_kias
+                                   prp.indicated_airspeed: target_kias,
+                                   prp.altitude_sl_ft: target_altitude,
                                 })
 
         if steps == int(1 *60 / env.dt):    #after a minute
             tgt_flight_path_deg = 3
             tgt_roll_angle_deg  = 0
             target_kias = 100
+            target_altitude = 6000
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.indicated_airspeed: target_kias
+                                   prp.indicated_airspeed: target_kias,
+                                   prp.altitude_sl_ft: target_altitude,
                                 })
 
         if steps == int(1.5 *60 / env.dt): #after one and a half minutes
             tgt_flight_path_deg = 3
             tgt_roll_angle_deg  = -20
             target_kias = 100
+            target_altitude = 6200
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.indicated_airspeed: target_kias
+                                   prp.indicated_airspeed: target_kias,
+                                   prp.altitude_sl_ft: target_altitude,
                                 })
 
         if steps == int(2.0 *60 / env.dt): #after two minutes
             tgt_flight_path_deg = 0
             tgt_roll_angle_deg  = 15
             target_kias = 110
+            target_altitude = 6200
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.indicated_airspeed: target_kias
+                                   prp.indicated_airspeed: target_kias,
+                                   prp.altitude_sl_ft: target_altitude,
                                 })
 
         if steps == int(2.5 *60 / env.dt): #after two and a half minutes
             tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
             target_kias = 110
+            target_altitude = 6200
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.indicated_airspeed: target_kias
+                                   prp.indicated_airspeed: target_kias,
+                                   prp.altitude_sl_ft: target_altitude,
                                 })
 
         if steps == int(3 *60 / env.dt): #after three minutes
             tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
             target_kias = 110
+            target_altitude = 6000
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
                                    prp.flight_path_deg: tgt_flight_path_deg,
-                                   prp.indicated_airspeed: target_kias
+                                   prp.indicated_airspeed: target_kias,
+                                   prp.altitude_sl_ft: target_altitude,
                                 })
 
         terminal = any(done_n) or terminal

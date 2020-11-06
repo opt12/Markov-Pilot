@@ -127,6 +127,27 @@ def make_glide_path_reward_components(self) -> Tuple[rewards.RewardComponent, ..
     )
     return base_components
 
+def make_altitude_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
+    ALTI_ERROR_SCALING = 50 # we need some bigger scaling factor as it's extremely difficult and we need some guiding reward here
+    ALTI_INT_DEG_MAX = self.integral_limit
+    base_components = (
+        rewards.AsymptoticErrorComponent(name='rwd_Altitude_error',
+                                prop=self.prop_error,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ALTI_ERROR_SCALING,
+                                weight=6),
+        rewards.LinearErrorComponent(name='rwd_Altitude_error_Integral',
+                                prop=self.prop_error_integral,
+                                state_variables=self.obs_props,
+                                target=0.0,
+                                potential_difference_based=False,
+                                scaling_factor=ALTI_INT_DEG_MAX,
+                                weight=10),
+    )
+    return base_components
+
 def make_elevator_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
     ANGLE_DEG_ERROR_SCALING = 0.1
     CMD_TRAVEL_MAX = 2/4  # a qarter of the max. absolute value of the delta-cmd;
@@ -144,10 +165,10 @@ def make_elevator_reward_components(self) -> Tuple[rewards.RewardComponent, ...]
 
 
 def make_ias_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
-    KIAS_ERROR_SCALING = 1  # we need some bigger scaling factor as it's extremely difficult and we need some guiding reward here
+    KIAS_ERROR_SCALING = 5  # we need some bigger scaling factor as it's extremely difficult and we need some guiding reward here
     KIAS_INT_MAX = self.integral_limit
     base_components = (
-        rewards.AngularAsymptoticErrorComponent(name='rwd_IAS_error',
+        rewards.AsymptoticErrorComponent(name='rwd_IAS_error',
                                 prop=self.prop_error,
                                 state_variables=self.obs_props,
                                 target=0.0,
@@ -165,7 +186,7 @@ def make_ias_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
     return base_components
 
 def make_throttle_reward_components(self) -> Tuple[rewards.RewardComponent, ...]:
-    CMD_TRAVEL_MAX = 1/4  # a qarter of the max. absolute value of the delta-cmd;
+    CMD_TRAVEL_MAX = 1/2  # a qarter of the max. absolute value of the delta-cmd;
     base_components = (
         rewards.LinearErrorComponent(name='rwd_cmd_travel_error',
                                 prop=self.prop_delta_cmd,

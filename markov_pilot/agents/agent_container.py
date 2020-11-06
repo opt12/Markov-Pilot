@@ -57,9 +57,10 @@ class AgentContainer():
         for i, ag in enumerate(self.agents_m):
             t_idxs = [self.task_names.index(n) for n in self.mapping_dict[ag.name]]
             self.task_idxs_per_agent.append(t_idxs)
-            if any([True for ag_idx in self.agent_idx_per_task[t_idxs] if ag_idx != -1]):
-            #we had a double entry
-                raise ValueError("All tasks in task_list_n must be contained in the mapping_dict at most once.")
+            # if any([True for ag_idx in self.agent_idx_per_task[t_idxs] if ag_idx != -1]):
+            # #we had a double entry
+            # TODO Was genau habe ich dabei gedacht? Welcher Fall?
+            #     raise ValueError("All tasks in task_list_n must be contained in the mapping_dict at most once.")
             np.put(self.agent_idx_per_task, t_idxs, i)
 
 
@@ -283,9 +284,10 @@ class AgentContainer():
             ag_actor_obs_spaces_m.append(aggregate_gym_boxes([obs_spaces_n[i] for i in t_idxs]))
             mapping_dict.update({aspec.name:aspec.task_names})
             #check that no doubles appeared
-            if any([True for ag_idx in agent_idx_per_task[t_idxs] if ag_idx != -1]):
-            #we had a double entry in the task association
-                raise ValueError("All tasks in task_list_n must be contained in the mapping_dict at most once.")
+            # TODO Was genau habe ich dabei gedacht? Welcher Fall?
+            # if any([True for ag_idx in agent_idx_per_task[t_idxs] if ag_idx != -1]):
+            # #we had a double entry in the task association
+            #     raise ValueError("All tasks in task_list_n must be contained in the mapping_dict at most once.")
             np.put(agent_idx_per_task, t_idxs, i)
 
         #determine the critic_state_space
