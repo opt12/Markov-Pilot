@@ -30,7 +30,7 @@ from markov_pilot.testbed.evaluate_training import evaluate_training
 
 ## define the initial setpoints
 target_path_angle_gamma_deg = 0
-target_kias = 100
+target_kias = 90
 target_altitude = 6000
 target_roll_angle_phi_deg   = -15
 target_sideslip_angle_beta_deg = 0
@@ -71,7 +71,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
     initial_path_angle_gamma_deg    = target_path_angle_gamma_deg# + 3
     initial_roll_angle_phi_deg      = target_roll_angle_phi_deg + 10
     initial_sideslip_angle_beta_deg = 0
-    initial_fwd_speed_KAS           = 100
+    initial_fwd_speed_KIAS          = 90
     initial_aoa_deg                 = 1.0
     initial_altitude_ft             = 6000
 
@@ -118,7 +118,7 @@ def setup_env(arglist) -> NoFGJsbSimEnv_multi:
     env = NoFGJsbSimEnv_multi(task_list, agent_interaction_freq = agent_interaction_freq, episode_time_s = episode_time_s)
     env = EpisodePlotterWrapper_multi(env, output_props=[prp.sideslip_deg])
 
-    env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KAS
+    env.set_initial_conditions({ prp.initial_u_fps: 1.6878099110965*initial_fwd_speed_KIAS
                                     , prp.initial_flight_path_deg: initial_path_angle_gamma_deg
                                     , prp.initial_roll_deg: initial_roll_angle_phi_deg
                                     , prp.initial_aoa_deg: initial_aoa_deg
@@ -196,8 +196,8 @@ def setup_container(task_list, arglist):
         **vars(arglist),
         'layer1_size': 600,
         'layer2_size': 400,
-        'task_reward_weights': [2, 10, 1],
-        'noise_sigma': 0.3, #0.15,
+        'task_reward_weights': [3, 10, 3],
+        'noise_sigma': 0.3, #0.15,  # add more noise for more exploration
         'noise_theta': 0.4, #0.2
         'writer': None,
     }
@@ -206,10 +206,10 @@ def setup_container(task_list, arglist):
         **vars(arglist),
         'layer1_size': 600,
         'layer2_size': 400,
-        'task_reward_weights': [20, 2, 1],  #maybe it's a good idea to increase the weight for the actuation over time; on the other hand this corrupts the learnt reward structure and thus is not Markov anymore.
+        'task_reward_weights': [10, 2, 1],  #maybe it's a good idea to increase the weight for the actuation over time; on the other hand this corrupts the learnt reward structure and thus is not Markov anymore.
         # es scheint wichtig, dass gerade der Throttle nicht zu sehr durch den letzten Term eingeschränkt wird, weil sonst einfach nichts passiert.
         # kann man dem throttle einen höheren Noise Level geben?
-        'noise_sigma': 0.3, #0.15,
+        'noise_sigma': 0.3, #0.15,  # add more noise for more exploration
         'noise_theta': 0.4, #0.2
         'writer': None,
     }
@@ -273,10 +273,10 @@ if __name__ == '__main__':
     testing_env = setup_env(arglist)
 
     #apply Varyetpoints to the training to increase the variance of training data
-    # training_env = VarySetpointsWrapper(training_env, prp.roll_deg, (-30, 30), (10, 30), (5, 30), (0.05, 0.5))
+    training_env = VarySetpointsWrapper(training_env, prp.roll_deg, (-30, 30), (10, 30), (5, 30), (0.05, 0.5))
     # training_env = VarySetpointsWrapper(training_env, prp.flight_path_deg, (-2, 2), (40, 120), (40, 120), (0.005, 0.05))
-    training_env = VarySetpointsWrapper(training_env, prp.indicated_airspeed, (90, 120), (60, 120), (60, 120), (0.005, 0.05))
-    training_env = VarySetpointsWrapper(training_env, prp.altitude_sl_ft, (5700, 6300), (60, 120), (60, 120), (0.005, 0.05))
+    training_env = VarySetpointsWrapper(training_env, prp.indicated_airspeed, (80, 110), (60, 120), (60, 120), (0.005, 0.05))
+    training_env = VarySetpointsWrapper(training_env, prp.altitude_sl_ft, (5700, 6500), (60, 120), (60, 120), (0.005, 0.01))
     # training_env = VarySetpointsWrapper(training_env, prp.sideslip_deg, (-2, 2), (10, 45), (5, 30), (0.05, 0.5))
 
     agent_container = setup_container(training_env.task_list, arglist)

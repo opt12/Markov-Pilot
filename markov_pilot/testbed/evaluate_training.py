@@ -20,7 +20,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
     tgt_flight_path_deg = 0
     tgt_roll_angle_deg  = 15
     tgt_sideslip_deg    = 0
-    target_kias = 100
+    target_kias = 90
     target_altitude = 6000
     initial_path_angle_gamma_deg = 0
     initial_roll_angle_phi_deg   = 0
@@ -73,7 +73,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         if steps == int(0.5 * 60 / env.dt): #after half a minute
             tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
-            target_kias = 100
+            target_kias = 90
             target_altitude = 6000
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
@@ -85,7 +85,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         if steps == int(1 *60 / env.dt):    #after a minute
             tgt_flight_path_deg = 3
             tgt_roll_angle_deg  = 0
-            target_kias = 100
+            target_kias = 90
             target_altitude = 6000
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
@@ -97,7 +97,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         if steps == int(1.5 *60 / env.dt): #after one and a half minutes
             tgt_flight_path_deg = 3
             tgt_roll_angle_deg  = -20
-            target_kias = 100
+            target_kias = 90
             target_altitude = 6200
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
@@ -109,7 +109,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         if steps == int(2.0 *60 / env.dt): #after two minutes
             tgt_flight_path_deg = 0
             tgt_roll_angle_deg  = 15
-            target_kias = 110
+            target_kias = 100
             target_altitude = 6200
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
@@ -121,7 +121,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         if steps == int(2.5 *60 / env.dt): #after two and a half minutes
             tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
-            target_kias = 110
+            target_kias = 100
             target_altitude = 6200
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
@@ -133,7 +133,7 @@ def evaluate_training(agent_container, env, lab_journal = None, store_evaluation
         if steps == int(3 *60 / env.dt): #after three minutes
             tgt_flight_path_deg = -0
             tgt_roll_angle_deg  = 0
-            target_kias = 110
+            target_kias = 90
             target_altitude = 6000
 
             env.change_setpoints({ prp.roll_deg:  tgt_roll_angle_deg,
